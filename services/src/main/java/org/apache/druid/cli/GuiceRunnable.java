@@ -76,9 +76,15 @@ public abstract class GuiceRunnable implements Runnable
   public Lifecycle initLifecycle(Injector injector)
   {
     try {
+      log.info("!!!：进入initLifecycle");
+      /**
+       * Lifecycle定义在{@link org.apache.druid.guice.LifecycleModule#getLifecycle(Injector)}方法上，
+       * 其返回对象，就是Lifecycle的实现类
+       */
       final Lifecycle lifecycle = injector.getInstance(Lifecycle.class);
       final StartupLoggingConfig startupLoggingConfig = injector.getInstance(StartupLoggingConfig.class);
 
+      //堆外内存大小
       Long directSizeBytes = null;
       try {
         directSizeBytes = JvmUtils.getRuntimeInfo().getDirectMemorySizeBytes();
@@ -87,6 +93,7 @@ public abstract class GuiceRunnable implements Runnable
         // querying direct memory is not supported
       }
 
+      // 输出日志
       log.info(
           "Starting up with processors[%,d], memory[%,d], maxMemory[%,d]%s. Properties follow.",
           JvmUtils.getRuntimeInfo().getAvailableProcessors(),
@@ -112,6 +119,14 @@ public abstract class GuiceRunnable implements Runnable
       }
 
       try {
+        /**
+         * 迭代了lifecycle中的handlers集合，
+         * handler是一个map集合，的key是{@link Lifecycle.Stage#values()}中的4种状态，
+         * value是List<Handler>类型
+         * 此集合就是每个Stage对应的handler列表。
+         *
+         *
+         */
         lifecycle.start();
       }
       catch (Throwable t) {

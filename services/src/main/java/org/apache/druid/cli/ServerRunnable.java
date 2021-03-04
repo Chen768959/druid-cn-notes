@@ -56,13 +56,46 @@ public abstract class ServerRunnable extends GuiceRunnable
     super(log);
   }
 
+  /**
+   * 所有命令行对象都继承此类，druid运行时，也都会运行其run方法。
+   */
   @Override
   public void run()
   {
+    log.info("!!!：进入ServerRunnable.run()");
+    /**
+     * 所有的命令行对象都继承了共同Runnable父类，所以大家执行的run方法都一样，
+     * 都是
+     * 1、先创建一个guice框架中上下文对象，Injector，
+     * 并将很多初始Module配置对象放入其中，
+     * 还会调用“getModules()”方法，将获取的Module也放入其中。
+     * getModules()方法实现在Runnable子类，也就是各个命令行对象中，也就是以下的该方法，
+     *
+     * 也就是说每一个命令行对象的启动逻辑都是一样，
+     * 都是将初始配置对象，以及独有的配置对象放入上下文中，生成Injector对象
+     *
+     * 2、initLifecycle中通过injector上下文注入了Lifecycle对象，
+     * 然后调用了Lifecycle对象中handlers集合里所有handle的start方法。
+     *
+     * -------------------------------------------------------------------
+     * handlers集合中的handler对象是什么时候放进去的？
+     * 从makeInjector()说起，
+     * 以其中的一个公共Module（HttpClientModule）为例，
+     * makeInjector()中创建了该module，并将其设置进injector上下文对象中
+     *
+     * 从HttpClientModule对象的配置方法configure()开始（其他module同理，都是从其配置方法中体现逻辑）
+     * 其中包含了各种往Lifecycle中放入handler对象的操作，（Lifecycle对象是通过上下文injector被注入到所需的地方）
+     *
+     * 然后到initLifecycle()方法时，Lifecycle就执行这些handler的start方法。
+     */
     final Injector injector = makeInjector();
     final Lifecycle lifecycle = initLifecycle(injector);
 
     try {
+      /**
+       * 当前线程属于一个命令行对象的执行线程，
+       * 此处的join，就是让主线程进行等待，什么时候这个命令行对象终止了，主线程才终止。
+       */
       lifecycle.join();
     }
     catch (Exception e) {

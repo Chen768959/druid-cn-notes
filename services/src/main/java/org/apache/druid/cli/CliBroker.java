@@ -85,9 +85,18 @@ public class CliBroker extends ServerRunnable
     super(log);
   }
 
+  /**
+   * 由于cli命令行框架的特性，
+   * 执行的是父类的run方法。
+   *
+   * 该方法作用是在初始化上下文对象时，提供Broker所需要的配置Module，
+   * 具体逻辑参照{@link ServerRunnable#run()}
+   */
   @Override
   protected List<? extends Module> getModules()
   {
+    log.info("!!!：进入CliBroker.getModules()");
+    System.out.println(Thread.currentThread().getId()+"-!!!：进入CliBroker.getModules()");
     return ImmutableList.of(
         new DruidProcessingModule(),
         new QueryableModule(),

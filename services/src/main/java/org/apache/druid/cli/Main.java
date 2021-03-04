@@ -56,12 +56,46 @@ public class Main
            .withCommands(Help.class, Version.class);
 
     List<Class<? extends Runnable>> serverCommands = Arrays.asList(
+        /**
+         * druid协调器：
+         * 主要负责和历史节点通信，
+         * 根据配置加载segment或删除segment。
+         * 定时运行。
+         */
         CliCoordinator.class,
+        /**
+         * 历史节点：
+         * 对非实时数据块（segment）进行存储和查询
+         */
         CliHistorical.class,
+        /**
+         * 相当于druid的路由，
+         * 接收客户端的查询请求，将请求路由到实时节点或历史节点，
+         * 还负责将二者查询结果进行合并
+         */
         CliBroker.class,
+        /**
+         * 任务管理器，
+         * 负责接收任务、分配任务
+         */
         CliOverlord.class,
+        /**
+         * 负责索引服务，
+         * 索引服务本身由3个部分组成：
+         * 1、overload，负责创建、分发task到middlemanager上
+         * 2、middlemanager，作为从节点，接收任务，并为每个任务启动一个jvm进程执行
+         * 3、speon，由middlemanager的一个进程，用于运行一个任务
+         */
         CliIndexer.class,
+        /**
+         * overload的从节点，
+         * 负责接收任务，并为每个任务启动一个jvm进程执行
+         */
         CliMiddleManager.class,
+        /**
+         * 可选组件，可以将请求路由到brokers、Coordinator、Overlord。
+         * 可以说是在broker之前的一个路由。
+         */
         CliRouter.class
     );
     builder.withGroup("server")

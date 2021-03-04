@@ -126,6 +126,11 @@ public class LifecycleModule implements Module
     binder.bindScope(ManageLifecycleAnnouncements.class, annoucementsScope);
   }
 
+  /**
+   * @Provides注解必须定义在Module类中，
+   * 被定义的方法返回的结果，就是被绑定的实例对象，
+   * 当注入以下类型的对象时，就会调用该方法获得对象。
+   */
   @Provides @LazySingleton
   public Lifecycle getLifecycle(final Injector injector)
   {

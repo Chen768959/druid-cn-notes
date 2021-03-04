@@ -375,6 +375,7 @@ public class Initialization
 
   public static Injector makeInjectorWithModules(final Injector baseInjector, Iterable<? extends Module> modules)
   {
+    log.info("!!!：Initialization.makeInjectorWithModules，准备设置所有modules，并创建Injector上下文");
     final ModuleList defaultModules = new ModuleList(baseInjector);
     defaultModules.addModules(
         // New modules should be added after Log4jShutterDownerModule

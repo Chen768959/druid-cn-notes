@@ -138,6 +138,7 @@ public class CliCoordinator extends ServerRunnable
     modules.add(JettyHttpClientModule.global());
 
     modules.add(
+        // Module相当于是guice的配置文件
         new Module()
         {
           @Override

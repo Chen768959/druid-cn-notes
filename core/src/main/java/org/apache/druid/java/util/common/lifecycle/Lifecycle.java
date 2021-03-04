@@ -105,6 +105,9 @@ public class Lifecycle
     this("anonymous");
   }
 
+  /**
+   * 初始化时传入的是“module”
+   */
   public Lifecycle(String name)
   {
     Preconditions.checkArgument(StringUtils.isNotEmpty(name), "Lifecycle name must not be null or empty");
@@ -326,6 +329,7 @@ public class Lifecycle
 
   public void start() throws Exception
   {
+    log.info("!!!：执行lifecycle.start()");
     startStopLock.lock();
     try {
       if (!state.get().equals(State.NOT_STARTED)) {
@@ -338,6 +342,7 @@ public class Lifecycle
         currStage = e.getKey();
         log.info("Starting lifecycle [%s] stage [%s]", name, currStage.name());
         for (Handler handler : e.getValue()) {
+          log.info("!!!：遍历handler，class：" + handler.getClass());
           handler.start();
         }
       }
