@@ -87,6 +87,8 @@ public abstract class ServerRunnable extends GuiceRunnable
      * 其中包含了各种往Lifecycle中放入handler对象的操作，（Lifecycle对象是通过上下文injector被注入到所需的地方）
      *
      * 然后到initLifecycle()方法时，Lifecycle就执行这些handler的start方法。
+     *
+     * 其中就包含jetty服务的启动
      */
     final Injector injector = makeInjector();
     final Lifecycle lifecycle = initLifecycle(injector);

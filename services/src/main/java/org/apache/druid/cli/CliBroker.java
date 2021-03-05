@@ -129,6 +129,17 @@ public class CliBroker extends ServerRunnable
 
           binder.bind(JettyServerInitializer.class).to(QueryJettyServerInitializer.class).in(LazySingleton.class);
 
+          /**
+           * BrokerQueryResource是查询入口。
+           *
+           * jetty是在父类run方法中，被handle.start方法启动的。
+           *
+           * druid中融合了Jersey框架（类似springmvc），
+           * 存在很多类被用于处理rest请求，可以理解为各种客户端请求的入口。
+           *
+           * Jerseys.addResource方法就是将这种“控制器”对象绑定进jetty中，
+           * 这样请求到达jetty，jetty再路由到对应的控制器
+           */
           binder.bind(BrokerQueryResource.class).in(LazySingleton.class);
           Jerseys.addResource(binder, BrokerQueryResource.class);
           binder.bind(QueryCountStatsProvider.class).to(BrokerQueryResource.class).in(LazySingleton.class);
