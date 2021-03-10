@@ -39,6 +39,7 @@ import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryInterruptedException;
 import org.apache.druid.query.QueryMetrics;
 import org.apache.druid.query.QueryPlus;
+import org.apache.druid.query.QueryRunner;
 import org.apache.druid.query.QuerySegmentWalker;
 import org.apache.druid.query.QueryToolChest;
 import org.apache.druid.query.QueryToolChestWarehouse;
@@ -169,12 +170,16 @@ public class QueryLifecycle
   public void initialize(final Query baseQuery)
   {
     transition(State.NEW, State.INITIALIZED);
-
+    /**
+     * 从context上下文参数中获取queryId，
+     * （context上下文是客户端请求时定义在json中的）
+     */
     String queryId = baseQuery.getId();
     if (Strings.isNullOrEmpty(queryId)) {
       queryId = UUID.randomUUID().toString();
     }
 
+    // 看逻辑应该就是context上下文
     Map<String, Object> mergedUserAndConfigContext;
     if (baseQuery.getContext() != null) {
       mergedUserAndConfigContext = BaseQuery.computeOverriddenContext(defaultQueryConfig.getContext(), baseQuery.getContext());
@@ -263,6 +268,25 @@ public class QueryLifecycle
 
     final ResponseContext responseContext = DirectDruidClient.makeResponseContextForQuery();
 
+    /**
+     * QueryPlus.wrap(baseQuery)：
+     * 创建一个QueryPlus对象
+     * （该对象看注释介绍应该就是个包装类，作用只是负责存放{@link Query}对象和对应的{@link QueryRunner}对象）。
+     * 此wrap方法也只是创建一个QueryPlus对象，然后把Query参数存进去。
+     * 该参数和身份验证有关
+     *
+     * .withIdentity(authenticationResult.getIdentity())：
+     * 还是返回一个QueryPlus对象，
+     * 只不过这回把参数“authenticationResult.getIdentity()”也存进去了
+     *
+     * .run(texasRanger, responseContext)：
+     * texasRanger是注入进来的，实现类是这个{@link ClientQuerySegmentWalker}
+     * 该方法就做了两件事
+     * 1、{@link BaseQuery#getRunner(QuerySegmentWalker)} 获取Query对象(BaseQuery)对应的QueryRunner对象。
+     *
+     * 
+     * 2、调用{@link QueryRunner#run(QueryPlus, ResponseContext)}方法。
+     */
     final Sequence res = QueryPlus.wrap(baseQuery)
                                   .withIdentity(authenticationResult.getIdentity())
                                   .run(texasRanger, responseContext);

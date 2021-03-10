@@ -121,6 +121,12 @@ public abstract class BaseQuery<T> implements Query<T>
   @VisibleForTesting
   public static QuerySegmentSpec getQuerySegmentSpecForLookUp(BaseQuery<?> query)
   {
+    /**
+     * DataSourceAnalysis直译是数据源分析。
+     * druid的查询方式因数据源的类型而异。
+     *
+     *
+     */
     return DataSourceAnalysis.forDataSource(query.getDataSource())
                              .getBaseQuerySegmentSpec()
                              .orElseGet(query::getQuerySegmentSpec);

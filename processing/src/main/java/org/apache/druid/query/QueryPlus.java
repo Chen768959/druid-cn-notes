@@ -146,6 +146,10 @@ public final class QueryPlus<T>
 
   public Sequence<T> run(QuerySegmentWalker walker, ResponseContext context)
   {
+    /**
+     * walker实现类为{@link ClientQuerySegmentWalker}
+     * query.getRunner调用的是{@link BaseQuery#getRunner(QuerySegmentWalker)}
+     */
     return query.getRunner(walker).run(this, context);
   }
 

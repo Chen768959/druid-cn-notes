@@ -171,23 +171,44 @@ public class QueryResource implements QueryCountStatsProvider
       @Context final HttpServletRequest req
   ) throws IOException
   {
+    // new一个queryLifecycle对象，其中很多属性都是从上下文中注入进来的
     final QueryLifecycle queryLifecycle = queryLifecycleFactory.factorize();
     Query<?> query = null;
 
+    //客户端希望接收的响应数据类型
     String acceptHeader = req.getHeader("Accept");
     if (Strings.isNullOrEmpty(acceptHeader)) {
       //default to content-type
+      // 没有accept，就用content-type类型当accept类型
       acceptHeader = req.getContentType();
     }
 
+    /**
+     * 创建一个ResourceIOReaderWriter对象，
+     * 其中存放了
+     * 1、accept请求类型（json还是smile）
+     * 2、帮助json序列化和反序列化的格式对象“ObjectMapper”
+     */
     final ResourceIOReaderWriter ioReaderWriter = createResourceIOReaderWriter(acceptHeader, pretty != null);
 
+    //当前线程来自jetty的work线程池中
     final String currThreadName = Thread.currentThread().getName();
     try {
+      /**
+       * readQuery(req, in, ioReaderWriter)：
+       * 利用自定义的ObjectMapper对象（注入进来的），
+       * 根据请求，解析成对应的Query对象，并返回
+       *
+       * queryLifecycle.initialize(Query);
+       * 主要是根据请求，获得对应的Query对象，
+       * 然后将特定Query对象，以及context上下文都放入queryLifecycle中
+       */
       queryLifecycle.initialize(readQuery(req, in, ioReaderWriter));
+      //拿出的是刚刚解析出来的特定query对象
       query = queryLifecycle.getQuery();
       final String queryId = query.getId();
 
+      // 重命名当前线程名，将相关信息都放进去
       final String queryThreadName = StringUtils.format(
           "%s[%s_%s_%s]",
           currThreadName,
@@ -202,22 +223,56 @@ public class QueryResource implements QueryCountStatsProvider
         log.debug("Got query [%s]", query);
       }
 
+      // 根据请求对象，判断此次请求是否被授权
       final Access authResult = queryLifecycle.authorize(req);
       if (!authResult.isAllowed()) {
         throw new ForbiddenException(authResult.toString());
       }
 
+      /**
+       * 执行查询请求
+       *
+       * 使用对应的QuerySegmentWalker构建QueryRunner，
+       * 然后调用QueryRunner的run方法
+       */
       final QueryLifecycle.QueryResponse queryResponse = queryLifecycle.execute();
+
+      // 得到结果？
       final Sequence<?> results = queryResponse.getResults();
       final ResponseContext responseContext = queryResponse.getResponseContext();
+      //获取请求头中的If-None-Match参数
       final String prevEtag = getPreviousEtag(req);
 
+      /**
+       * 客户端请求查询时请求头会传一个If-None-Match参数，
+       * 服务端查询完毕后，结果数据里有一个ETag参数，
+       *
+       * 此处二者相等时满足以下条件
+       */
       if (prevEtag != null && prevEtag.equals(responseContext.get(ResponseContext.Key.ETAG))) {
+        //发送日志和监控给“getRemoteAddr”地址，也就是请求客户端地址
         queryLifecycle.emitLogsAndMetrics(null, req.getRemoteAddr(), -1);
+        //successfulQueryCount值+1，看样子是记录成功查询的数量的
         successfulQueryCount.incrementAndGet();
+        /**
+         * 不是很明白，为什么此处返回了个空的响应
+         * 是因为上面的queryLifecycle.emitLogsAndMetrics(null, req.getRemoteAddr(), -1);已经发送了想要的结果吗？
+         */
         return Response.notModified().build();
       }
 
+      /**
+       * druid中的查询结果对象是一种“Sequence”类型的对象，
+       * 是对迭代器的高级封装。
+       *
+       * 而Yielder对象作用是在遍历Sequence对象时，进行“暂停”。
+       *
+       * Yielder对象可以看成一个链表，
+       * 头部Yielder对象，后面跟了一连串的Yielder对象。
+       * Yielder的get方法可获取当前对象值，next可获得下一个Yielder。
+       *
+       *
+       */
       final Yielder<?> yielder = Yielders.each(results);
 
       try {
@@ -226,6 +281,7 @@ public class QueryResource implements QueryCountStatsProvider
             QueryContexts.isSerializeDateTimeAsLong(query, false)
             || (!shouldFinalize && QueryContexts.isSerializeDateTimeAsLongInner(query, false));
 
+        //新建一个负责输出的对象
         final ObjectWriter jsonWriter = ioReaderWriter.newOutputWriter(
             queryLifecycle.getToolChest(),
             queryLifecycle.getQuery(),
@@ -241,9 +297,13 @@ public class QueryResource implements QueryCountStatsProvider
                   {
                     Exception e = null;
 
+                    // CountingOutputStream：该流可以记录已经往此流中写入了多少字节
                     CountingOutputStream os = new CountingOutputStream(outputStream);
                     try {
                       // json serializer will always close the yielder
+                      /**
+                       * 将yielder中的结果数据直接序列化后写入输出流
+                       */
                       jsonWriter.writeValue(os, yielder);
 
                       os.flush(); // Some types of OutputStream suppress flush errors in the .close() method.
@@ -362,13 +422,23 @@ public class QueryResource implements QueryCountStatsProvider
     }
   }
 
+  /**
+   *
+   * @param req 客户端请求对象
+   * @param in 对应客户端请求的输入流
+   * @param ioReaderWriter 里面包含了序列化和反序列化工具类，以及accept格式
+   * @return org.apache.druid.query.Query<?>
+   */
   private Query<?> readQuery(
       final HttpServletRequest req,
       final InputStream in,
       final ResourceIOReaderWriter ioReaderWriter
   ) throws IOException
   {
+    // 获取ObjectMapper工具类，将此次请求的输入流中的内容反序列化成Query对象
+    // 可以理解为客户端的json请求会被序列化成Query对象
     Query baseQuery = ioReaderWriter.getInputMapper().readValue(in, Query.class);
+    // 获取请求头中的If-None-Match值，该值一开始是由服务端传的，即如果客户端又会传给服务端就是用缓存（不过此值看来在druid中不是这么用的）
     String prevEtag = getPreviousEtag(req);
 
     if (prevEtag != null) {
@@ -392,8 +462,12 @@ public class QueryResource implements QueryCountStatsProvider
 
   protected ResourceIOReaderWriter createResourceIOReaderWriter(String requestType, boolean pretty)
   {
+    //判断客户端希望获取的数据类型是否是“application/x-jackson-smile”或“application/smile”类型
     boolean isSmile = SmileMediaTypes.APPLICATION_JACKSON_SMILE.equals(requestType) ||
                       APPLICATION_SMILE.equals(requestType);
+
+    //确定返回客户端的数据类型，是x-jackson-smile还是json
+    //smile是json的二进制版本，smile的速度更快
     String contentType = isSmile ? SmileMediaTypes.APPLICATION_JACKSON_SMILE : MediaType.APPLICATION_JSON;
     return new ResourceIOReaderWriter(
         contentType,

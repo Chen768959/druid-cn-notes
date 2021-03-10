@@ -39,8 +39,9 @@ import java.util.Optional;
 
 /**
  * Analysis of a datasource for purposes of deciding how to execute a particular query.
- *
+ * 分析数据源
  * The analysis breaks a datasource down in the following way:
+ * 通过以下方式分析数据源
  *
  * <pre>
  *
