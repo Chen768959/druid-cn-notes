@@ -30,6 +30,8 @@ public interface QuerySegmentWalker
    * Gets the Queryable for a given interval, the Queryable returned can be any version(s) or partitionNumber(s)
    * such that it represents the interval.
    *
+   * 根据时间间隔查找queryrunner
+   *
    * @param <T>       query result type
    * @param query     the query to find a Queryable for
    * @param intervals the intervals to find a Queryable for
@@ -42,6 +44,8 @@ public interface QuerySegmentWalker
    * Gets the Queryable for a given list of SegmentDescriptors.
    *
    * The descriptors are expected to apply to the base datasource involved in the query, i.e. the one returned by:
+   *
+   * 根据给定的segment查找queryrunner
    *
    * <pre>
    *   DataSourceAnalysis.forDataSource(query.getDataSource()).getBaseDataSource()

@@ -30,7 +30,9 @@ import org.apache.druid.client.cache.CacheConfig;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.java.util.emitter.service.ServiceEmitter;
+import org.apache.druid.query.BaseQuery;
 import org.apache.druid.query.DataSource;
 import org.apache.druid.query.FluentQueryRunnerBuilder;
 import org.apache.druid.query.GlobalTableDataSource;
@@ -76,6 +78,8 @@ import java.util.stream.Collectors;
  */
 public class ClientQuerySegmentWalker implements QuerySegmentWalker
 {
+  private static final Logger log = new Logger(ClientQuerySegmentWalker.class);
+
   private final ServiceEmitter emitter;
   private final QuerySegmentWalker clusterClient;
   private final QuerySegmentWalker localClient;
@@ -143,13 +147,51 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
   @Override
   public <T> QueryRunner<T> getQueryRunnerForIntervals(Query<T> query, Iterable<Interval> intervals)
   {
+    intervals.forEach(interval -> {
+      log.info("!!!select：此次查询interval="+interval.toString());
+    });
+
+    //该类与自定义的扩展类有关
     final QueryToolChest<T, Query<T>> toolChest = warehouse.getToolChest(query);
 
     // transform TableDataSource to GlobalTableDataSource when eligible
     // before further transformation to potentially inline
+    /**
+     * 如果datasoource类型是TableDataSource，则转型成GlobalTableDataSource
+     *
+     * 每个datasource是可以包含很多“子datasource”的，
+     * 所以此方法将datasource以及其子source中，所有的TableDataSource类型都转化成GlobalTableDataSource
+     */
     final DataSource freeTradeDataSource = globalizeIfPossible(query.getDataSource());
     // do an inlining dry run to see if any inlining is necessary, without actually running the queries.
+    /**
+     * 查找配置文件中的druid.server.http.maxSubqueryRows参数
+     * 该值设置了join子查询结果的最大行数
+     */
     final int maxSubqueryRows = QueryContexts.getMaxSubqueryRows(query, serverConfig.getMaxSubqueryRows());
+    /**
+     * 获取inlineDryRun数据源，只用于下面的测试，
+     *
+     * inlineIfNecessary方法：
+     * 首先递归查找了传参datasource，以及其内的所有自datasource，
+     * 如果发现是“QueryDataSource”类型，
+     * 就将其作为一个“全新query进行查询（从中获取query对象）”
+     * （然后就是一系列正常查询的流程了，由walker根据此query生成newQuery和baseQueryRunner，
+     * 然后调用的也是basequery的run方法获取查询结果）
+     * 然后将查询结果放入InlineDataSource中，并返回。
+     *
+     * 可以说inlineIfNecessary()方法就是将某datasource中的所有子QueryDataSource类型的查询（子查询）全部查出来，
+     * 然后讲这些子查询结果装入其中，形成一个新的datasource（InlineDataSource类型）
+     *
+     * 注意1：
+     * 最后一个boolean参数，是用来控制“是否不进行子查询”的，
+     * 为true的话，则不会进行QueryDataSource类型的查询
+     *
+     * 注意2：
+     * 倒数第二个参数“maxSubqueryRows”
+     * 对应的是配置文件中的druid.server.http.maxSubqueryRows参数，也是在此处使用的，
+     * 所有子查询结果会被累加计数，如果数据量超过此限制，则会报错
+     */
     final DataSource inlineDryRun = inlineIfNecessary(
         freeTradeDataSource,
         toolChest,
@@ -158,6 +200,15 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
         true
     );
 
+    /**
+     * 判断此次查询能否在本机，或其他从机上完成，
+     * 如果都不能，则报错。
+     *
+     * 可以看出确定能否查询需要query和数据源
+     *
+     * query.query.withDataSource(datasource)方法会生成一个新的query对象，
+     * 新对象和原对象一模一样，唯一的区别就是数据源是传参
+     */
     if (!canRunQueryUsingClusterWalker(query.withDataSource(inlineDryRun))
         && !canRunQueryUsingLocalWalker(query.withDataSource(inlineDryRun))) {
       // Dry run didn't go well.
@@ -260,15 +311,21 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
   )
   {
     if (dataSource instanceof TableDataSource) {
+      log.info("!!!select：datasource为TableDataSource");
       GlobalTableDataSource maybeGlobal = new GlobalTableDataSource(((TableDataSource) dataSource).getName());
       if (joinableFactory.isDirectlyJoinable(maybeGlobal)) {
         return maybeGlobal;
       }
       return dataSource;
     } else {
+      log.info("!!!select：datasource为其他类型");
       List<DataSource> currentChildren = dataSource.getChildren();
       List<DataSource> newChildren = new ArrayList<>(currentChildren.size());
       for (DataSource child : currentChildren) {
+        child.getTableNames().stream().forEach(name->{
+          log.info("!!!select：datasource的children包含table："+name);
+        });
+        log.info("!!!select：datasource的children结束");
         newChildren.add(globalizeIfPossible(child));
       }
       return dataSource.withChildren(newChildren);
@@ -289,6 +346,15 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
    *                             for an example of a toolchest that can handle subqueries.
    * @param dryRun               if true, does not actually execute any subqueries, but will inline empty result sets.
    */
+  /**
+   * 在某个前提下，尝试将QueryDataSources替换成InlineDataSources
+   *
+   * @param dataSource 原始datasource
+   * @param toolChestIfOutermost 自定义的querysource
+   * @param subqueryRowLimitAccumulator 一个原子int
+   * @param maxSubqueryRows druid.server.http.maxSubqueryRows参数，关联子查询结果最大可接受行数
+   * @param dryRun 为true，则实际上不进行任何子查询，关联空的结果集
+   */
   @SuppressWarnings({"rawtypes", "unchecked"}) // Subquery, toolchest, runner handling all use raw types
   private DataSource inlineIfNecessary(
       final DataSource dataSource,
@@ -298,12 +364,17 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
       final boolean dryRun
   )
   {
+    log.info("!!!select：inlineIfNecessary，查看datasource类型："+ dataSource.getClass()+
+            "...当前int原子为："+subqueryRowLimitAccumulator.get()+"...maxRows为："+maxSubqueryRows);
     if (dataSource instanceof QueryDataSource) {
       // This datasource is a subquery.
+      //从datasource中找到子查询对象
       final Query subQuery = ((QueryDataSource) dataSource).getQuery();
+      //获取该子查询的自定义处理类
       final QueryToolChest toolChest = warehouse.getToolChest(subQuery);
 
       if (toolChestIfOutermost != null && toolChestIfOutermost.canPerformSubquery(subQuery)) {
+        log.info("!!!select：inlineIfNecessary，进入存在toolChestIfOutermost的条件分支");
         // Strip outer queries that are handleable by the toolchest, and inline subqueries that may be underneath
         // them (e.g. subqueries nested under a join).
         final Stack<DataSource> stack = new Stack<>();
@@ -330,15 +401,37 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
           // We need to consider inlining it.
           return inlineIfNecessary(current, toolChestIfOutermost, subqueryRowLimitAccumulator, maxSubqueryRows, dryRun);
         }
+        /**
+         * 如果此条子查询在整个集群中可以被查出结果，
+         *
+         */
       } else if (canRunQueryUsingLocalWalker(subQuery) || canRunQueryUsingClusterWalker(subQuery)) {
+        log.info("!!!select：inlineIfNecessary，进入处理子查询逻辑");
         // Subquery needs to be inlined. Assign it a subquery id and run it.
+        // 为子查询分配一个id
         final Query subQueryWithId = subQuery.withDefaultSubQueryId();
+        log.info("!!!select：inlineIfNecessary，分配id后的子查询query类型："+subQueryWithId.getClass());
 
         final Sequence<?> queryResults;
 
+        // 为true则不进行真正的子查询，直接给子查询结果赋个空值
         if (dryRun) {
           queryResults = Sequences.empty();
         } else {
+          //获取子查询的queryrunner，其逻辑和正在进行的一样，都是由walker生成newQuery和baseQueryRunner，下面实际上调用的也是basequery的run方法
+          /**
+           * 获取子查询的queryrunner，然后调用其run方法获取查询结果。
+           *
+           * 注意：
+           * 整个过程和当前正在进行的查询一模一样，
+           * 都是由walker根据子查询query生成newQuery和baseQueryRunner，
+           * 然后调用的也是basequery的run方法获取查询结果，
+           * 期间子查询如果还有子查询，则也会走到此处，然后获取“子子查询的结果”，
+           *
+           * 可以说此处就将子查询，以及对应的的后续所有自查询结果获取到了。
+           *
+           * 可以说摸清了一条查询的逻辑，其子查询逻辑也就摸清了。
+           */
           final QueryRunner subqueryRunner = subQueryWithId.getRunner(this);
           queryResults = subqueryRunner.run(
               QueryPlus.wrap(subQueryWithId),
@@ -346,6 +439,19 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
           );
         }
 
+        /**
+         * 生成InlineDataSource，
+         * 可以说所谓的InlineDataSource就是“将所有子查询查出来，然后把其结果放入其中后的一种datasource”，
+         * 简单点说就是“包含所有子查询结果的datasource”
+         *
+         * 期间还判断了子查询结果不能超过limit
+         *
+         * @param query 子查询对象
+         * @param results 子查询结果
+         * @param toolChest
+         * @param limitAccumulator 原子int，从调用之初就被新建并传进来了
+         * @param limit druid.server.http.maxSubqueryRows参数，关联子查询结果最大可接受行数
+         */
         return toInlineDataSource(
             subQueryWithId,
             queryResults,
@@ -354,6 +460,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
             maxSubqueryRows
         );
       } else {
+        log.info("!!!select：inlineIfNecessary，无法内联子查询");
         // Cannot inline subquery. Attempt to inline one level deeper, and then try again.
         return inlineIfNecessary(
             dataSource.withChildren(
@@ -375,6 +482,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
       }
     } else {
       // Not a query datasource. Walk children and see if there's anything to inline.
+      //递归查找dataSource的所有子datasource看其是否为QueryDataSource类型
       return dataSource.withChildren(
           dataSource.getChildren()
                     .stream()
@@ -434,13 +542,14 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
   /**
    * Convert the results of a particular query into a materialized (List-based) InlineDataSource.
    *
-   * @param query            the query
-   * @param results          query results
-   * @param toolChest        toolchest for the query
+   * @param query            the query 子查询对象
+   * @param results          query results 子查询结果
+   * @param toolChest        toolchest for the query 自定义的查询工具
    * @param limitAccumulator an accumulator for tracking the number of accumulated rows in all subqueries for a
-   *                         particular master query
+   *                         particular master query 原子int，从调用之初就被新建并传进来了
    * @param limit            user-configured limit. If negative, will be treated as {@link Integer#MAX_VALUE}.
-   *                         If zero, this method will throw an error immediately.
+   *                         If zero, this method will throw an error
+   *                         immediately.druid.server.http.maxSubqueryRows参数，关联子查询结果最大可接受行数
    *
    * @throws ResourceLimitExceededException if the limit is exceeded
    */
@@ -452,6 +561,8 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
       final int limit
   )
   {
+    log.info("!!!select：toInlineDataSource中");
+    //immediately.druid.server.http.maxSubqueryRows参数设置为负数，则表示为最大值
     final int limitToUse = limit < 0 ? Integer.MAX_VALUE : limit;
 
     if (limitAccumulator.get() >= limitToUse) {
@@ -465,6 +576,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
     toolChest.resultsAsArrays(query, results).accumulate(
         resultList,
         (acc, in) -> {
+          // 将子查询结果行数累加进limitAccumulator，并且与limitToUse参数进行比较
           if (limitAccumulator.getAndIncrement() >= limitToUse) {
             throw new ResourceLimitExceededException(
                 "Subquery generated results beyond maximum[%d]",

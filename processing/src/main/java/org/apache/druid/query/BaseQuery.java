@@ -28,6 +28,7 @@ import org.apache.druid.guice.annotations.ExtensionPoint;
 import org.apache.druid.java.util.common.granularity.Granularities;
 import org.apache.druid.java.util.common.granularity.Granularity;
 import org.apache.druid.java.util.common.granularity.PeriodGranularity;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.planning.DataSourceAnalysis;
 import org.apache.druid.query.spec.QuerySegmentSpec;
 import org.joda.time.DateTimeZone;
@@ -46,6 +47,7 @@ import java.util.TreeMap;
 @ExtensionPoint
 public abstract class BaseQuery<T> implements Query<T>
 {
+  private static final Logger log = new Logger(BaseQuery.class);
   public static void checkInterrupted()
   {
     if (Thread.interrupted()) {
@@ -106,7 +108,7 @@ public abstract class BaseQuery<T> implements Query<T>
     return descending;
   }
 
-  @JsonProperty("intervals")
+  @JsonProperty("intervals")//指定java对象转化成json时，该属性对应的key名
   public QuerySegmentSpec getQuerySegmentSpec()
   {
     return querySegmentSpec;
@@ -115,6 +117,13 @@ public abstract class BaseQuery<T> implements Query<T>
   @Override
   public QueryRunner<T> getRunner(QuerySegmentWalker walker)
   {
+    QuerySegmentSpec querySegmentSpec = getQuerySegmentSpecForLookUp(this);
+    log.info("!!!select：BaseQuery内生成的querySegmentSpec对象："+querySegmentSpec.getClass());
+    /**
+     * getQuerySegmentSpecForLookUp(this)生成的spec对象是{@link org.apache.druid.query.spec.LegacySegmentSpec}，
+     * 但是其内部没有lookup方法，
+     * 所以实际调用的还是{@link org.apache.druid.query.spec.MultipleIntervalSegmentSpec#lookup(Query, QuerySegmentWalker)}
+     */
     return getQuerySegmentSpecForLookUp(this).lookup(this, walker);
   }
 
@@ -125,6 +134,21 @@ public abstract class BaseQuery<T> implements Query<T>
      * DataSourceAnalysis直译是数据源分析。
      * druid的查询方式因数据源的类型而异。
      *
+     * 1、DataSourceAnalysis.forDataSource：
+     * 获取数据源，（暂按照table数据源来分析）。
+     * 入参的datasource来自于此处查询请求的参数中，暂定table datasource
+     *
+     * 如果是table datasource，
+     * 则此处只是创建一个新的DataSourceAnalysis对象，
+     * 然后将datasource、Query对象，这些参数存进去。
+     *
+     * 2、.getBaseQuerySegmentSpec()：
+     * 调用数据源内方法获取QuerySegmentSpec对象
+     * {@link DataSourceAnalysis#getBaseQuerySegmentSpec()}
+     *
+     *
+     * 3、.orElseGet(query::getQuerySegmentSpec)：
+     * 如果上一步获取不到，则使用getQuerySegmentSpec()获取（暂不考虑）
      *
      */
     return DataSourceAnalysis.forDataSource(query.getDataSource())

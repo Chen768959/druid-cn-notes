@@ -106,8 +106,13 @@ public class DataSourceAnalysis
   {
     // Strip outer queries, retaining querySegmentSpecs as we go down (lowest will become the 'baseQuerySegmentSpec').
     Query<?> baseQuery = null;
+    // table datasource
     DataSource current = dataSource;
 
+    /**
+     * 判断datasource是否是QueryDataSource，
+     * sql类型的查询，用的就是QueryDataSource
+     */
     while (current instanceof QueryDataSource) {
       final Query<?> subQuery = ((QueryDataSource) current).getQuery();
 
@@ -125,6 +130,11 @@ public class DataSourceAnalysis
       final Pair<DataSource, List<PreJoinableClause>> flattened = flattenJoin((JoinDataSource) current);
       return new DataSourceAnalysis(dataSource, flattened.lhs, baseQuery, flattened.rhs);
     } else {
+
+      /**
+       * 如果既不是query datasource，也不是join datasource，
+       * 则创建一个新的DataSourceAnalysis对象，并将这些参数存进去
+       */
       return new DataSourceAnalysis(dataSource, current, baseQuery, Collections.emptyList());
     }
   }
@@ -226,6 +236,11 @@ public class DataSourceAnalysis
    */
   public Optional<QuerySegmentSpec> getBaseQuerySegmentSpec()
   {
+    /**
+     * getBaseQuery().map(query -> ((BaseQuery<?>) query) 防空指针用的
+     * getQuerySegmentSpec返回的对象，像是json中intervals键值对，
+     * 也就是查询时指定的时间范围
+     */
     return getBaseQuery().map(query -> ((BaseQuery<?>) query).getQuerySegmentSpec());
   }
 

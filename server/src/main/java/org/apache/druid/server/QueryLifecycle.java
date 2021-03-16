@@ -284,8 +284,12 @@ public class QueryLifecycle
      * 该方法就做了两件事
      * 1、{@link BaseQuery#getRunner(QuerySegmentWalker)} 获取Query对象(BaseQuery)对应的QueryRunner对象。
      *
-     * 
+     * 最终获取了{@link org.apache.druid.server.ClientQuerySegmentWalker.QuerySwappingQueryRunner}
+     * 这个QueryRunner
+     *
      * 2、调用{@link QueryRunner#run(QueryPlus, ResponseContext)}方法。
+     *
+     * {@link org.apache.druid.server.ClientQuerySegmentWalker.QuerySwappingQueryRunner#run(QueryPlus, ResponseContext)}
      */
     final Sequence res = QueryPlus.wrap(baseQuery)
                                   .withIdentity(authenticationResult.getIdentity())

@@ -206,6 +206,7 @@ public class QueryResource implements QueryCountStatsProvider
       queryLifecycle.initialize(readQuery(req, in, ioReaderWriter));
       //拿出的是刚刚解析出来的特定query对象
       query = queryLifecycle.getQuery();
+      log.info("!!!select：此次请求query对象："+query.getClass());
       final String queryId = query.getId();
 
       // 重命名当前线程名，将相关信息都放进去
@@ -230,14 +231,37 @@ public class QueryResource implements QueryCountStatsProvider
       }
 
       /**
-       * 执行查询请求
+       * ！！！执行查询请求
        *
-       * 使用对应的QuerySegmentWalker构建QueryRunner，
-       * 然后调用QueryRunner的run方法
+       * Query对象：
+       * 客户端的请求会被包装成query对象，每种请求不一样，
+       * 以timeseries数据源为例，查询请求会被包装成{@link org.apache.druid.query.timeseries.TimeseriesQuery}
+       * 然后在上面被传入queryLifecycle。
+       *
+       * walker对象：
+       * walker对象作用是根据query请求，合理的创建queryrunner对象，
+       * 在程序启动时就会创建好，并注入到queryLifecycle中，
+       * 此处是{@link ClientQuerySegmentWalker},
+       * walker接口有两个方法，
+       * 一个是根据时间限制条件，创建queryrunner，
+       * 一个是根据segment条件，创建queryrunner。
+       * 以timeseries数据源为例，
+       * 调用的是{@link ClientQuerySegmentWalker#getQueryRunnerForIntervals(Query, Iterable)}
+       * 使用这种方式创建的queryrunner一般是个包装类，
+       * 里面包含了一个“baseQueryRunner”，一个“newQuery”，以及“最初的query对象TimeseriesQuery”
+       *
+       * queryrunner
+       * 就想上面说的，
+       * 虽然walker返回的是{@link org.apache.druid.server.ClientQuerySegmentWalker.QuerySwappingQueryRunner}
+       * 但是此类实际上是一个包装类，
+       * 其内部包含了一个“baseQueryRunner”，一个“newQuery”，以及“最初的query对象TimeseriesQuery”
+       * 它的run方法实际上是，将基础query和newQuery“关联起来”，然后传参给baseQueryRunner，并调用baseQueryRunner的run方法。
+       *
+       * 所以一次查询的关键实际上是：
+       * 1、walker如何生成newQuery和baseQueryRunner，以及生成他们的意义。
+       * 2、baseQueryRunner的run方法做了什么
        */
       final QueryLifecycle.QueryResponse queryResponse = queryLifecycle.execute();
-
-      // 得到结果？
       final Sequence<?> results = queryResponse.getResults();
       final ResponseContext responseContext = queryResponse.getResponseContext();
       //获取请求头中的If-None-Match参数

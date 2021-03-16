@@ -23,6 +23,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import org.apache.druid.guice.annotations.PublicApi;
 import org.apache.druid.java.util.common.guava.Sequence;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.context.ResponseContext;
 
 import javax.annotation.Nullable;
@@ -33,6 +34,7 @@ import javax.annotation.Nullable;
 @PublicApi
 public final class QueryPlus<T>
 {
+  private static final Logger log = new Logger(QueryPlus.class);
   /**
    * Returns the minimum bare QueryPlus object with the given query. {@link #getQueryMetrics()} of the QueryPlus object,
    * returned from this factory method, returns {@code null}.
@@ -150,7 +152,11 @@ public final class QueryPlus<T>
      * walker实现类为{@link ClientQuerySegmentWalker}
      * query.getRunner调用的是{@link BaseQuery#getRunner(QuerySegmentWalker)}
      */
-    return query.getRunner(walker).run(this, context);
+    QueryRunner<T> queryRunner = query.getRunner(walker);
+
+    log.info("!!!select：query生成的queryRunner对象："+queryRunner.getClass());
+
+    return queryRunner.run(this, context);
   }
 
   public QueryPlus<T> optimizeForSegment(PerSegmentQueryOptimizationContext optimizationContext)

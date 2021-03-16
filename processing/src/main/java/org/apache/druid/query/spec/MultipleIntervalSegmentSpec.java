@@ -54,6 +54,9 @@ public class MultipleIntervalSegmentSpec implements QuerySegmentSpec
   @Override
   public <T> QueryRunner<T> lookup(Query<T> query, QuerySegmentWalker walker)
   {
+    /**
+     * query就是外面调用的query
+     */
     return walker.getQueryRunnerForIntervals(query, intervals);
   }
 
