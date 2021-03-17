@@ -64,6 +64,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Stack;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
 /**
@@ -283,7 +284,9 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
            *
            * 所以此处实际起作用的queryrunner是clusterClient创建的
            *
-           * 此处clusterClient创建的runner为{@link CachingClusteredClient}
+           * 此处clusterClient类型为{@link CachingClusteredClient}
+           * 此类会创建一个匿名QueryRunner对象，其run方法实际调用的是{@link CachingClusteredClient#run(QueryPlus, ResponseContext, UnaryOperator, boolean)}方法
+           *
            */
           decorateClusterRunner(newQuery, clusterClient.getQueryRunnerForIntervals(newQuery, intervals)),
           query,

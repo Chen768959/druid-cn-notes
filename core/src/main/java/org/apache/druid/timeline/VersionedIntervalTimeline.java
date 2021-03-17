@@ -193,7 +193,6 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
   )
   {
     lock.writeLock().lock();
-
     try {
       final IdentityHashMap<TimelineEntry, Interval> allEntries = new IdentityHashMap<>();
 
@@ -731,9 +730,16 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
   {
     List<TimelineObjectHolder<VersionType, ObjectType>> retVal = new ArrayList<>();
     NavigableMap<Interval, TimelineEntry> timeline;
+
+    //lookup方法传参为ONLY_COMPLETE，不进此逻辑
     if (completeness == Partitions.INCOMPLETE_OK) {
       timeline = incompletePartitionsTimeline;
     } else {
+      /**
+       * 看类型是个treeMap，
+       * key为查询时间间隔对象Interval，
+       * value是TimelineEntry类型
+       */
       timeline = completePartitionsTimeline;
     }
 

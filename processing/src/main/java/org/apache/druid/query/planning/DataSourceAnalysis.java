@@ -105,6 +105,15 @@ public class DataSourceAnalysis
     this.preJoinableClauses = preJoinableClauses;
   }
 
+  /**
+   * 简单来说此方法是对一些特殊数据源类型参数的处理。
+   * 如果是QueryDataSource类型，则获取出其中的子查询subQuery对象及对应数据源，放入DataSourceAnalysis对象封装。
+   * 如果是JoinDataSource类型，则将原始数据源拆分成基础数据源和被连接数据源，分别放入DataSourceAnalysis对象封装。
+   *
+   * 如果不是以上两者，则不作任何处理，直接将数据源放入DataSourceAnalysis对象封装。
+   *
+   * @param dataSource
+   */
   public static DataSourceAnalysis forDataSource(final DataSource dataSource)
   {
     log.info("!!!select：forDataSource，进入时datasource："+dataSource.getClass());
@@ -113,10 +122,7 @@ public class DataSourceAnalysis
     // table datasource
     DataSource current = dataSource;
 
-    /**
-     * 判断datasource是否是QueryDataSource，
-     * sql类型的查询，用的就是QueryDataSource
-     */
+    //从QueryDataSource中提炼出“子查询对象”，然后将baseQuery赋值成自查询对象，current也赋值成子查询的datasource
     while (current instanceof QueryDataSource) {
       final Query<?> subQuery = ((QueryDataSource) current).getQuery();
 
@@ -130,14 +136,23 @@ public class DataSourceAnalysis
       current = subQuery.getDataSource();
     }
 
+    /**
+     * 如果是JoinDataSource类型，
+     * 则{@link this#flattenJoin(JoinDataSource)}，
+     * 将数据源解析成两部分并返回，left为基础数据源。right为联接数据源
+     *
+     * baseQuery还是null
+     */
     if (current instanceof JoinDataSource) {
       final Pair<DataSource, List<PreJoinableClause>> flattened = flattenJoin((JoinDataSource) current);
       return new DataSourceAnalysis(dataSource, flattened.lhs, baseQuery, flattened.rhs);
     } else {
 
       /**
-       * 如果既不是query datasource，也不是join datasource，
+       * 如果既不是query datasource，也不是join datasource，（比如一般的json查询就是TableDataSource类型）
        * 则创建一个新的DataSourceAnalysis对象，并将这些参数存进去
+       * 其中baseQuery为空，
+       * dataSource=current
        */
       return new DataSourceAnalysis(dataSource, current, baseQuery, Collections.emptyList());
     }

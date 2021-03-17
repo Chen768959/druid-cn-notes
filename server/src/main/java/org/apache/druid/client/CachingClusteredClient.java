@@ -189,11 +189,15 @@ public class CachingClusteredClient implements QuerySegmentWalker
       final QueryPlus<T> queryPlus,
       final ResponseContext responseContext,
       final UnaryOperator<TimelineLookup<String, ServerSelector>> timelineConverter,
-      final boolean specificSegments
+      final boolean specificSegments // false
   )
   {
+    log.info("!!!select：进入CachingClusteredClient匿名queryrunner run()方法");
+
+    // 建立“查询”、“结果合并”的计划
     final ClusterQueryResult<T> result = new SpecificQueryRunnable<>(queryPlus, responseContext)
         .run(timelineConverter, specificSegments);
+
     initializeNumRemainingResponsesInResponseContext(queryPlus.getQuery(), responseContext, result.numQueryServers);
     return result.sequence;
   }
@@ -289,8 +293,18 @@ public class CachingClusteredClient implements QuerySegmentWalker
       // Note that enabling this leads to putting uncovered intervals information in the response headers
       // and might blow up in some cases https://github.com/apache/druid/issues/2108
       this.uncoveredIntervalsLimit = QueryContexts.getUncoveredIntervalsLimit(query);
+      /**
+       * 简单来说此方法是对一些特殊数据源类型参数的处理。
+       * 如果是QueryDataSource类型，则获取出其中的子查询subQuery对象及对应数据源，放入DataSourceAnalysis对象封装。
+       * 如果是JoinDataSource类型，则将原始数据源拆分成基础数据源和被连接数据源，分别放入DataSourceAnalysis对象封装。
+       *
+       * 如果不是以上两者，则不作任何处理，直接将数据源放入DataSourceAnalysis对象封装。
+       *
+       * 一般json查询都是TableDataSource
+       */
       this.dataSourceAnalysis = DataSourceAnalysis.forDataSource(query.getDataSource());
       // For nested queries, we need to look at the intervals of the inner most query.
+      // 获取此次查询的时间间隔参数intervals
       this.intervals = dataSourceAnalysis.getBaseQuerySegmentSpec()
                                          .map(QuerySegmentSpec::getIntervals)
                                          .orElseGet(() -> query.getIntervals());
@@ -325,23 +339,48 @@ public class CachingClusteredClient implements QuerySegmentWalker
      * @return a pair of a sequence merging results from remote query servers and the number of remote servers
      *         participating in query processing.
      */
+    //建立查询和合并计划
     ClusterQueryResult<T> run(
         final UnaryOperator<TimelineLookup<String, ServerSelector>> timelineConverter,
-        final boolean specificSegments
+        final boolean specificSegments //false
     )
     {
+      /**
+       * serverView为启动时注入，此处实际调用的是{@link BrokerServerView#getTimeline(DataSourceAnalysis)}
+       * 此处返回的是一个timeline数据（如果存在的话），
+       * 暂不知道意义
+       */
       final Optional<? extends TimelineLookup<String, ServerSelector>> maybeTimeline = serverView.getTimeline(
           dataSourceAnalysis
       );
+      if (maybeTimeline.isPresent()){
+        log.info("!!!select：存在maybeTimeline，类型为："+maybeTimeline.get().getClass());
+      }else {
+        log.info("!!!select：maybeTimeline为空");
+      }
+
+      // 如果没有maybeTimeline，则直接返回空查询结果
       if (!maybeTimeline.isPresent()) {
         return new ClusterQueryResult<>(Sequences.empty(), 0);
       }
 
+      /**
+       * timelineConverter这个参数是一个“函数参数”，
+       * 相当于传进来一个函数，有参数有响应，
+       * 此处的apply就是调用该函数，
+       * 而这个函数当时定义的是“没有任何逻辑，传什么就回显什么”，
+       *
+       * 所以此处的timelineConverter.apply()相当于什么都没做，
+       * 直接将maybeTimeline.get()赋值给了timeline
+       */
       final TimelineLookup<String, ServerSelector> timeline = timelineConverter.apply(maybeTimeline.get());
       if (uncoveredIntervalsLimit > 0) {
         computeUncoveredIntervals(timeline);
       }
 
+      /**
+       *
+       */
       final Set<SegmentServerSelector> segmentServers = computeSegmentsToQuery(timeline, specificSegments);
       @Nullable
       final byte[] queryCacheKey = computeQueryCacheKey();
@@ -454,6 +493,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
       boolean uncoveredIntervalsOverflowed = false;
 
       for (Interval interval : intervals) {
+        log.info("!!!select：computeUncoveredIntervals处理查询时间参数，查询时间："+interval.toString());
         Iterable<TimelineObjectHolder<String, ServerSelector>> lookup = timeline.lookup(interval);
         long startMillis = interval.getStartMillis();
         long endMillis = interval.getEndMillis();

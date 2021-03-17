@@ -307,11 +307,17 @@ public class BrokerServerView implements TimelineServerView
   @Override
   public Optional<VersionedIntervalTimeline<String, ServerSelector>> getTimeline(final DataSourceAnalysis analysis)
   {
+    /**
+     * analysis.getBaseTableDataSource()判断analysis对象中的数据源是不是TableDataSource类型，如果不是则抛出异常。
+     *
+     * 可以看出此处只支持TableDataSource类型的数据源
+     */
     final TableDataSource table =
         analysis.getBaseTableDataSource()
                 .orElseThrow(() -> new ISE("Cannot handle datasource: %s", analysis.getDataSource()));
 
     synchronized (lock) {
+      //
       return Optional.ofNullable(timelines.get(table.getName()));
     }
   }
