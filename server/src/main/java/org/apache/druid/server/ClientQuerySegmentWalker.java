@@ -32,7 +32,6 @@ import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
 import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.java.util.emitter.service.ServiceEmitter;
-import org.apache.druid.query.BaseQuery;
 import org.apache.druid.query.DataSource;
 import org.apache.druid.query.FluentQueryRunnerBuilder;
 import org.apache.druid.query.GlobalTableDataSource;
@@ -161,6 +160,8 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
      *
      * 每个datasource是可以包含很多“子datasource”的，
      * 所以此方法将datasource以及其子source中，所有的TableDataSource类型都转化成GlobalTableDataSource
+     *
+     * global应该是
      */
     final DataSource freeTradeDataSource = globalizeIfPossible(query.getDataSource());
     // do an inlining dry run to see if any inlining is necessary, without actually running the queries.
@@ -170,7 +171,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
      */
     final int maxSubqueryRows = QueryContexts.getMaxSubqueryRows(query, serverConfig.getMaxSubqueryRows());
     /**
-     * 获取inlineDryRun数据源，只用于下面的测试，
+     * 获取InlineDataSource数据源，只用于下面的测试，
      *
      * inlineIfNecessary方法：
      * 首先递归查找了传参datasource，以及其内的所有自datasource，
@@ -208,6 +209,13 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
      *
      * query.query.withDataSource(datasource)方法会生成一个新的query对象，
      * 新对象和原对象一模一样，唯一的区别就是数据源是传参
+     *
+     * canRunQueryUsingClusterWalker中有个核心判断：
+     * datasource类型必须得是TableDataSource或者父类是UnionDataSource子类是TableDataSource
+     *
+     * canRunQueryUsingLocalWalker中的核心判断：
+     * 其datasource类型和上面的cluster相反，必须不是TableDataSource或者父类是UnionDataSource子类不是TableDataSource
+     * 而且datasource必须得是global的
      */
     if (!canRunQueryUsingClusterWalker(query.withDataSource(inlineDryRun))
         && !canRunQueryUsingLocalWalker(query.withDataSource(inlineDryRun))) {
@@ -217,6 +225,14 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
 
     // Now that we know the structure is workable, actually do the inlining (if necessary).
     final Query<T> newQuery = query.withDataSource(
+        /**
+         * 重新创建一个InlineDataSource数据源，
+         * 和上面的唯一区别就是此次“dryRun为false”，
+         * 也就是真的需要其计算所有内联子查询，
+         * 并将计算结果存入此datasource中。
+         *
+         * 然后将新建的InlineDataSource数据源作为入参创建一个newQuery
+         */
         inlineIfNecessary(
             freeTradeDataSource,
             toolChest,
@@ -227,17 +243,48 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
     );
 
     if (canRunQueryUsingLocalWalker(newQuery)) {
+      log.info("!!!select：满足canRunQueryUsingLocalWalker条件");
+      log.info("!!!select：localClient类型："+localClient.getClass());
       // No need to decorate since LocalQuerySegmentWalker does its own.
+      /**
+       * 当满足canRunQueryUsingLocalWalker条件时生成的，
+       *
+       * query是我们的原始查询对象，
+       * newQuery是一个新查询对象，绑定了InlineDataSource数据源（将原始query中所有子查询结果查出并放入了其中），
+       *
+       * localClient是一个新的walker，
+       * 此处使用该walker，结合newQuery，创建了一个新的queryrunner
+       *
+       * 所以此处实际起作用的localClient是clusterClient创建的
+       * （后续对QuerySwappingQueryRunner的run方法调用，实际上也是调用的这个localClient创建的queryrunner的run方法）
+       */
       return new QuerySwappingQueryRunner<>(
           localClient.getQueryRunnerForIntervals(newQuery, intervals),
           query,
           newQuery
       );
     } else if (canRunQueryUsingClusterWalker(newQuery)) {
+      log.info("!!!select：满足canRunQueryUsingClusterWalker条件");
+      log.info("!!!select：clusterClient类型："+clusterClient.getClass());
       // Note: clusterClient.getQueryRunnerForIntervals() can return an empty sequence if there is no segment
       // to query, but this is not correct when there's a right or full outer join going on.
       // See https://github.com/apache/druid/issues/9229 for details.
       return new QuerySwappingQueryRunner<>(
+          /**
+           * 当满足canRunQueryUsingLocalWalker条件时生成的，
+           *
+           * query是我们的原始查询对象，
+           * newQuery是一个新查询对象，绑定了InlineDataSource数据源（将原始query中所有子查询结果查出并放入了其中），
+           *
+           * clusterClient是一个新的walker，
+           * 此处使用该walker，结合newQuery，创建了一个新的queryrunner
+           *
+           * decorateClusterRunner看注释应该是创建一个“负责等所有cluster主机上的数据都查完后，再进行合并”的一个包装queryrunner
+           *
+           * 所以此处实际起作用的queryrunner是clusterClient创建的
+           *
+           * 此处clusterClient创建的runner为{@link CachingClusteredClient}
+           */
           decorateClusterRunner(newQuery, clusterClient.getQueryRunnerForIntervals(newQuery, intervals)),
           query,
           newQuery
@@ -276,6 +323,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
    */
   private <T> boolean canRunQueryUsingLocalWalker(Query<T> query)
   {
+    log.info("!!!select：进入canRunQueryUsingLocalWalker");
     final DataSourceAnalysis analysis = DataSourceAnalysis.forDataSource(query.getDataSource());
     final QueryToolChest<T, Query<T>> toolChest = warehouse.getToolChest(query);
 
@@ -294,6 +342,8 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
    */
   private <T> boolean canRunQueryUsingClusterWalker(Query<T> query)
   {
+    log.info("!!!select：进入canRunQueryUsingClusterWalker");
+    //将query和datasource封装进Analysis方法
     final DataSourceAnalysis analysis = DataSourceAnalysis.forDataSource(query.getDataSource());
     final QueryToolChest<T, Query<T>> toolChest = warehouse.getToolChest(query);
 

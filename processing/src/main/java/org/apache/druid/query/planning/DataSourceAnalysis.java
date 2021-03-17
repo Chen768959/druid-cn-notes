@@ -21,6 +21,7 @@ package org.apache.druid.query.planning;
 
 import org.apache.druid.java.util.common.IAE;
 import org.apache.druid.java.util.common.Pair;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.BaseQuery;
 import org.apache.druid.query.DataSource;
 import org.apache.druid.query.JoinDataSource;
@@ -83,6 +84,8 @@ public class DataSourceAnalysis
   private final Query<?> baseQuery;
   private final List<PreJoinableClause> preJoinableClauses;
 
+  private static final Logger log = new Logger(DataSourceAnalysis.class);
+
   private DataSourceAnalysis(
       DataSource dataSource,
       DataSource baseDataSource,
@@ -104,6 +107,7 @@ public class DataSourceAnalysis
 
   public static DataSourceAnalysis forDataSource(final DataSource dataSource)
   {
+    log.info("!!!select：forDataSource，进入时datasource："+dataSource.getClass());
     // Strip outer queries, retaining querySegmentSpecs as we go down (lowest will become the 'baseQuerySegmentSpec').
     Query<?> baseQuery = null;
     // table datasource
