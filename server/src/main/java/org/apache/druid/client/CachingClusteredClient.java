@@ -75,6 +75,7 @@ import org.apache.druid.server.QueryResource;
 import org.apache.druid.server.QueryScheduler;
 import org.apache.druid.server.coordination.DruidServerMetadata;
 import org.apache.druid.timeline.DataSegment;
+import org.apache.druid.timeline.Partitions;
 import org.apache.druid.timeline.SegmentId;
 import org.apache.druid.timeline.TimelineLookup;
 import org.apache.druid.timeline.TimelineObjectHolder;
@@ -374,16 +375,46 @@ public class CachingClusteredClient implements QuerySegmentWalker
        * 直接将maybeTimeline.get()赋值给了timeline
        */
       final TimelineLookup<String, ServerSelector> timeline = timelineConverter.apply(maybeTimeline.get());
+
       if (uncoveredIntervalsLimit > 0) {
         computeUncoveredIntervals(timeline);
       }
 
       /**
+       * 该方法主要就是“根据此次查询的时间区间，从整个druid集群中找所有对应的segment”。
        *
+       * 一个SegmentServerSelector只是一个包装类，其核心是内部存的两个对象：
+       * 1、{@link ServerSelector}
+       * ServerSelector与segment是一对一关系，
+       * ServerSelector代表了segment所在服务器的“查找工具”，
+       * 其通过ServerSelector的pick方法，可以“从历史节点和实时节点中根据segment找到对应的{@link QueryableDruidServer}”
+       * QueryableDruidServer就是segment所在的服务器对象
+       *
+       * 2、{@link SegmentDescriptor}
+       * 一个segment要由“DataSource、时间间隔、version、分区号”这四种属性来唯一标识一个segment，
+       * SegmentDescriptor如其名，就是一个segment的描述，只有保存信息的作用，存了以下三种信息，
+       * itvl：segment对应的时间区间
+       * ver：版本（相同属性的segment存在“升级”的情况，比如按照不同的索引方式重新生成某一时间段的segment文件，就会更新一个版本）
+       * part：分区号，某一个时间段的数据量太大，则会拆成多个segment文件存储，所有属性都一样，只有分区号递增。
+       *
+       * 而一个时间区间内的数据，很可能分散在多个segment分片上，
+       * 所以返回的自然是个set集合。
+       *
+       * 后续可用每个SegmentServerSelector对象，找到集群中对应的server服务，然后对其发起查询请求。
        */
       final Set<SegmentServerSelector> segmentServers = computeSegmentsToQuery(timeline, specificSegments);
+
+      /**
+       * 其中populateCache和useCache必须有一个才能执行
+       * useCache参数用于查询是否启用缓存，
+       * populateCache参数用于查询结果是否更新缓存，
+       * 这两个都是“段级”缓存的参数
+       *
+       * 如果开启段级缓存，则通过strategy对象查询出缓存key
+       */
       @Nullable
       final byte[] queryCacheKey = computeQueryCacheKey();
+
       if (query.getContext().get(QueryResource.HEADER_IF_NONE_MATCH) != null) {
         @Nullable
         final String prevEtag = (String) query.getContext().get(QueryResource.HEADER_IF_NONE_MATCH);
@@ -394,13 +425,22 @@ public class CachingClusteredClient implements QuerySegmentWalker
         }
       }
 
+      /**
+       * 根据缓存key获取缓存结果
+       */
       final List<Pair<Interval, byte[]>> alreadyCachedResults =
           pruneSegmentsWithCachedResults(queryCacheKey, segmentServers);
 
+      /**
+       * 为此次query分配priority（优先级）和lane（？）
+       */
       query = scheduler.prioritizeAndLaneQuery(queryPlus, segmentServers);
+      //重新将query放入queryPlus
       queryPlus = queryPlus.withQuery(query);
 
       final SortedMap<DruidServer, List<SegmentDescriptor>> segmentsByServer = groupSegmentsByServer(segmentServers);
+
+
       LazySequence<T> mergedResultSequence = new LazySequence<>(() -> {
         List<Sequence<T>> sequencesByInterval = new ArrayList<>(alreadyCachedResults.size() + segmentsByServer.size());
         addSequencesFromCache(sequencesByInterval, alreadyCachedResults);
@@ -408,6 +448,9 @@ public class CachingClusteredClient implements QuerySegmentWalker
         return merge(sequencesByInterval);
       });
 
+      /**
+       * 将查询对象交由scheduler调度器来查询
+       */
       return new ClusterQueryResult<>(scheduler.run(query, mergedResultSequence), segmentsByServer.size());
     }
 
@@ -449,11 +492,26 @@ public class CachingClusteredClient implements QuerySegmentWalker
 
     private Set<SegmentServerSelector> computeSegmentsToQuery(
         TimelineLookup<String, ServerSelector> timeline,
-        boolean specificSegments
+        boolean specificSegments //false
     )
     {
+      /**
+       * specificSegmentswei false，
+       * timeline为之前{@link BrokerServerView#getTimeline(DataSourceAnalysis)}获取
+       * lookupFn = {@link VersionedIntervalTimeline#lookup(Interval, Partitions)}
+       *
+       * 存在一个map集合，其中包含了各种Interval时间区间，和对应的{@link VersionedIntervalTimeline.TimelineEntry}实体。
+       * （暂不知道该map是怎么形成的，估计是数据摄入时形成），
+       *
+       * 然后从map中查找出于此次查询的时间区间重叠的键值对，
+       * 将其对应TimelineEntry返回
+       *
+       * 这个lookupFn就是TimelineEntry的包装类
+       */
       final java.util.function.Function<Interval, List<TimelineObjectHolder<String, ServerSelector>>> lookupFn
           = specificSegments ? timeline::lookupWithIncompletePartitions : timeline::lookup;
+
+
       final List<TimelineObjectHolder<String, ServerSelector>> serversLookup = toolChest.filterSegments(
           query,
           intervals.stream().flatMap(i -> lookupFn.apply(i).stream()).collect(Collectors.toList())
@@ -461,7 +519,13 @@ public class CachingClusteredClient implements QuerySegmentWalker
 
       final Set<SegmentServerSelector> segments = new LinkedHashSet<>();
       final Map<String, Optional<RangeSet<String>>> dimensionRangeCache = new HashMap<>();
+
       // Filter unneeded chunks based on partition dimension
+      /**
+       * 此块应该是根据查询参数中的Filter条件进行一些过滤
+       *
+       * holder中装了当前时间区间对应的{@link VersionedIntervalTimeline.TimelineEntry}实体中的数据
+       */
       for (TimelineObjectHolder<String, ServerSelector> holder : serversLookup) {
         final Set<PartitionChunk<ServerSelector>> filteredChunks;
         if (QueryContexts.isSecondaryPartitionPruningEnabled(query)) {
@@ -474,13 +538,37 @@ public class CachingClusteredClient implements QuerySegmentWalker
         } else {
           filteredChunks = Sets.newHashSet(holder.getObject());
         }
+
+
         for (PartitionChunk<ServerSelector> chunk : filteredChunks) {
+          /**
+           * ServerSelector与segment是一对一关系，
+           *
+           * 象征了segment所在的服务器的“查找工具”，
+           * 其通过pick方法，可以“从历史节点和实时节点中根据segment找到对应的{@link QueryableDruidServer}”
+           *
+           * QueryableDruidServer就是segment所在的服务器对象
+           */
           ServerSelector server = chunk.getObject();
+
+          /**
+           * 一个segment要由“DataSource、时间间隔、version、分区号”这四种属性来唯一标识一个segment，
+           * SegmentDescriptor如其名，就是一个segment的描述，只有保存信息的作用，存了以下三种信息，
+           * itvl：segment对应的时间区间
+           * ver：版本（相同属性的segment存在“升级”的情况，比如按照不同的索引方式重新生成某一时间段的segment文件，就会更新一个版本）
+           * part：分区号，某一个时间段的数据量太大，则会拆成多个segment文件存储，所有属性都一样，只有分区号递增。
+           */
           final SegmentDescriptor segment = new SegmentDescriptor(
               holder.getInterval(),
               holder.getVersion(),
               chunk.getChunkNumber()
           );
+          /**
+           * 所谓“SegmentServerSelector”只是将“ServerSelector”和“SegmentDescriptor”存起来的一个包装类，
+           * 新建时只是将这两个对象放进去。
+           *
+           * 关于这两个类的介绍在上面
+           */
           segments.add(new SegmentServerSelector(server, segment));
         }
       }
@@ -532,11 +620,15 @@ public class CachingClusteredClient implements QuerySegmentWalker
     @Nullable
     private byte[] computeQueryCacheKey()
     {
+      log.info("!!!select：computeQueryCacheKey，缓存工具对象strategy："+strategy.getClass());
       if ((populateCache || useCache) // implies strategy != null
           && !isBySegment) { // explicit bySegment queries are never cached
         assert strategy != null;
-        return strategy.computeCacheKey(query);
+        byte[] cacheKey = strategy.computeCacheKey(query);
+        log.info("!!!select：computeQueryCacheKey，以开启缓存，key为："+new String(cacheKey));
+        return cacheKey;
       } else {
+        log.info("!!!select：computeQueryCacheKey，未开启缓存");
         return null;
       }
     }

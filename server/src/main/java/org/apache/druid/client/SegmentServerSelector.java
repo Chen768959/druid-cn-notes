@@ -28,14 +28,19 @@ import javax.annotation.Nullable;
 
 /**
  * Given a {@link SegmentDescriptor}, get a {@link ServerSelector} to use to pick a {@link DruidServer} to query.
+ * 传入一个{@link SegmentDescriptor}参数，返回一个{@link ServerSelector}对象，这个“选择器”被用于选择哪一个{@link DruidServer}来进行查询
  *
- * Used by {@link CachingClusteredClient} on the broker to fan out queries to historical and realtime data. Used
- * by {@link org.apache.druid.server.LocalQuerySegmentWalker} on the broker for on broker queries
+ * Used by {@link CachingClusteredClient} on the broker to fan out queries to historical and realtime data.
+ * 一个请求到达broker后，逻辑会走向CachingClusteredClient，然后到达这里，最终由这个对象“向历史节点和实时节点去索取此次查询的数据结果”
+ *
+ * Used by {@link org.apache.druid.server.LocalQuerySegmentWalker} on the broker for on broker queries
  */
 public class SegmentServerSelector extends Pair<ServerSelector, SegmentDescriptor>
 {
   /**
    * This is for a segment hosted on a remote server, where {@link ServerSelector} may be used to pick
+   *
+   * 针对在远程服务器上的segment
    * a {@link DruidServer} to query.
    */
   public SegmentServerSelector(ServerSelector server, SegmentDescriptor segment)
