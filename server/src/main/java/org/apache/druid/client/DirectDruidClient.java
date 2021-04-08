@@ -148,6 +148,10 @@ public class DirectDruidClient<T> implements QueryRunner<T>
     return openConnections.get();
   }
 
+  /**
+   * 发送请求，获得请求的异步结果future，
+   * 最后返回的对象就是请求结果的迭代器的包装类
+   */
   @Override
   public Sequence<T> run(final QueryPlus<T> queryPlus, final ResponseContext context)
   {
@@ -160,6 +164,12 @@ public class DirectDruidClient<T> implements QueryRunner<T>
     final String url = StringUtils.format("%s://%s/druid/v2/", scheme, host);
     final String cancelUrl = StringUtils.format("%s://%s/druid/v2/%s", scheme, host, query.getId());
 
+    log.info("!!!：select，queryRunner获取Sequence，url："+url);
+    log.info("!!!：select，queryRunner获取Sequence，cancelUrl："+cancelUrl);
+
+    /**
+     *
+     */
     try {
       log.debug("Querying queryId[%s] url[%s]", query.getId(), url);
 
@@ -170,6 +180,7 @@ public class DirectDruidClient<T> implements QueryRunner<T>
       final long maxQueuedBytes = QueryContexts.getMaxQueuedBytes(query, 0);
       final boolean usingBackpressure = maxQueuedBytes > 0;
 
+      //根据query查询对象，创建HttpResponseHandler
       final HttpResponseHandler<InputStream, InputStream> responseHandler = new HttpResponseHandler<InputStream, InputStream>()
       {
         private final AtomicLong totalByteCount = new AtomicLong(0);
@@ -454,7 +465,13 @@ public class DirectDruidClient<T> implements QueryRunner<T>
         throw new RE("Query[%s] url[%s] timed out.", query.getId(), url);
       }
 
+      /**
+       * {@link org.apache.druid.java.util.http.client.NettyHttpClient#go(Request, HttpResponseHandler, Duration)}
+       *
+       * future是异步结果对象
+       */
       future = httpClient.go(
+          //创建请求对象
           new Request(
               HttpMethod.POST,
               new URL(url)
@@ -463,13 +480,21 @@ public class DirectDruidClient<T> implements QueryRunner<T>
                HttpHeaders.Names.CONTENT_TYPE,
                isSmile ? SmileMediaTypes.APPLICATION_JACKSON_SMILE : MediaType.APPLICATION_JSON
            ),
+
+          //用于异步的处理此次http调用的结果
           responseHandler,
           Duration.millis(timeLeft)
       );
 
+      /**
+       * 将此次查询注册进queryWatcher，
+       * queryWatcher目的是保证所有正在进行的、或待进行的查询的可见性
+       * 即根据queryWatcher可以找到所有现有查询
+       */
       queryWatcher.registerQueryFuture(query, future);
 
       openConnections.getAndIncrement();
+      // 绑定异步回调，future执行完毕后，执行FutureCallback回调方法（只是计数+1）
       Futures.addCallback(
           future,
           new FutureCallback<InputStream>()
@@ -497,6 +522,11 @@ public class DirectDruidClient<T> implements QueryRunner<T>
       throw new RuntimeException(e);
     }
 
+    /**
+     * Sequence的本质就是“请求结果迭代器”的包装类，
+     * JsonParserIterator实现了Iterator接口，
+     * 其next就是future的结果，被转换成了pojo对象
+     */
     Sequence<T> retVal = new BaseSequence<>(
         new BaseSequence.IteratorMaker<T, JsonParserIterator<T>>()
         {

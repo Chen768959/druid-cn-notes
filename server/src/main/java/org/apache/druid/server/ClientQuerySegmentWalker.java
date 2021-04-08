@@ -670,6 +670,8 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
         throw new ISE("Unexpected query received");
       }
 
+      log.info("!!!：QuerySwappingQueryRunner中baseRunner为："+baseRunner.getClass());
+
       return baseRunner.run(queryPlus.withQuery(newQuery), responseContext);
     }
   }

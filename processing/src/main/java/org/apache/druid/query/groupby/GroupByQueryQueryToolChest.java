@@ -40,8 +40,10 @@ import org.apache.druid.java.util.common.granularity.Granularity;
 import org.apache.druid.java.util.common.guava.MappedSequence;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.CacheStrategy;
 import org.apache.druid.query.DataSource;
+import org.apache.druid.query.FinalizeResultsQueryRunner;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryContexts;
 import org.apache.druid.query.QueryDataSource;
@@ -80,6 +82,8 @@ import java.util.function.BinaryOperator;
  */
 public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupByQuery>
 {
+  private static final Logger log = new Logger(GroupByQueryQueryToolChest.class);
+
   private static final byte GROUPBY_QUERY = 0x14;
   private static final TypeReference<Object> OBJECT_TYPE_REFERENCE =
       new TypeReference<Object>()
@@ -471,6 +475,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
           @Override
           public Sequence<ResultRow> run(QueryPlus<ResultRow> queryPlus, ResponseContext responseContext)
           {
+            log.info("!!!：进入GroupByQueryQueryToolChest中Runner run()");
             GroupByQuery groupByQuery = (GroupByQuery) queryPlus.getQuery();
             final List<DimensionSpec> dimensionSpecs = new ArrayList<>();
             final BitSet optimizedDimensions = extractionsToRewrite(groupByQuery);
@@ -486,6 +491,10 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
               }
             }
 
+            log.info("!!!：GroupByQueryQueryToolChest中Runner 传参为："+runner.getClass());
+            /**
+             * 此处传参runner为{@link org.apache.druid.server.SetAndVerifyContextQueryRunner}
+             */
             return runner.run(
                 queryPlus.withQuery(groupByQuery.withDimensionSpecs(dimensionSpecs)),
                 responseContext

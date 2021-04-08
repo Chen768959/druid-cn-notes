@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.aggregation.MetricManipulationFn;
 import org.apache.druid.query.aggregation.MetricManipulatorFns;
 import org.apache.druid.query.context.ResponseContext;
@@ -40,6 +41,8 @@ import org.apache.druid.query.context.ResponseContext;
  */
 public class FinalizeResultsQueryRunner<T> implements QueryRunner<T>
 {
+  private static final Logger log = new Logger(FinalizeResultsQueryRunner.class);
+
   private final QueryRunner<T> baseRunner;
   private final QueryToolChest<T, Query<T>> toolChest;
 
@@ -105,7 +108,12 @@ public class FinalizeResultsQueryRunner<T> implements QueryRunner<T>
       finalizerFn = toolChest.makePostComputeManipulatorFn(query, metricManipulationFn);
     }
 
+    log.info("!!!：FinalizeResultsQueryRunner中baseRunner为："+baseRunner.getClass());
     //noinspection unchecked (Technically unsound, but see class-level javadoc for rationale)
+    /**
+     * 此处的baseRunner指{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#preMergeQueryDecoration(QueryRunner)}
+     * 此方法返回的runner
+     */
     return (Sequence<T>) Sequences.map(
         baseRunner.run(queryPlus.withQuery(queryToRun), responseContext),
         finalizerFn

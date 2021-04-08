@@ -102,9 +102,11 @@ public class JsonParserIterator<T> implements Iterator<T>, Closeable
   @Override
   public T next()
   {
+    //初始化，即为jp赋值
     init();
 
     try {
+      // 将json数据反序列化成pojo
       final T retVal = objectCodec.readValue(jp, typeRef);
       jp.nextToken();
       return retVal;
@@ -157,9 +159,11 @@ public class JsonParserIterator<T> implements Iterator<T>, Closeable
         if (checkTimeout(timeLeftMillis)) {
           throw interruptQuery(timeoutQuery());
         }
+        // 获取请求结果输入流
         InputStream is = hasTimeout ? future.get(timeLeftMillis, TimeUnit.MILLISECONDS) : future.get();
 
         if (is != null) {
+          //从输入流中获取JsonParser对象
           jp = objectMapper.getFactory().createParser(is);
         } else if (checkTimeout()) {
           throw interruptQuery(timeoutQuery());

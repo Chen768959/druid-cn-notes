@@ -28,6 +28,7 @@ import com.google.errorprone.annotations.concurrent.GuardedBy;
 import org.apache.druid.java.util.common.DateTimes;
 import org.apache.druid.java.util.common.UOE;
 import org.apache.druid.java.util.common.guava.Comparators;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.timeline.partition.PartitionChunk;
 import org.apache.druid.timeline.partition.PartitionHolder;
 import org.apache.druid.utils.CollectionUtils;
@@ -74,6 +75,8 @@ import java.util.stream.StreamSupport;
 public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshadowable<ObjectType>>
     implements TimelineLookup<VersionType, ObjectType>
 {
+  private static final Logger log = new Logger(VersionedIntervalTimeline.class);
+
   public static VersionedIntervalTimeline<String, DataSegment> forSegments(Iterable<DataSegment> segments)
   {
     return forSegments(segments.iterator());
@@ -116,6 +119,7 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
       Iterator<DataSegment> segments
   )
   {
+    log.info("!!!select：timeline.addAll逻辑，进入addSegments");
     timeline.addAll(
         Iterators.transform(segments, segment -> segment.getShardSpec().createChunk(segment)),
         DataSegment::getInterval,
@@ -183,6 +187,7 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
 
   public void add(final Interval interval, VersionType version, PartitionChunk<ObjectType> object)
   {
+    log.info("!!!select：timeline.addAll逻辑，进入add");
     addAll(Iterators.singletonIterator(object), o -> interval, o -> version);
   }
 
@@ -232,6 +237,7 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
         Interval interval = entry.getValue();
 
         if (entry.getKey().getPartitionHolder().isComplete()) {
+          log.info("!!!select：初始化，value属于completePartitionsTimeline，value："+interval.toString());
           add(completePartitionsTimeline, interval, entry.getKey());
         }
 
@@ -728,6 +734,7 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
   @GuardedBy("lock")
   private List<TimelineObjectHolder<VersionType, ObjectType>> lookup(Interval interval, Partitions completeness)
   {
+    log.info("进入VersionedIntervalTimeline.lookup，此次查询时间为："+interval.toString());
     List<TimelineObjectHolder<VersionType, ObjectType>> retVal = new ArrayList<>();
     NavigableMap<Interval, TimelineEntry> timeline;
 
@@ -743,10 +750,22 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
       timeline = completePartitionsTimeline;
     }
 
+    /**
+     * 此处直接迭代timelineMap，
+     * 表示其中数据应该在数据摄入的时候就生成了
+     */
     for (Entry<Interval, TimelineEntry> entry : timeline.entrySet()) {
       Interval timelineInterval = entry.getKey();
       TimelineEntry val = entry.getValue();
 
+      log.info("!!!select：completePartitionsTimeline中数据key："+timelineInterval.toString());
+      log.info("!!!select：completePartitionsTimeline中数据val.getTrueInterval："+val.getTrueInterval().toString());
+      log.info("!!!select：completePartitionsTimeline中数据val.getVersion："+val.getVersion());
+      log.info("!!!select：completePartitionsTimeline中数据val.getPartitionHolder："+val.getPartitionHolder().toString());
+      /**
+       * 判断此次查询的时间和集合中的时间是否有重叠的，
+       * 如果重叠，则将时间区间对应的TimelineEntry实体存入一个TimelineObjectHolder对象，然后返回
+       */
       if (timelineInterval.overlaps(interval)) {
         retVal.add(
             new TimelineObjectHolder<>(

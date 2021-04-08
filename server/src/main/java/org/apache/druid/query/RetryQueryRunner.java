@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
+import java.util.function.UnaryOperator;
 
 public class RetryQueryRunner<T> implements QueryRunner<T>
 {
@@ -105,8 +106,13 @@ public class RetryQueryRunner<T> implements QueryRunner<T>
     // However, we call baseRunner.run() here instead where it's executed while constructing a query plan.
     // This is because ResultLevelCachingQueryRunner requires to compute the cache key based on
     // the segments to query which is computed in SpecificQueryRunnable.run().
+    LOG.info("!!!：RetryQueryRunner中baseRunner为："+baseRunner.getClass());
+    /**
+     * {@link org.apache.druid.client.CachingClusteredClient#run(QueryPlus, ResponseContext, UnaryOperator, boolean)}
+     */
     final Sequence<T> baseSequence = baseRunner.run(queryPlus, context);
     // runnableAfterFirstAttempt is only for testing, it must be no-op for production code.
+    LOG.info("!!!：RetryQueryRunner中runnableAfterFirstAttempt为："+runnableAfterFirstAttempt.getClass());
     runnableAfterFirstAttempt.run();
 
     return new YieldingSequenceBase<T>()

@@ -27,6 +27,7 @@ import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.context.ResponseContext;
 
 import javax.annotation.Nullable;
+import java.util.function.UnaryOperator;
 
 /**
  * An immutable composite object of {@link Query} + extra stuff needed in {@link QueryRunner}s.
@@ -155,7 +156,21 @@ public final class QueryPlus<T>
     QueryRunner<T> queryRunner = query.getRunner(walker);
 
     log.info("!!!select：query生成的queryRunner对象："+queryRunner.getClass());
-
+    /**
+     * 此处的queryRunner{@link org.apache.druid.server.ClientQuerySegmentWalker}中的QuerySwappingQueryRunner对象，
+     * 其内部还包裹着一个baseRunner，后续每一个baseRunner都调用了其内部的baseRunner的run，一层层调用，整个顺序如下
+     * QuerySwappingQueryRunner
+     * {@link org.apache.druid.query.FluentQueryRunnerBuilder.FluentQueryRunner#run(QueryPlus, ResponseContext)}
+     * {@link ResultLevelCachingQueryRunner#run(QueryPlus, ResponseContext)}
+     * {@link CPUTimeMetricQueryRunner#run(QueryPlus, ResponseContext)}
+     * |->{@link FinalizeResultsQueryRunner#run(QueryPlus, ResponseContext)}
+     * |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#preMergeQueryDecoration(QueryRunner)}
+     * |->{@link org.apache.druid.server.SetAndVerifyContextQueryRunner#run(QueryPlus, ResponseContext)}
+     * |->{@link org.apache.druid.query.RetryQueryRunner#run(QueryPlus, ResponseContext)}
+     * |->{@link org.apache.druid.client.CachingClusteredClient#run(QueryPlus, ResponseContext, UnaryOperator, boolean)}
+     *
+     * 此处返回的Sequence<T>结果，由最后的CachingClusteredClient中的run方法返回，
+     */
     return queryRunner.run(this, context);
   }
 

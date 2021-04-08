@@ -44,6 +44,7 @@ import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryContexts;
 import org.apache.druid.query.QueryException;
 import org.apache.druid.query.QueryInterruptedException;
+import org.apache.druid.query.QueryPlus;
 import org.apache.druid.query.QueryToolChest;
 import org.apache.druid.query.QueryUnsupportedException;
 import org.apache.druid.query.TruncatedResponseContextException;
@@ -76,6 +77,7 @@ import java.io.OutputStream;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.UnaryOperator;
 
 @LazySingleton
 @Path("/druid/v2/")
@@ -251,7 +253,7 @@ public class QueryResource implements QueryCountStatsProvider
        * 里面包含了一个“baseQueryRunner”，一个“newQuery”，以及“最初的query对象TimeseriesQuery”
        *
        * queryrunner
-       * 就想上面说的，
+       * 就像上面说的，
        * 虽然walker返回的是{@link org.apache.druid.server.ClientQuerySegmentWalker.QuerySwappingQueryRunner}
        * 但是此类实际上是一个包装类，
        * 其内部包含了一个“baseQueryRunner”，一个“newQuery”，以及“最初的query对象TimeseriesQuery”
@@ -260,8 +262,17 @@ public class QueryResource implements QueryCountStatsProvider
        * 所以一次查询的关键实际上是：
        * 1、walker如何生成newQuery和baseQueryRunner，以及生成他们的意义。
        * 2、baseQueryRunner的run方法做了什么
+       *
+       * 此处返回的结果，实际上由{@link org.apache.druid.client.CachingClusteredClient#run(QueryPlus, ResponseContext, UnaryOperator, boolean)}返回，
+       * 该方法主要做了以下两件事
+       * 1、根据查询时间区间，从整个集群中找到对应的segment以及其所在的主机信息。
+       * 2、创建一个匿名函数，
+       * 该函数作用是“根据segment所在主机的信息，使用netty发送http请求，并将所有获取的结果合并返回”
+       * （发送http请求，异步获取请求结果：{@link org.apache.druid.client.DirectDruidClient#run(QueryPlus, ResponseContext)}）
+       * 返回的类型就是Sequence<T>
        */
       final QueryLifecycle.QueryResponse queryResponse = queryLifecycle.execute();
+      log.info("!!!：doPost获取到queryResponse");
       final Sequence<?> results = queryResponse.getResults();
       final ResponseContext responseContext = queryResponse.getResponseContext();
       //获取请求头中的If-None-Match参数

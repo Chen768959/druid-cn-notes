@@ -20,6 +20,7 @@
 package org.apache.druid.query;
 
 import org.apache.druid.java.util.common.guava.Sequence;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.java.util.emitter.service.ServiceEmitter;
 import org.apache.druid.query.context.ResponseContext;
 
@@ -28,6 +29,8 @@ import java.util.function.Function;
 
 public class FluentQueryRunnerBuilder<T>
 {
+  private static final Logger log = new Logger(FluentQueryRunnerBuilder.class);
+
   final QueryToolChest<T, Query<T>> toolChest;
 
   public FluentQueryRunner create(QueryRunner<T> baseRunner)
@@ -52,6 +55,7 @@ public class FluentQueryRunnerBuilder<T>
     @Override
     public Sequence<T> run(QueryPlus<T> queryPlus, ResponseContext responseContext)
     {
+      log.info("!!!：FluentQueryRunner中baseRunner为："+baseRunner.getClass());
       return baseRunner.run(queryPlus, responseContext);
     }
 

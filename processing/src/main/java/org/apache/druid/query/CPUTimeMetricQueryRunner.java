@@ -24,14 +24,18 @@ import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.SequenceWrapper;
 import org.apache.druid.java.util.common.guava.Sequences;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.java.util.emitter.service.ServiceEmitter;
 import org.apache.druid.query.context.ResponseContext;
 import org.apache.druid.utils.JvmUtils;
 
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.UnaryOperator;
 
 public class CPUTimeMetricQueryRunner<T> implements QueryRunner<T>
 {
+  private static final Logger log = new Logger(CPUTimeMetricQueryRunner.class);
+
   private final QueryRunner<T> delegate;
   private final QueryToolChest<T, ? extends Query<T>> queryToolChest;
   private final ServiceEmitter emitter;
@@ -62,10 +66,31 @@ public class CPUTimeMetricQueryRunner<T> implements QueryRunner<T>
   {
     final long startRun = JvmUtils.getCurrentThreadCpuTime();
     final QueryPlus<T> queryWithMetrics = queryPlus.withQueryMetrics(queryToolChest);
+    log.info("!!!：CPUTimeMetricQueryRunner中delegate runner为："+delegate.getClass());
+    /**
+     * delegate为{@link FinalizeResultsQueryRunner}
+     *
+     * 其经历一系列runner后，最终由此方法返回sequence
+     * {@link org.apache.druid.client.CachingClusteredClient#run(QueryPlus, ResponseContext, UnaryOperator, boolean)}
+     *
+     */
     final Sequence<T> baseSequence = delegate.run(queryWithMetrics, responseContext);
 
+    log.info("!!!：CPUTimeMetricQueryRunner中delegate runner END..");
     cpuTimeAccumulator.addAndGet(JvmUtils.getCurrentThreadCpuTime() - startRun);
 
+    /**
+     * 此处是将baseSequence与“new SequenceWrapper()”都装入WrappingSequence对象中，
+     *
+     * baseSequence是此次查询的所有结果（此处还未获取结果，需要调用其中的查询方法后才会获取）。
+     *
+     * SequenceWrapper可以看成是获取结果之前，或之后，做的一些额外操作，
+     * 比如下面的after方法，
+     * 就是获取结果期间报错后，需要执行的一些操作
+     *
+     * 而此处返回的WrappingSequence对象，就是baseSequence和wrapper的包装类，
+     * 可以通过其获取baseSequence的结果，且会自动在获取结果的前后调用wrapper的对应方法
+     */
     return Sequences.wrap(
         baseSequence,
         new SequenceWrapper()

@@ -93,10 +93,13 @@ public class ResultLevelCachingQueryRunner<T> implements QueryRunner<T>
       query = query.withOverriddenContext(
           ImmutableMap.of(QueryResource.HEADER_IF_NONE_MATCH, existingResultSetId));
 
+      log.info("!!!：ResultLevelCachingQueryRunner中baseRunner为："+baseRunner.getClass());
       Sequence<T> resultFromClient = baseRunner.run(
           QueryPlus.wrap(query),
           responseContext
       );
+
+      log.info("!!!：ResultLevelCachingQueryRunner中baseRunner查询end");
       String newResultSetId = (String) responseContext.get(ResponseContext.Key.ETAG);
 
       if (useResultCache && newResultSetId != null && newResultSetId.equals(existingResultSetId)) {
@@ -155,6 +158,7 @@ public class ResultLevelCachingQueryRunner<T> implements QueryRunner<T>
         );
       }
     } else {
+      log.info("!!!：ResultLevelCachingQueryRunner中baseRunner为（非缓存）："+baseRunner.getClass());
       return baseRunner.run(
           queryPlus,
           responseContext

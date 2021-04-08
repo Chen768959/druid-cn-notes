@@ -291,9 +291,11 @@ public class QueryLifecycle
      *
      * {@link org.apache.druid.server.ClientQuerySegmentWalker.QuerySwappingQueryRunner#run(QueryPlus, ResponseContext)}
      */
-    final Sequence res = QueryPlus.wrap(baseQuery)
-                                  .withIdentity(authenticationResult.getIdentity())
-                                  .run(texasRanger, responseContext);
+
+    QueryPlus tmpQueryPlus = QueryPlus.wrap(baseQuery)
+            .withIdentity(authenticationResult.getIdentity());
+    log.info("!!!：获取tmpQueryPlus，准备调用run");
+    final Sequence res = tmpQueryPlus.run(texasRanger, responseContext);
 
     return new QueryResponse(res == null ? Sequences.empty() : res, responseContext);
   }

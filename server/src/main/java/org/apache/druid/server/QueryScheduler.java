@@ -119,9 +119,22 @@ public class QueryScheduler implements QueryWatcher
   public <T> Query<T> prioritizeAndLaneQuery(QueryPlus<T> queryPlus, Set<SegmentServerSelector> segments)
   {
     Query<T> query = queryPlus.getQuery();
+
+    /**
+     * prioritizationStrategy.computePriority :{@link org.apache.druid.server.scheduling.ManualQueryPrioritizationStrategy#computePriority(QueryPlus, Set)}
+     * 返回一个空的Optional对象。
+     */
     Optional<Integer> priority = prioritizationStrategy.computePriority(queryPlus, segments);
+
     query = priority.map(query::withPriority).orElse(query);
+
+    /**
+     * NoQueryLaningStrategy.computeLane：{@link org.apache.druid.server.scheduling.NoQueryLaningStrategy#computeLane(QueryPlus, Set)}
+     *
+     * 此处是获取查询请求context上下文中的lane参数
+     */
     Optional<String> lane = laningStrategy.computeLane(queryPlus.withQuery(query), segments);
+
     return lane.map(query::withLane).orElse(query);
   }
 

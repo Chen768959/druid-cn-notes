@@ -23,6 +23,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Multimap;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import org.apache.druid.java.util.common.IAE;
 import org.apache.druid.java.util.common.ISE;
@@ -57,6 +59,9 @@ import org.joda.time.Duration;
 import java.net.URL;
 import java.util.Collection;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -112,6 +117,8 @@ public class NettyHttpClient extends AbstractHttpClient
     final HttpMethod method = request.getMethod();
     final URL url = request.getUrl();
     final Multimap<String, String> headers = request.getHeaders();
+
+    log.info("!!!：select，使用NettyHttpClient.go，url："+url.toString());
 
     final String requestDesc = StringUtils.format("%s %s", method, url);
     if (log.isDebugEnabled()) {

@@ -22,11 +22,13 @@ package org.apache.druid.java.util.common.guava;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Supplier;
 import com.google.common.base.Throwables;
+import org.apache.druid.java.util.common.logger.Logger;
 
 /**
  */
 final class WrappingSequence<T> implements Sequence<T>
 {
+  private static final Logger log = new Logger(WrappingSequence.class);
   private final Sequence<T> baseSequence;
   private final SequenceWrapper wrapper;
 
@@ -42,6 +44,7 @@ final class WrappingSequence<T> implements Sequence<T>
     OutType result;
     try {
       wrapper.before();
+
       result = wrapper.wrap(new Supplier<OutType>()
       {
         @Override
@@ -79,6 +82,7 @@ final class WrappingSequence<T> implements Sequence<T>
   )
   {
     try {
+      log.info("!!!：toYielder中wrapper为："+wrapper.getClass());
       wrapper.before();
       return wrapper.wrap(new Supplier<Yielder<OutType>>()
       {

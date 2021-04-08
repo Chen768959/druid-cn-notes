@@ -22,6 +22,7 @@ package org.apache.druid.server;
 import com.google.common.collect.ImmutableMap;
 import org.apache.druid.client.DirectDruidClient;
 import org.apache.druid.java.util.common.guava.Sequence;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryContexts;
 import org.apache.druid.query.QueryPlus;
@@ -34,6 +35,7 @@ import org.apache.druid.server.initialization.ServerConfig;
  */
 public class SetAndVerifyContextQueryRunner<T> implements QueryRunner<T>
 {
+  private static final Logger log = new Logger(SetAndVerifyContextQueryRunner.class);
   private final ServerConfig serverConfig;
   private final QueryRunner<T> baseRunner;
   private final long startTimeMillis;
@@ -48,6 +50,10 @@ public class SetAndVerifyContextQueryRunner<T> implements QueryRunner<T>
   @Override
   public Sequence<T> run(QueryPlus<T> queryPlus, ResponseContext responseContext)
   {
+    log.info("!!!：SetAndVerifyContextQueryRunner中runner为："+baseRunner.getClass());
+    /**
+     * {@link org.apache.druid.query.RetryQueryRunner#run(QueryPlus, ResponseContext)}
+     */
     return baseRunner.run(
         QueryPlus.wrap(withTimeoutAndMaxScatterGatherBytes(queryPlus.getQuery(), serverConfig)),
         responseContext
