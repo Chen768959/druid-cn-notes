@@ -117,12 +117,29 @@ public abstract class BaseQuery<T> implements Query<T>
   @Override
   public QueryRunner<T> getRunner(QuerySegmentWalker walker)
   {
+    /**
+     * walker为启动时注入而来，
+     * broker和historical启动时注入的对象不同
+     * broker启动时walker为{@link org.apache.druid.server.ClientQuerySegmentWalker}
+     * historical启动时walker为{@link org.apache.druid.server.coordination.ServerManager}
+     *
+     * 这两个walker不同，也决定了broker和historical在面对查询请求时，其二者的处理逻辑不同
+     */
+    log.info("!!!select：BaseQuery内getRunner时，walker类型："+walker.getClass());
+
     QuerySegmentSpec querySegmentSpec = getQuerySegmentSpecForLookUp(this);
     log.info("!!!select：BaseQuery内生成的querySegmentSpec对象："+querySegmentSpec.getClass());
     /**
+     * 客户端请求broker时，querySegmentSpec为以下实现类：
      * getQuerySegmentSpecForLookUp(this)生成的spec对象是{@link org.apache.druid.query.spec.LegacySegmentSpec}，
      * 但是其内部没有lookup方法，
      * 所以实际调用的还是{@link org.apache.druid.query.spec.MultipleIntervalSegmentSpec#lookup(Query, QuerySegmentWalker)}
+     *
+     * broker发送查询请求给historical时，querySegmentSpec为以下实现类：
+     * {@link org.apache.druid.query.spec.MultipleSpecificSegmentSpec#lookup(Query, QuerySegmentWalker)}
+     * 其lookup方法为
+     * walker.getQueryRunnerForSegments(query, descriptors);
+     * 也就是{@link org.apache.druid.server.coordination.ServerManager#getQueryRunnerForSegments(Query, Iterable)}
      */
     return getQuerySegmentSpecForLookUp(this).lookup(this, walker);
   }

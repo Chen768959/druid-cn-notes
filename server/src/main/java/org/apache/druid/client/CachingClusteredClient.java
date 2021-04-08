@@ -979,7 +979,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
       /**
        * 相当于将此server上的所有待查segment列表放进query查询对象
        *
-       * 然后将查询对象交由serverRunner
+       * 然后将查询对象交由serverRunner（{@link org.apache.druid.client.DirectDruidClient}）
        */
       return serverRunner.run(
           queryPlus.withQuery(

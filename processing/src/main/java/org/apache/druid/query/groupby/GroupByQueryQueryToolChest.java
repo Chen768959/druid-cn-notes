@@ -117,6 +117,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
   public QueryRunner<ResultRow> mergeResults(final QueryRunner<ResultRow> runner)
   {
     return (queryPlus, responseContext) -> {
+      log.info("!!!：进入GroupByQueryQueryToolChest中mergeResults匿名函数");
       if (QueryContexts.isBySegment(queryPlus.getQuery())) {
         return runner.run(queryPlus, responseContext);
       }

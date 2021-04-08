@@ -39,6 +39,7 @@ import org.apache.druid.java.util.common.StringUtils;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Yielder;
 import org.apache.druid.java.util.common.guava.Yielders;
+import org.apache.druid.java.util.common.guava.YieldingAccumulator;
 import org.apache.druid.java.util.emitter.EmittingLogger;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryContexts;
@@ -266,13 +267,15 @@ public class QueryResource implements QueryCountStatsProvider
        * 此处返回的结果，实际上由{@link org.apache.druid.client.CachingClusteredClient#run(QueryPlus, ResponseContext, UnaryOperator, boolean)}返回，
        * 该方法主要做了以下两件事
        * 1、根据查询时间区间，从整个集群中找到对应的segment以及其所在的主机信息。
-       * 2、创建一个匿名函数，
+       * 2、创建一个匿名函数（创建LazySequence对象时设置的匿名函数），
        * 该函数作用是“根据segment所在主机的信息，使用netty发送http请求，并将所有获取的结果合并返回”
        * （发送http请求，异步获取请求结果：{@link org.apache.druid.client.DirectDruidClient#run(QueryPlus, ResponseContext)}）
        * 返回的类型就是Sequence<T>
+       * 而该匿名函数只有在接下来Sequence进行toYielder时才会被执行
        */
       final QueryLifecycle.QueryResponse queryResponse = queryLifecycle.execute();
       log.info("!!!：doPost获取到queryResponse");
+      //该results对象中包含了真正执行查询的匿名函数，只有调用了，才会进行查询
       final Sequence<?> results = queryResponse.getResults();
       final ResponseContext responseContext = queryResponse.getResponseContext();
       //获取请求头中的If-None-Match参数
@@ -306,9 +309,13 @@ public class QueryResource implements QueryCountStatsProvider
        * 头部Yielder对象，后面跟了一连串的Yielder对象。
        * Yielder的get方法可获取当前对象值，next可获得下一个Yielder。
        *
-       *
+       * 此处实际上是调用{@link org.apache.druid.java.util.common.guava.LazySequence#toYielder(Object, YieldingAccumulator)}
+       * 将此次查询的Sequence转换成Yielder，
+       * 而也正是此处，才会真正执行远程http的集群查询，具体匿名执行逻辑在
+       * {@link org.apache.druid.client.DirectDruidClient#run(QueryPlus, ResponseContext)}创建LazySequence的时候
        */
       final Yielder<?> yielder = Yielders.each(results);
+      log.info("!!!：yielder中数据类型："+yielder.get().getClass());
 
       try {
         boolean shouldFinalize = QueryContexts.isFinalize(query, true);

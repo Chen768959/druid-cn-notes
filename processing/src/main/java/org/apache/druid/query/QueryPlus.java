@@ -152,11 +152,19 @@ public final class QueryPlus<T>
     /**
      * walker实现类为{@link ClientQuerySegmentWalker}
      * query.getRunner调用的是{@link BaseQuery#getRunner(QuerySegmentWalker)}
+     *
+     * 请求到达broker和到达historical后获取的queryRunner是不同的
+     * 到达broker获取的queryRunner类型为
+     * {@link org.apache.druid.server.ClientQuerySegmentWalker $QuerySwappingQueryRunner}
+     *
+     * 请求到达historical获取的queryRunner类型为
+     * {@link org.apache.druid.query.CPUTimeMetricQueryRunner}
      */
     QueryRunner<T> queryRunner = query.getRunner(walker);
 
     log.info("!!!select：query生成的queryRunner对象："+queryRunner.getClass());
     /**
+     * 请求到达broker时，为以下逻辑：
      * 此处的queryRunner{@link org.apache.druid.server.ClientQuerySegmentWalker}中的QuerySwappingQueryRunner对象，
      * 其内部还包裹着一个baseRunner，后续每一个baseRunner都调用了其内部的baseRunner的run，一层层调用，整个顺序如下
      * QuerySwappingQueryRunner
@@ -169,7 +177,14 @@ public final class QueryPlus<T>
      * |->{@link org.apache.druid.query.RetryQueryRunner#run(QueryPlus, ResponseContext)}
      * |->{@link org.apache.druid.client.CachingClusteredClient#run(QueryPlus, ResponseContext, UnaryOperator, boolean)}
      *
-     * 此处返回的Sequence<T>结果，由最后的CachingClusteredClient中的run方法返回，
+     * 此处返回的Sequence<T>结果，由最后的CachingClusteredClient中的run方法返回。
+     *
+     * ====================================================================================================
+     * 请求到达historical时为以下逻辑：
+     * queryRunner为{@link org.apache.druid.query.CPUTimeMetricQueryRunner}
+     * |->{@link FinalizeResultsQueryRunner#run(QueryPlus, ResponseContext)}
+     * |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeResults(QueryRunner)}（！！！此处开始与broker不同）
+     *
      */
     return queryRunner.run(this, context);
   }

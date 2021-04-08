@@ -29,6 +29,11 @@ public class Yielders
 {
   public static <T> Yielder<T> each(final Sequence<T> sequence)
   {
+    /**
+     * sequence的toYielder方法就是将一个sequence转换成Yielder
+     *
+     * 此处的sequence为{@link LazySequence}
+     */
     return sequence.toYielder(
         null,
         new YieldingAccumulator<T, T>()
