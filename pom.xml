@@ -141,7 +141,7 @@
         <module>benchmarks</module>
         <module>extendedset</module>
         <module>hll</module>
-        <module>web-console</module>
+<!--        <module>web-console</module>-->
         <!-- Core cloud functionality -->
         <module>cloud/aws-common</module>
         <module>cloud/gcp-common</module>
@@ -209,7 +209,14 @@
         <!-- Only used by core, but moved to root for parallel build dependency resolution -->
         <repository>
           <id>sigar</id>
-          <url>https://repository.jboss.org/nexus/content/repositories/thirdparty-uploads/</url>
+<!--          <url>https://repository.jboss.org/nexus/content/repositories/thirdparty-uploads/</url>-->
+            <url>http://porting-dependence.obs.cn-north-4.myhuaweicloud.com/ARTIFACTS/</url>
+        </repository>
+
+        <repository>
+            <id>kunpengmaven</id>
+            <name>kunpeng maven</name>
+            <url>https://mirrors.huaweicloud.com/kunpeng/maven</url>
         </repository>
     </repositories>
 
@@ -1699,6 +1706,9 @@
                     <configuration>
                         <source>${maven.compiler.source}</source>
                         <target>${maven.compiler.target}</target>
+                        <compilerArguments>
+                            <extdirs>D:\git\druid-cn-notes\lib</extdirs>
+                        </compilerArguments>
                     </configuration>
                 </plugin>
                 <plugin>
@@ -1708,6 +1718,8 @@
                     <configuration>
                         <nodeVersion>v10.13.0</nodeVersion>
                         <npmVersion>6.4.1</npmVersion>
+                        <nodeDownloadRoot>https://npm.taobao.org/mirrors/node/</nodeDownloadRoot>
+                        <npmDownloadRoot>https://registry.npm.taobao.org/npm/-/</npmDownloadRoot>
                     </configuration>
                 </plugin>
             </plugins>
@@ -1729,6 +1741,9 @@
                         <!-- prefer release instead of source/target in JDK 9 and above -->
                         <configuration>
                             <release>${java.version}</release>
+                            <compilerArguments>
+                                <extdirs>D:\git\druid-cn-notes\lib</extdirs>
+                            </compilerArguments>
                         </configuration>
                     </plugin>
                 </plugins>
@@ -1750,6 +1765,9 @@
                             <source>${maven.compiler.source}</source>
                             <target>${maven.compiler.target}</target>
                             <showWarnings>false</showWarnings>
+                            <compilerArguments>
+                                <extdirs>D:\git\druid-cn-notes\lib</extdirs>
+                            </compilerArguments>
                             <compilerArgs>
                                 <arg>-XepDisableWarningsInGeneratedCode</arg>
 
