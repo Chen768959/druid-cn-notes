@@ -52,7 +52,11 @@ public class SetAndVerifyContextQueryRunner<T> implements QueryRunner<T>
   {
     log.info("!!!：SetAndVerifyContextQueryRunner中runner为："+baseRunner.getClass());
     /**
+     * broker中为：
      * {@link org.apache.druid.query.RetryQueryRunner#run(QueryPlus, ResponseContext)}
+     *
+     * his中为：
+     * {@link org.apache.druid.query.CPUTimeMetricQueryRunner#run(QueryPlus, ResponseContext)}
      */
     return baseRunner.run(
         QueryPlus.wrap(withTimeoutAndMaxScatterGatherBytes(queryPlus.getQuery(), serverConfig)),

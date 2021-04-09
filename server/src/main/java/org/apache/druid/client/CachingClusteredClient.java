@@ -682,7 +682,9 @@ public class CachingClusteredClient implements QuerySegmentWalker
     @Nullable
     private byte[] computeQueryCacheKey()
     {
-      log.info("!!!select：computeQueryCacheKey，缓存工具对象strategy："+strategy.getClass());
+      if (strategy!=null){
+        log.info("!!!select：computeQueryCacheKey，缓存工具对象strategy："+strategy.getClass());
+      }
       if ((populateCache || useCache) // implies strategy != null
           && !isBySegment) { // explicit bySegment queries are never cached
         assert strategy != null;

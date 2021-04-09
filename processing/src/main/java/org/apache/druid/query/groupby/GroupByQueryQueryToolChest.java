@@ -75,6 +75,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutorService;
 import java.util.function.BinaryOperator;
 
 /**
@@ -119,13 +120,22 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
     return (queryPlus, responseContext) -> {
       log.info("!!!：进入GroupByQueryQueryToolChest中mergeResults匿名函数");
       if (QueryContexts.isBySegment(queryPlus.getQuery())) {
+        log.info("!!!：进入isBySegment if，runner类型："+runner.getClass());
         return runner.run(queryPlus, responseContext);
       }
 
+      //请求到达historical后进入此逻辑
       final GroupByQuery groupByQuery = (GroupByQuery) queryPlus.getQuery();
       if (strategySelector.strategize(groupByQuery).doMergeResults(groupByQuery)) {
+        log.info("!!!：进入strategySelector if,runner类型："+runner.getClass());
+        /**
+         * runner类型{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
+         * 所创建的匿名runner
+         */
         return initAndMergeGroupByResults(groupByQuery, runner, responseContext);
       }
+
+      log.info("!!!：没有进入任何if，runner类型："+runner.getClass());
       return runner.run(queryPlus, responseContext);
     };
   }
@@ -176,7 +186,9 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
       ResponseContext context
   )
   {
+    //请求historical未进此if
     if (isNestedQueryPushDown(query, groupByStrategy)) {
+      log.info("!!!：进入isNestedQueryPushDown if");
       return mergeResultsWithNestedQueryPushDown(groupByStrategy, query, resource, runner, context);
     }
     return mergeGroupByResultsWithoutPushDown(groupByStrategy, query, resource, runner, context);
@@ -271,6 +283,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
       ResponseContext context
   )
   {
+    log.info("!!!：groupByStrategy类型："+groupByStrategy.getClass());
     Sequence<ResultRow> pushDownQueryResults = groupByStrategy.mergeResults(runner, query, context);
     final Sequence<ResultRow> finalizedResults = finalizeSubqueryResults(pushDownQueryResults, query);
     GroupByQuery rewrittenQuery = rewriteNestedQueryForPushDown(query);

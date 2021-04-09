@@ -68,11 +68,15 @@ public class CPUTimeMetricQueryRunner<T> implements QueryRunner<T>
     final QueryPlus<T> queryWithMetrics = queryPlus.withQueryMetrics(queryToolChest);
     log.info("!!!：CPUTimeMetricQueryRunner中delegate runner为："+delegate.getClass());
     /**
+     * broker中逻辑为：
      * delegate为{@link FinalizeResultsQueryRunner}
      *
      * 其经历一系列runner后，最终由此方法返回sequence
      * {@link org.apache.druid.client.CachingClusteredClient#run(QueryPlus, ResponseContext, UnaryOperator, boolean)}
      *
+     * =======================================================================================
+     * his中逻辑为;
+     * delegate为{@link org.apache.druid.query.PerSegmentOptimizingQueryRunner#run(QueryPlus, ResponseContext)}
      */
     final Sequence<T> baseSequence = delegate.run(queryWithMetrics, responseContext);
 

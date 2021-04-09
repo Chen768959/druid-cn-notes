@@ -20,6 +20,7 @@
 package org.apache.druid.query;
 
 import org.apache.druid.java.util.common.guava.Sequence;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.context.ResponseContext;
 
 /**
@@ -35,6 +36,8 @@ import org.apache.druid.query.context.ResponseContext;
  */
 public class PerSegmentOptimizingQueryRunner<T> implements QueryRunner<T>
 {
+  private static final Logger log = new Logger(PerSegmentOptimizingQueryRunner.class);
+
   private final QueryRunner<T> base;
   private final PerSegmentQueryOptimizationContext optimizationContext;
 
@@ -50,6 +53,10 @@ public class PerSegmentOptimizingQueryRunner<T> implements QueryRunner<T>
   @Override
   public Sequence<T> run(final QueryPlus<T> input, final ResponseContext responseContext)
   {
+    log.info("!!!：PerSegmentOptimizingQueryRunner中base runner为："+base.getClass());
+    /**
+     * his中为：{@link org.apache.druid.query.spec.SpecificSegmentQueryRunner#run(QueryPlus, ResponseContext)}
+     */
     return base.run(
         input.optimizeForSegment(optimizationContext),
         responseContext

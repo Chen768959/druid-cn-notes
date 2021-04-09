@@ -138,6 +138,7 @@ public class VectorGroupByEngine
           @Override
           public CloseableIterator<ResultRow> make()
           {
+            //矢量化游标？
             final VectorCursor cursor = storageAdapter.makeVectorCursor(
                 Filters.toFilter(query.getDimFilter()),
                 interval,
@@ -267,6 +268,9 @@ public class VectorGroupByEngine
       this.keySize = selectors.stream().mapToInt(GroupByVectorColumnSelector::getGroupingKeySize).sum();
       this.keySpace = WritableMemory.allocate(keySize * cursor.getMaxVectorSize());
       this.vectorGrouper = makeGrouper();
+      /**
+       * 创建真正的迭代器
+       */
       this.granulizer = VectorCursorGranularizer.create(storageAdapter, cursor, query.getGranularity(), queryInterval);
 
       if (granulizer != null) {

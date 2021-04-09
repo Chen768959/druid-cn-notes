@@ -28,6 +28,8 @@ import org.apache.druid.java.util.common.guava.Sequences;
 import org.apache.druid.java.util.common.guava.Yielder;
 import org.apache.druid.java.util.common.guava.Yielders;
 import org.apache.druid.java.util.common.guava.YieldingAccumulator;
+import org.apache.druid.java.util.common.logger.Logger;
+import org.apache.druid.query.PerSegmentOptimizingQueryRunner;
 import org.apache.druid.query.Queries;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryPlus;
@@ -43,6 +45,8 @@ import java.util.Collections;
  */
 public class SpecificSegmentQueryRunner<T> implements QueryRunner<T>
 {
+  private static final Logger log = new Logger(SpecificSegmentQueryRunner.class);
+
   private final QueryRunner<T> base;
   private final SpecificSegmentSpec specificSpec;
 
@@ -71,10 +75,17 @@ public class SpecificSegmentQueryRunner<T> implements QueryRunner<T>
     final String currThreadName = currThread.getName();
     final String newName = StringUtils.format("%s_%s_%s", query.getType(), query.getDataSource(), query.getIntervals());
 
+    log.info("!!!：SpecificSegmentQueryRunner中base runner为："+base.getClass());
+    /**
+     * 此处返回的就是base.run(queryPlus, responseContext).get()的内容
+     *
+     * base.run为：{@link org.apache.druid.query.MetricsEmittingQueryRunner#run(QueryPlus, ResponseContext)}
+     */
     final Sequence<T> baseSequence = doNamed(
         currThread,
         currThreadName,
         newName,
+        //创建匿名函数Supplier，并将base.run结果作为参数
         () -> base.run(queryPlus, responseContext)
     );
 
@@ -143,6 +154,11 @@ public class SpecificSegmentQueryRunner<T> implements QueryRunner<T>
         };
       }
     };
+
+    /**
+     * 将查询结果与wrap进行组合包装，
+     * wrap作用是在获得查询结果的前后执行某些逻辑
+     */
     return Sequences.wrap(
         segmentMissingCatchingSequence,
         new SequenceWrapper()

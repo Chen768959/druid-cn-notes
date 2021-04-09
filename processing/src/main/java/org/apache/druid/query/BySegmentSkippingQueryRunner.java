@@ -21,12 +21,16 @@ package org.apache.druid.query;
 
 
 import org.apache.druid.java.util.common.guava.Sequence;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.context.ResponseContext;
+import org.apache.druid.query.groupby.GroupByQueryQueryToolChest;
 
 /**
  */
 public abstract class BySegmentSkippingQueryRunner<T> implements QueryRunner<T>
 {
+  private static final Logger log = new Logger(BySegmentSkippingQueryRunner.class);
+
   private final QueryRunner<T> baseRunner;
 
   public BySegmentSkippingQueryRunner(
@@ -40,6 +44,7 @@ public abstract class BySegmentSkippingQueryRunner<T> implements QueryRunner<T>
   public Sequence<T> run(QueryPlus<T> queryPlus, ResponseContext responseContext)
   {
     if (QueryContexts.isBySegment(queryPlus.getQuery())) {
+      log.info("!!!：BySegmentSkippingQueryRunner run方法进入isBySegment if");
       return baseRunner.run(queryPlus, responseContext);
     }
 

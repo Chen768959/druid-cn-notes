@@ -32,6 +32,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import org.apache.druid.collections.BlockingPool;
+import org.apache.druid.collections.NonBlockingPool;
 import org.apache.druid.collections.ReferenceCountingResourceHolder;
 import org.apache.druid.collections.Releaser;
 import org.apache.druid.common.guava.GuavaUtils;
@@ -50,12 +51,18 @@ import org.apache.druid.query.QueryInterruptedException;
 import org.apache.druid.query.QueryPlus;
 import org.apache.druid.query.QueryRunner;
 import org.apache.druid.query.QueryWatcher;
+import org.apache.druid.query.ReferenceCountingSegmentQueryRunner;
 import org.apache.druid.query.ResourceLimitExceededException;
 import org.apache.druid.query.context.ResponseContext;
+import org.apache.druid.query.filter.Filter;
 import org.apache.druid.query.groupby.GroupByQuery;
 import org.apache.druid.query.groupby.GroupByQueryConfig;
 import org.apache.druid.query.groupby.ResultRow;
 import org.apache.druid.query.groupby.epinephelinae.RowBasedGrouperHelper.RowBasedKey;
+import org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine;
+import org.apache.druid.segment.StorageAdapter;
+import org.joda.time.DateTime;
+import org.joda.time.Interval;
 
 import java.io.File;
 import java.nio.ByteBuffer;
@@ -160,9 +167,23 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
     final boolean hasTimeout = QueryContexts.hasTimeout(query);
     final long timeoutAt = System.currentTimeMillis() + queryTimeout;
 
+    /**
+     * 此处用到的手法和请求到达broker，然后懒加载获取Sequence是一致的。
+     *
+     * 都是返回一个Sequence，然后往里传一个“IteratorMaker”匿名函数，
+     * 这个IteratorMaker中的make方法才是真正的查询逻辑，
+     * 也只有在后面调用Sequence转Yielder的方法时，才会调用这个真正的查询逻辑进行查询，
+     * 所以我们重点看以下的make方法：
+     *
+     *
+     */
     return new BaseSequence<>(
         new BaseSequence.IteratorMaker<ResultRow, CloseableGrouperIterator<RowBasedKey, ResultRow>>()
         {
+          /**
+           * 真正的查询逻辑，在后续Sequence转Yielder时会被调用。
+           *
+           */
           @Override
           public CloseableGrouperIterator<RowBasedKey, ResultRow> make()
           {
@@ -228,6 +249,9 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
                                 throw new ISE("Null queryRunner! Looks to be some segment unmapping action happening");
                               }
 
+                              /**
+                               * 使用guava提交异步任务，返回结果
+                               */
                               ListenableFuture<AggregateResult> future = exec.submit(
                                   new AbstractPrioritizedCallable<AggregateResult>(priority)
                                   {
@@ -242,6 +266,22 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
                                           Releaser grouperReleaser = grouperHolder.increment()
                                       ) {
                                         // Return true if OK, false if resources were exhausted.
+                                        log.info("!!!：V2异步执行查询任务，查询input类型："+input.getClass());
+                                        /**
+                                         * 此处input：{@link org.apache.druid.server.SetAndVerifyContextQueryRunner#run(QueryPlus, ResponseContext)}
+                                         * |->{@link org.apache.druid.query.CPUTimeMetricQueryRunner#run(QueryPlus, ResponseContext)}
+                                         * |->{@link org.apache.druid.query.PerSegmentOptimizingQueryRunner#run(QueryPlus, ResponseContext)}
+                                         * |->{@link org.apache.druid.query.spec.SpecificSegmentQueryRunner#run(QueryPlus, ResponseContext)}
+                                         *    |->{@link org.apache.druid.query.MetricsEmittingQueryRunner#run(QueryPlus, ResponseContext)}
+                                         *    |->{@link org.apache.druid.query.BySegmentQueryRunner#run(QueryPlus, ResponseContext)}
+                                         *    |->{@link org.apache.druid.client.CachingQueryRunner#run(QueryPlus, ResponseContext)}
+                                         *    |->{@link org.apache.druid.query.MetricsEmittingQueryRunner#run(QueryPlus, ResponseContext)}
+                                         *    |->{@link ReferenceCountingSegmentQueryRunner#run(QueryPlus, ResponseContext)}
+                                         *    |->{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory.GroupByQueryRunner#run(QueryPlus, ResponseContext)}
+                                         *    |->{@link org.apache.druid.query.groupby.epinephelinae.GroupByQueryEngineV2#process(GroupByQuery, StorageAdapter, NonBlockingPool, GroupByQueryConfig)}
+                                         *    |->{@link VectorGroupByEngine#process(GroupByQuery, StorageAdapter, ByteBuffer, DateTime, Filter, Interval, GroupByQueryConfig)}
+                                         *
+                                         */
                                         return input.run(queryPlusForRunners, responseContext)
                                                     .accumulate(AggregateResult.ok(), accumulator);
                                       }

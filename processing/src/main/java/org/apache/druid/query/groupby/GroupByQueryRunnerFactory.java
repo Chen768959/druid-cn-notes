@@ -23,14 +23,18 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.inject.Inject;
+import org.apache.druid.collections.NonBlockingPool;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.guava.Sequence;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryPlus;
 import org.apache.druid.query.QueryRunner;
 import org.apache.druid.query.QueryRunnerFactory;
 import org.apache.druid.query.QueryToolChest;
 import org.apache.druid.query.context.ResponseContext;
+import org.apache.druid.query.groupby.epinephelinae.GroupByMergingQueryRunnerV2;
+import org.apache.druid.query.groupby.strategy.GroupByStrategy;
 import org.apache.druid.query.groupby.strategy.GroupByStrategySelector;
 import org.apache.druid.segment.Segment;
 import org.apache.druid.segment.StorageAdapter;
@@ -42,6 +46,8 @@ import java.util.concurrent.ExecutorService;
  */
 public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, GroupByQuery>
 {
+  private static final Logger log = new Logger(GroupByQueryRunnerFactory.class);
+
   private final GroupByStrategySelector strategySelector;
   private final GroupByQueryQueryToolChest toolChest;
 
@@ -75,9 +81,28 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
       @Override
       public Sequence<ResultRow> run(QueryPlus<ResultRow> queryPlus, ResponseContext responseContext)
       {
-        QueryRunner<ResultRow> rowQueryRunner = strategySelector
-            .strategize((GroupByQuery) queryPlus.getQuery())
-            .mergeRunners(queryExecutor, queryRunners);
+        log.info("!!!：进入mergeRunners中匿名QueryRunner，run方法");
+
+        GroupByStrategy groupByStrategy =strategySelector.strategize((GroupByQuery) queryPlus.getQuery());
+        /**
+         * groupByStrategy类型为{@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2}
+         */
+        log.info("!!!：进入mergeRunners中匿名QueryRunner，groupByStrategy类型为："+groupByStrategy.getClass());
+        /**
+         * executor类型{@link org.apache.druid.query.MetricsEmittingExecutorService}
+         */
+        log.info("!!!：进入mergeRunners中匿名QueryRunner，queryExecutor类型为："+queryExecutor.getClass());
+        for (QueryRunner<ResultRow> runner:queryRunners){
+          /**
+           * 包含{@link org.apache.druid.server.SetAndVerifyContextQueryRunner}
+           */
+          log.info("!!!：进入mergeRunners中匿名QueryRunner，queryRunners中包含："+runner.getClass());
+        }
+        QueryRunner<ResultRow> rowQueryRunner = groupByStrategy.mergeRunners(queryExecutor, queryRunners);
+
+        /**
+         * 此处调用的是{@link GroupByMergingQueryRunnerV2#run(QueryPlus, ResponseContext)}
+         */
         return rowQueryRunner.run(queryPlus, responseContext);
       }
     };
@@ -103,12 +128,19 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
     @Override
     public Sequence<ResultRow> run(QueryPlus<ResultRow> queryPlus, ResponseContext responseContext)
     {
+      log.info("!!!：进入GroupByQueryRunner，run方法");
       Query<ResultRow> query = queryPlus.getQuery();
       if (!(query instanceof GroupByQuery)) {
         throw new ISE("Got a [%s] which isn't a %s", query.getClass(), GroupByQuery.class);
       }
 
-      return strategySelector.strategize((GroupByQuery) query).process((GroupByQuery) query, adapter);
+      GroupByStrategy groupByStrategy = strategySelector.strategize((GroupByQuery) query);
+
+      log.info("!!!：进入GroupByQueryRunner，groupByStrategy为："+groupByStrategy.getClass());
+      /**
+       * {@link org.apache.druid.query.groupby.epinephelinae.GroupByQueryEngineV2#process(GroupByQuery, StorageAdapter, NonBlockingPool, GroupByQueryConfig)}
+       */
+      return groupByStrategy.process((GroupByQuery) query, adapter);
     }
   }
 

@@ -21,11 +21,16 @@ package org.apache.druid.query;
 
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.context.ResponseContext;
 import org.apache.druid.segment.SegmentReference;
 
+import java.util.concurrent.ExecutorService;
+
 public class ReferenceCountingSegmentQueryRunner<T> implements QueryRunner<T>
 {
+  private static final Logger log = new Logger(ReferenceCountingSegmentQueryRunner.class);
+
   private final QueryRunnerFactory<T, Query<T>> factory;
   private final SegmentReference segment;
   private final SegmentDescriptor descriptor;
@@ -46,7 +51,13 @@ public class ReferenceCountingSegmentQueryRunner<T> implements QueryRunner<T>
   {
     return segment.acquireReferences().map(closeable -> {
       try {
-        final Sequence<T> baseSequence = factory.createRunner(segment).run(queryPlus, responseContext);
+        QueryRunner<T> queryRunner = factory.createRunner(segment);
+        /**
+         * 进入{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
+         * 然后返回{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory.GroupByQueryRunner#run(QueryPlus, ResponseContext)}
+         */
+        log.info("!!!：ReferenceCountingSegmentQueryRunner中factory.createRunner(segment)为："+queryRunner.getClass());
+        final Sequence<T> baseSequence = queryRunner.run(queryPlus, responseContext);
         return Sequences.withBaggage(baseSequence, closeable);
       }
       catch (Throwable t) {
@@ -58,6 +69,9 @@ public class ReferenceCountingSegmentQueryRunner<T> implements QueryRunner<T>
         }
         throw t;
       }
-    }).orElseGet(() -> new ReportTimelineMissingSegmentQueryRunner<T>(descriptor).run(queryPlus, responseContext));
+    }).orElseGet(() -> {
+      log.info("!!!：ReferenceCountingSegmentQueryRunner未获取到acquireReferences值");
+      return new ReportTimelineMissingSegmentQueryRunner<T>(descriptor).run(queryPlus, responseContext);
+    });
   }
 }

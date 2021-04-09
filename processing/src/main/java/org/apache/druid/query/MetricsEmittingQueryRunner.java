@@ -90,11 +90,20 @@ public class MetricsEmittingQueryRunner<T> implements QueryRunner<T>
 
     applyCustomDimensions.accept(queryMetrics);
 
+    log.info("!!!：MetricsEmittingQueryRunner中queryRunner为："+queryRunner.getClass());
     return Sequences.wrap(
         // Use LazySequence because want to account execution time of queryRunner.run() (it prepares the underlying
         // Sequence) as part of the reported query time, i. e. we want to execute queryRunner.run() after
         // `startTime = System.nanoTime();` (see below).
+        /**
+         * {@link org.apache.druid.query.BySegmentQueryRunner#run(QueryPlus, ResponseContext)}
+         *
+         * 第二次进来时变成
+         * {@link ReferenceCountingSegmentQueryRunner#run(QueryPlus, ResponseContext)}
+         */
         new LazySequence<>(() -> queryRunner.run(queryWithMetrics, responseContext)),
+
+        //设置wrapper，此wrapper用于计算整个查询时间
         new SequenceWrapper()
         {
           private long startTimeNs;

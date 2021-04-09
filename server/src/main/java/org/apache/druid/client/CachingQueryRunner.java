@@ -28,6 +28,8 @@ import org.apache.druid.client.cache.CachePopulator;
 import org.apache.druid.java.util.common.guava.BaseSequence;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
+import org.apache.druid.java.util.common.logger.Logger;
+import org.apache.druid.query.BySegmentQueryRunner;
 import org.apache.druid.query.CacheStrategy;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryPlus;
@@ -42,6 +44,7 @@ import java.util.Iterator;
 
 public class CachingQueryRunner<T> implements QueryRunner<T>
 {
+  private static final Logger log = new Logger(CachingQueryRunner.class);
   private final String cacheId;
   private final SegmentDescriptor segmentDescriptor;
   private final QueryRunner<T> base;
@@ -75,6 +78,10 @@ public class CachingQueryRunner<T> implements QueryRunner<T>
   @Override
   public Sequence<T> run(QueryPlus<T> queryPlus, ResponseContext responseContext)
   {
+    /**
+     * {@link org.apache.druid.query.MetricsEmittingQueryRunner}
+     */
+    log.info("!!!：CachingQueryRunner中base为："+base.getClass());
     Query<T> query = queryPlus.getQuery();
     final CacheStrategy strategy = toolChest.getCacheStrategy(query);
     final boolean populateCache = CacheUtil.isPopulateSegmentCache(
@@ -96,7 +103,9 @@ public class CachingQueryRunner<T> implements QueryRunner<T>
       key = null;
     }
 
+    //返回缓存结果
     if (useCache) {
+      log.info("!!!：CachingQueryRunner中base使用缓存");
       final Function cacheFn = strategy.pullFromSegmentLevelCache();
       final byte[] cachedResult = cache.get(key);
       if (cachedResult != null) {
@@ -136,9 +145,15 @@ public class CachingQueryRunner<T> implements QueryRunner<T>
     }
 
     if (populateCache) {
+      log.info("!!!：CachingQueryRunner中base填充缓存");
       final Function cacheFn = strategy.prepareForSegmentLevelCache();
+      /**
+       * {@link org.apache.druid.query.MetricsEmittingQueryRunner#run(QueryPlus, ResponseContext)}
+       */
       return cachePopulator.wrap(base.run(queryPlus, responseContext), value -> cacheFn.apply(value), cache, key);
+      //无缓存
     } else {
+      log.info("!!!：CachingQueryRunner中base不填充缓存");
       return base.run(queryPlus, responseContext);
     }
   }

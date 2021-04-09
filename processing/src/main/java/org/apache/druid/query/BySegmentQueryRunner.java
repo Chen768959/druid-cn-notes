@@ -21,6 +21,7 @@ package org.apache.druid.query;
 
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.context.ResponseContext;
 import org.apache.druid.timeline.SegmentId;
 import org.joda.time.DateTime;
@@ -40,6 +41,8 @@ import java.util.List;
  */
 public class BySegmentQueryRunner<T> implements QueryRunner<T>
 {
+  private static final Logger log = new Logger(BySegmentQueryRunner.class);
+
   private final SegmentId segmentId;
   private final DateTime timestamp;
   private final QueryRunner<T> base;
@@ -55,6 +58,10 @@ public class BySegmentQueryRunner<T> implements QueryRunner<T>
   @SuppressWarnings("unchecked")
   public Sequence<T> run(final QueryPlus<T> queryPlus, ResponseContext responseContext)
   {
+    /**
+     * base为{@link org.apache.druid.client.CachingQueryRunner#run(QueryPlus, ResponseContext)}
+     */
+    log.info("!!!：BySegmentQueryRunner中base runner为："+base.getClass());
     if (QueryContexts.isBySegment(queryPlus.getQuery())) {
       final Sequence<T> baseSequence = base.run(queryPlus, responseContext);
       final List<T> results = baseSequence.toList();

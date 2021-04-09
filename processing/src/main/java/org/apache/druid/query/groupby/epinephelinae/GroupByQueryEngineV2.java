@@ -41,6 +41,7 @@ import org.apache.druid.query.dimension.DimensionSpec;
 import org.apache.druid.query.filter.Filter;
 import org.apache.druid.query.groupby.GroupByQuery;
 import org.apache.druid.query.groupby.GroupByQueryConfig;
+import org.apache.druid.query.groupby.GroupByQueryRunnerFactory;
 import org.apache.druid.query.groupby.ResultRow;
 import org.apache.druid.query.groupby.epinephelinae.column.DictionaryBuildingStringGroupByColumnSelectorStrategy;
 import org.apache.druid.query.groupby.epinephelinae.column.DoubleGroupByColumnSelectorStrategy;
@@ -89,6 +90,7 @@ import java.util.stream.Stream;
  */
 public class GroupByQueryEngineV2
 {
+  private static final Logger log = new Logger(GroupByQueryEngineV2.class);
   private static final GroupByStrategyFactory STRATEGY_FACTORY = new GroupByStrategyFactory();
 
   private static GroupByColumnSelectorPlus[] createGroupBySelectorPlus(
@@ -122,7 +124,7 @@ public class GroupByQueryEngineV2
           "Null storage adapter found. Probably trying to issue a query against a segment being memory unmapped."
       );
     }
-
+    //获取此次的查询时间
     final List<Interval> intervals = query.getQuerySegmentSpec().getIntervals();
     if (intervals.size() != 1) {
       throw new IAE("Should only have one interval, got[%s]", intervals);
@@ -148,7 +150,9 @@ public class GroupByQueryEngineV2
 
       final Sequence<ResultRow> result;
 
+      //此处doVectorize为true
       if (doVectorize) {
+        log.info("!!!：GroupByQueryEngineV2，process执行向量化");
         result = VectorGroupByEngine.process(
             query,
             storageAdapter,
@@ -158,7 +162,16 @@ public class GroupByQueryEngineV2
             interval,
             querySpecificConfig
         );
+
+        result.toList().forEach(x->{
+          int len = x.getArray().length;
+          log.info("!!!：tmp!，x.getArray().length："+len);
+          for (int i=0;i<len;i++){
+            log.info("!!!：tmp!，x.get("+i+")："+x.get(i));
+          }
+        });
       } else {
+        log.info("!!!：GroupByQueryEngineV2，process不执行向量化");
         result = processNonVectorized(
             query,
             storageAdapter,
