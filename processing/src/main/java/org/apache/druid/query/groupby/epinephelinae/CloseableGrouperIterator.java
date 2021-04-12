@@ -20,15 +20,21 @@
 package org.apache.druid.query.groupby.epinephelinae;
 
 import org.apache.druid.java.util.common.io.Closer;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.java.util.common.parsers.CloseableIterator;
+import org.apache.druid.query.aggregation.AggregatorAdapters;
+import org.apache.druid.query.groupby.ResultRow;
 import org.apache.druid.query.groupby.epinephelinae.Grouper.Entry;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.function.Function;
 
 public class CloseableGrouperIterator<KeyType, T> implements CloseableIterator<T>
 {
+  private static final Logger log = new Logger(CloseableGrouperIterator.class);
+
   private final Function<Entry<KeyType>, T> transformer;
   private final CloseableIterator<Entry<KeyType>> iterator;
   private final Closer closer;
@@ -50,7 +56,12 @@ public class CloseableGrouperIterator<KeyType, T> implements CloseableIterator<T
   @Override
   public T next()
   {
-    return transformer.apply(iterator.next());
+    // 获取到聚合结果
+    Entry<KeyType> memoryEntry = iterator.next();
+    // 获取列值，并将上面的聚合结果和其进行组合，然后返回ResultRow
+    T resultRow = transformer.apply(memoryEntry);
+
+    return resultRow;
   }
 
   @Override

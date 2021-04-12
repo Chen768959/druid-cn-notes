@@ -27,6 +27,7 @@ import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.guava.BaseSequence;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.io.Closer;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.java.util.common.parsers.CloseableIterator;
 import org.apache.druid.query.QueryContexts;
 import org.apache.druid.query.aggregation.AggregatorAdapters;
@@ -38,6 +39,7 @@ import org.apache.druid.query.groupby.ResultRow;
 import org.apache.druid.query.groupby.epinephelinae.AggregateResult;
 import org.apache.druid.query.groupby.epinephelinae.BufferArrayGrouper;
 import org.apache.druid.query.groupby.epinephelinae.CloseableGrouperIterator;
+import org.apache.druid.query.groupby.epinephelinae.GroupByMergingQueryRunnerV2;
 import org.apache.druid.query.groupby.epinephelinae.GroupByQueryEngineV2;
 import org.apache.druid.query.groupby.epinephelinae.HashVectorGrouper;
 import org.apache.druid.query.groupby.epinephelinae.VectorGrouper;
@@ -56,6 +58,7 @@ import org.joda.time.Interval;
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -65,6 +68,8 @@ import java.util.stream.Collectors;
 
 public class VectorGroupByEngine
 {
+  private static final Logger log = new Logger(VectorGroupByEngine.class);
+
   private VectorGroupByEngine()
   {
     // No instantiation.
@@ -135,12 +140,18 @@ public class VectorGroupByEngine
     return new BaseSequence<>(
         new BaseSequence.IteratorMaker<ResultRow, CloseableIterator<ResultRow>>()
         {
+          /**
+           * 以下make方法为后续Sequence转Yielder时，或者toList等被调用时，才会被调用，
+           * 也是真正的查询结果的执行方法
+           */
           @Override
           public CloseableIterator<ResultRow> make()
           {
             //矢量化游标？
             final VectorCursor cursor = storageAdapter.makeVectorCursor(
+                // 过滤条件
                 Filters.toFilter(query.getDimFilter()),
+                // 查询时间条件
                 interval,
                 query.getVirtualColumns(),
                 false,
@@ -222,6 +233,32 @@ public class VectorGroupByEngine
   @VisibleForTesting
   static class VectorGroupByEngineIterator implements CloseableIterator<ResultRow>
   {
+    /**
+     * 该对象为查询结果的迭代器对象。
+     * 观察其next()方法{@link this#next()}
+     *
+     * （1）next()方法概览
+     * {@link this#next()}
+     * |->delegate.next()   {@link CloseableGrouperIterator#next()}
+     * |->vectorGrouper.iterator().next()
+     *
+     * 所以当前对象的next方法，实际上是调用“vectorGrouper对象生成的iterator迭代器的next()方法”。
+     *
+     * （2）vectorGrouper对象的创建
+     * vectorGrouper = {@link this#makeGrouper()}
+     * vectorGrouper的实现类实际上是{@link BufferArrayGrouper}
+     *
+     * （3）vectorGrouper.iterator()
+     * 也就是{@link BufferArrayGrouper#iterator()}
+     * 其内部又调用了自身的{@link BufferArrayGrouper#iterator(boolean)}方法，
+     * 该方法创建并返回了一个全新的匿名迭代器
+     *
+     * （4）vectorGrouper.iterator().next()
+     * 指的也就是上面创建的匿名迭代器的next方法
+     *
+     */
+
+
     private final GroupByQuery query;
     private final GroupByQueryConfig querySpecificConfig;
     private final StorageAdapter storageAdapter;
@@ -231,6 +268,13 @@ public class VectorGroupByEngine
     private final DateTime fudgeTimestamp;
     private final int keySize;
     private final WritableMemory keySpace;
+    /**
+     * vectorGrouper.iterator()中会产生真正的迭代器，后续的next等方法实际上就是调用该方法产生的迭代器。
+     *
+     * vectorGrouper由makeGrouper()产生，{@link this#makeGrouper()}
+     * 最后生成{@link BufferArrayGrouper}
+     * 而他的{@link BufferArrayGrouper#iterator()}方法产生了真正的迭代器
+     */
     private final VectorGrouper vectorGrouper;
 
     @Nullable
@@ -285,6 +329,7 @@ public class VectorGroupByEngine
     @Override
     public ResultRow next()
     {
+      // 执行hasNext()，顺便就初始化了delegate
       if (!hasNext()) {
         throw new NoSuchElementException();
       }
@@ -295,6 +340,7 @@ public class VectorGroupByEngine
     @Override
     public boolean hasNext()
     {
+      // 判断迭代器是否存在，且迭代器内部hasNext条件成立
       if (delegate != null && delegate.hasNext()) {
         return true;
       } else {
@@ -307,6 +353,7 @@ public class VectorGroupByEngine
               vectorGrouper.reset();
             }
 
+            // 初始化迭代器
             delegate = initNewDelegate();
           }
           return true;
@@ -341,6 +388,7 @@ public class VectorGroupByEngine
       );
 
       if (cardinalityForArrayAggregation >= 0) {
+        log.info("!!!：生成BufferArrayGrouper");
         grouper = new BufferArrayGrouper(
             Suppliers.ofInstance(processingBuffer),
             AggregatorAdapters.factorizeVector(
@@ -350,6 +398,7 @@ public class VectorGroupByEngine
             cardinalityForArrayAggregation
         );
       } else {
+        log.info("!!!：生成HashVectorGrouper");
         grouper = new HashVectorGrouper(
             Suppliers.ofInstance(processingBuffer),
             keySize,
@@ -429,20 +478,38 @@ public class VectorGroupByEngine
       final int resultRowAggregatorStart = query.getResultRowAggregatorStart();
 
       return new CloseableGrouperIterator<>(
+          /**
+           * 此处的迭代器，
+           * 是后续next时真正调用的迭代器
+           */
           vectorGrouper.iterator(),
+
+          /**
+           * 传参entry是聚合的结果，
+           * 也就是上面vectorGrouper.iterator()的查询结果，
+           *
+           * 本函数的目的是获得查询的dimensions结果，
+           * 然后和传参的聚合结果一起封装成新的ResultRow对象并返回。
+           */
           entry -> {
             final ResultRow resultRow = ResultRow.create(query.getResultRowSizeWithoutPostAggregators());
+
+            // 此时resultRow中内容为null
 
             // Add timestamp, if necessary.
             if (resultRowHasTimestamp) {
               resultRow.set(0, timestamp.getMillis());
             }
 
+            // 此时resultRow中内容为null
+
             // Add dimensions.
+            /**
+             * 添加dimensions
+             */
             int keyOffset = 0;
             for (int i = 0; i < selectors.size(); i++) {
               final GroupByVectorColumnSelector selector = selectors.get(i);
-
               selector.writeKeyToResultRow(
                   entry.getKey(),
                   keyOffset,
@@ -452,6 +519,7 @@ public class VectorGroupByEngine
 
               keyOffset += selector.getGroupingKeySize();
             }
+            // 此时resultRow中已经包含了该行的dimensions和所聚合的时间
 
             // Convert dimension values to desired output types, possibly.
             GroupByQueryEngineV2.convertRowTypesToOutputTypes(
@@ -460,10 +528,19 @@ public class VectorGroupByEngine
                 resultRowDimensionStart
             );
 
+            // 此时resultRow中还是只有该行的dimensions和所聚合的时间
+
             // Add aggregations.
+            /**
+             * entry是查询出来的聚合结果，
+             * 其getValues是个数组，其中包含了每行的聚合结果。
+             * 此处将每行的聚合结果，和该行的dimension进行了合并
+             */
             for (int i = 0; i < entry.getValues().length; i++) {
               resultRow.set(resultRowAggregatorStart + i, entry.getValues()[i]);
             }
+
+            // 此时resultRow中额外还加入了该行的聚合结果
 
             return resultRow;
           },

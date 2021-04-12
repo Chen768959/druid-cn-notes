@@ -46,6 +46,9 @@ public class AggregatorAdapters implements Closeable
 {
   private static final Logger log = new Logger(AggregatorAdapters.class);
 
+  /**
+   *
+   */
   private final List<Adapter> adapters;
   private final List<AggregatorFactory> factories;
   private final int[] aggregatorPositions;

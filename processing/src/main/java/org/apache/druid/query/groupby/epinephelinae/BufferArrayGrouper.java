@@ -26,6 +26,7 @@ import org.apache.datasketches.memory.Memory;
 import org.apache.datasketches.memory.WritableMemory;
 import org.apache.druid.java.util.common.IAE;
 import org.apache.druid.java.util.common.ISE;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.java.util.common.parsers.CloseableIterator;
 import org.apache.druid.query.aggregation.AggregatorAdapters;
 import org.apache.druid.query.aggregation.AggregatorFactory;
@@ -54,6 +55,8 @@ import java.util.NoSuchElementException;
  */
 public class BufferArrayGrouper implements VectorGrouper, IntGrouper
 {
+  private static final Logger log = new Logger(BufferArrayGrouper.class);
+
   private final Supplier<ByteBuffer> bufferSupplier;
   private final AggregatorAdapters aggregators;
   private final int cardinalityWithMissingValue;
@@ -107,6 +110,7 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
   public BufferArrayGrouper(
       // the buffer returned from the below supplier can have dirty bits and should be cleared during initialization
       final Supplier<ByteBuffer> bufferSupplier,
+      // 查询引擎，迭代器中查询的元素，就是通过此对象查询出的
       final AggregatorAdapters aggregators,
       final int cardinality
   )
@@ -285,6 +289,10 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
   @Override
   public CloseableIterator<Entry<Memory>> iterator()
   {
+    /**
+     * 该迭代器中的对象都是从aggregators中获取的{@link this#aggregators}
+     * 获取next对象调用{@link AggregatorAdapters#get(ByteBuffer, int, int)}
+     */
     final CloseableIterator<Entry<Integer>> iterator = iterator(false);
     final WritableMemory keyMemory = WritableMemory.allocate(Integer.BYTES);
     return new CloseableIterator<Entry<Memory>>()
@@ -336,9 +344,18 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
           throw new NoSuchElementException();
         }
 
+        //当前下标（初始时为0）
         final int current = next;
+        //获取接下来的查询下标（下一次调用此next方法时，该next又会被赋值给上面的current属性）
         next = findNext(current);
-
+        /**
+         * values数组，用来装“聚合结果”
+         * 假设我们有一个聚合需求，如求sum，
+         * 则下面每一个value都是一个sum的结果
+         *
+         * 而每一个value都是由aggregators.get(valBuffer, recordOffset, i);创建而来
+         * 由此可见aggregators对象负责创建聚合结果
+         */
         final Object[] values = new Object[aggregators.size()];
         final int recordOffset = current * recordSize;
         for (int i = 0; i < aggregators.size(); i++) {

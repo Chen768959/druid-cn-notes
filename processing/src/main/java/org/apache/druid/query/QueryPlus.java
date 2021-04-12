@@ -25,8 +25,10 @@ import org.apache.druid.guice.annotations.PublicApi;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.context.ResponseContext;
+import org.apache.druid.query.groupby.epinephelinae.GroupByMergingQueryRunnerV2;
 
 import javax.annotation.Nullable;
+import java.util.concurrent.ExecutorService;
 import java.util.function.UnaryOperator;
 
 /**
@@ -184,6 +186,8 @@ public final class QueryPlus<T>
      * queryRunner为{@link org.apache.druid.query.CPUTimeMetricQueryRunner}
      * |->{@link FinalizeResultsQueryRunner#run(QueryPlus, ResponseContext)}
      * |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeResults(QueryRunner)}（！！！此处开始与broker不同）
+     * |->{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
+     * |->{@link GroupByMergingQueryRunnerV2#run(QueryPlus, ResponseContext)}
      *
      */
     return queryRunner.run(this, context);
