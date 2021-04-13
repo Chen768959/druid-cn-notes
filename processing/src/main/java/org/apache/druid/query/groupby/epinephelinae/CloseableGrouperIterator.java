@@ -56,9 +56,19 @@ public class CloseableGrouperIterator<KeyType, T> implements CloseableIterator<T
   @Override
   public T next()
   {
-    // 获取到聚合结果
+    /**
+     * 历史节点：
+     * 获取到聚合结果。
+     * 此处的iterator指的是{@link BufferArrayGrouper#iterator(boolean)}产生的迭代器，
+     * 其next也是调用的其中，可查询聚合结果
+     */
     Entry<KeyType> memoryEntry = iterator.next();
-    // 获取列值，并将上面的聚合结果和其进行组合，然后返回ResultRow
+
+    /**
+     *
+     *
+     * 获取列值，并将上面的聚合结果和其进行组合，然后返回ResultRow
+     */
     T resultRow = transformer.apply(memoryEntry);
 
     return resultRow;

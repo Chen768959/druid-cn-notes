@@ -174,8 +174,6 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
      * 这个IteratorMaker中的make方法才是真正的查询逻辑，
      * 也只有在后面调用Sequence转Yielder的方法时，才会调用这个真正的查询逻辑进行查询，
      * 所以我们重点看以下的make方法：
-     *
-     *
      */
     return new BaseSequence<>(
         new BaseSequence.IteratorMaker<ResultRow, CloseableGrouperIterator<RowBasedKey, ResultRow>>()
@@ -280,7 +278,6 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
                                          *    |->{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory.GroupByQueryRunner#run(QueryPlus, ResponseContext)}
                                          *    |->{@link org.apache.druid.query.groupby.epinephelinae.GroupByQueryEngineV2#process(GroupByQuery, StorageAdapter, NonBlockingPool, GroupByQueryConfig)}
                                          *    |->{@link VectorGroupByEngine#process(GroupByQuery, StorageAdapter, ByteBuffer, DateTime, Filter, Interval, GroupByQueryConfig)}
-                                         *
                                          */
                                         return input.run(queryPlusForRunners, responseContext)
                                                     .accumulate(AggregateResult.ok(), accumulator);

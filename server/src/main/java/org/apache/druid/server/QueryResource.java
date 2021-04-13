@@ -50,6 +50,14 @@ import org.apache.druid.query.QueryToolChest;
 import org.apache.druid.query.QueryUnsupportedException;
 import org.apache.druid.query.TruncatedResponseContextException;
 import org.apache.druid.query.context.ResponseContext;
+import org.apache.druid.query.filter.Filter;
+import org.apache.druid.query.groupby.GroupByQuery;
+import org.apache.druid.query.groupby.GroupByQueryConfig;
+import org.apache.druid.query.groupby.ResultRow;
+import org.apache.druid.query.groupby.epinephelinae.BufferArrayGrouper;
+import org.apache.druid.query.groupby.epinephelinae.GroupByMergingQueryRunnerV2;
+import org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine;
+import org.apache.druid.segment.StorageAdapter;
 import org.apache.druid.server.metrics.QueryCountStatsProvider;
 import org.apache.druid.server.security.Access;
 import org.apache.druid.server.security.AuthConfig;
@@ -57,6 +65,7 @@ import org.apache.druid.server.security.AuthorizationUtils;
 import org.apache.druid.server.security.AuthorizerMapper;
 import org.apache.druid.server.security.ForbiddenException;
 import org.joda.time.DateTime;
+import org.joda.time.Interval;
 
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletRequest;
@@ -75,6 +84,7 @@ import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicLong;
@@ -272,6 +282,45 @@ public class QueryResource implements QueryCountStatsProvider
        * （发送http请求，异步获取请求结果：{@link org.apache.druid.client.DirectDruidClient#run(QueryPlus, ResponseContext)}）
        * 返回的类型就是Sequence<T>
        * 而该匿名函数只有在接下来Sequence进行toYielder时才会被执行
+       *
+       * ===============================================================================================================
+       * 请求到达historical节点：
+       * broker节点收到查询请求后，会将请求拆分成子请求，然后发送给historical节点，
+       * 历史节点也是该方法接收请求，然后也会走到此处.
+       *
+       * “！！！”
+       * 无论是broker节点还是历史节点，其懒加载原理都如下：
+       * 此处获得的结果对象中都包含了一个{@link org.apache.druid.java.util.common.guava.BaseSequence.IteratorMaker}类型的匿名函数，
+       * 且会在其中设置一个make()方法，该方法返回了一个{@link org.apache.druid.java.util.common.parsers.CloseableIterator}类型的迭代器，
+       * 通过该迭代器，可以读取查询结果，每次迭代一个ResultRow类型的对象，也就是一行结果。
+       *
+       * 在后续Sequence进行toYielder或者要从Sequence中取结果时，就会调用make获取迭代器，然后再用迭代器获取结果，
+       * 也就是在这时候，才会真正查询结果。
+       *
+       * 所以历史节点查询的关键就是：
+       * （1）历史节点的make()方法如何获取迭代器
+       * 通过此方法{@link org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine#process(GroupByQuery, StorageAdapter, ByteBuffer, DateTime, Filter, Interval, GroupByQueryConfig)}
+       * 返回BaseSequence结果对象的同时，设置了一个IteratorMaker匿名函数，
+       * 其make()方法返回了一个{@link VectorGroupByEngine.VectorGroupByEngineIterator}迭代器，
+       * 后续BaseSequence通过此迭代器的next方法，可获取查询结果ResultRow对象
+       *
+       * （2）此迭代器的next()方法是如何返回{@link ResultRow}查询结果行对象的。
+       * 这块有点绕。。
+       * 先来看迭代器的next()方法
+       * {@link VectorGroupByEngine.VectorGroupByEngineIterator#next()}
+       * 真正查询出结果的是其内部的
+       * {@link org.apache.druid.query.groupby.epinephelinae.CloseableGrouperIterator}迭代器的next方法
+       * 而此迭代器查询ResultRow分为2步，
+       * 1、先是“再通过其内部一个迭代器”获取该行的聚合函数
+       * 2、再通过一个匿名方法，获取该行的dimension值
+       * 其内部迭代器和匿名方法都是在创建此CloseableGrouperIterator迭代器是传参进入的。
+       * 创建方法为{@link org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine.VectorGroupByEngineIterator#initNewDelegate()}
+       *
+       * 直接关注“获取聚合函数的迭代器的next方法”和“获取dimension值的匿名方法”
+       * 1、{@link BufferArrayGrouper#iterator(boolean)}创建了查询聚合函数的迭代器
+       *
+       * 2、{@link org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine.VectorGroupByEngineIterator#initNewDelegate()}
+       * 其中就包含了获取dimension值的匿名方法
        */
       final QueryLifecycle.QueryResponse queryResponse = queryLifecycle.execute();
       log.info("!!!：doPost获取到queryResponse");

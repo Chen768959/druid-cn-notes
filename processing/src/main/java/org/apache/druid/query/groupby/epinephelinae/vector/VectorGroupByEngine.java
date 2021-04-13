@@ -233,32 +233,6 @@ public class VectorGroupByEngine
   @VisibleForTesting
   static class VectorGroupByEngineIterator implements CloseableIterator<ResultRow>
   {
-    /**
-     * 该对象为查询结果的迭代器对象。
-     * 观察其next()方法{@link this#next()}
-     *
-     * （1）next()方法概览
-     * {@link this#next()}
-     * |->delegate.next()   {@link CloseableGrouperIterator#next()}
-     * |->vectorGrouper.iterator().next()
-     *
-     * 所以当前对象的next方法，实际上是调用“vectorGrouper对象生成的iterator迭代器的next()方法”。
-     *
-     * （2）vectorGrouper对象的创建
-     * vectorGrouper = {@link this#makeGrouper()}
-     * vectorGrouper的实现类实际上是{@link BufferArrayGrouper}
-     *
-     * （3）vectorGrouper.iterator()
-     * 也就是{@link BufferArrayGrouper#iterator()}
-     * 其内部又调用了自身的{@link BufferArrayGrouper#iterator(boolean)}方法，
-     * 该方法创建并返回了一个全新的匿名迭代器
-     *
-     * （4）vectorGrouper.iterator().next()
-     * 指的也就是上面创建的匿名迭代器的next方法
-     *
-     */
-
-
     private final GroupByQuery query;
     private final GroupByQueryConfig querySpecificConfig;
     private final StorageAdapter storageAdapter;
@@ -326,6 +300,38 @@ public class VectorGroupByEngine
       this.bucketInterval = this.bucketIterator.hasNext() ? this.bucketIterator.next() : null;
     }
 
+    /**
+     * ResultRow结果实际由delegate.next()查询得来，
+     * delegate本身是个迭代器，其next()分为两步
+     * 1、第一步是再由其内部的迭代器的next查询当前行的聚合结果
+     * 2、第二步由匿名方法得到当前行的dimension列的结果
+     *
+     * 这两步中无论是delegate的内部迭代器，还是匿名方法，都是创建delegate时传入进去的，
+     * 也就是{@link this#initNewDelegate()}时作为参数传入delegate。
+     *
+     * ====================================================================================
+     * 该对象为查询结果的迭代器对象。
+     * 观察其next()方法{@link this#next()}
+     *
+     * （1）next()方法概览
+     * {@link this#next()}
+     * |->delegate.next()   {@link CloseableGrouperIterator#next()}
+     * |->vectorGrouper.iterator().next()
+     *
+     * 所以当前对象的next方法，实际上是调用“vectorGrouper对象生成的iterator迭代器的next()方法”。
+     *
+     * （2）vectorGrouper对象的创建
+     * vectorGrouper = {@link this#makeGrouper()}
+     * vectorGrouper的实现类实际上是{@link BufferArrayGrouper}
+     *
+     * （3）vectorGrouper.iterator()
+     * 也就是{@link BufferArrayGrouper#iterator()}
+     * 其内部又调用了自身的{@link BufferArrayGrouper#iterator(boolean)}方法，
+     * 该方法创建并返回了一个全新的匿名迭代器
+     *
+     * （4）vectorGrouper.iterator().next()
+     * 指的也就是上面创建的匿名迭代器的next方法
+     */
     @Override
     public ResultRow next()
     {
