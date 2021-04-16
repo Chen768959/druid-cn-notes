@@ -358,7 +358,18 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
          */
         final Object[] values = new Object[aggregators.size()];
         final int recordOffset = current * recordSize;
+        //aggregators中包含了所有聚合器，此处迭代每一个
         for (int i = 0; i < aggregators.size(); i++) {
+          /**
+           * 从聚合器中查询聚合查询聚合结果
+           * 我们以{@link org.apache.druid.query.aggregation.LongSumVectorAggregator}聚合器为例，
+           * 其只是从valBuffer中getLong(recordOffset)
+           *
+           * 所以结果早就在valBuffer中了。
+           *
+           *
+           */
+          log.info("!!!：查询聚合结果position："+recordOffset);
           values[i] = aggregators.get(valBuffer, recordOffset, i);
         }
         // shift by -1 since values are initially shifted by +1 so they are all positive and

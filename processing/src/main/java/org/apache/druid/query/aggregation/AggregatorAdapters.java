@@ -46,9 +46,6 @@ public class AggregatorAdapters implements Closeable
 {
   private static final Logger log = new Logger(AggregatorAdapters.class);
 
-  /**
-   *
-   */
   private final List<Adapter> adapters;
   private final List<AggregatorFactory> factories;
   private final int[] aggregatorPositions;
@@ -214,7 +211,9 @@ public class AggregatorAdapters implements Closeable
   @Nullable
   public Object get(final ByteBuffer buf, final int position, final int aggregatorNumber)
   {
-    return adapters.get(aggregatorNumber).get(buf, position + aggregatorPositions[aggregatorNumber]);
+    Adapter adapter = adapters.get(aggregatorNumber);
+    log.info("!!!：AggregatorAdapters中获取聚合器类型为："+adapter.getClass());
+    return adapter.get(buf, position + aggregatorPositions[aggregatorNumber]);
   }
 
   /**
@@ -292,6 +291,7 @@ public class AggregatorAdapters implements Closeable
     @Override
     public Object get(final ByteBuffer buf, final int position)
     {
+      log.info("!!!：VectorAggregatorAdapter内部聚合器为："+aggregator.getClass());
       return aggregator.get(buf, position);
     }
 
@@ -351,6 +351,7 @@ public class AggregatorAdapters implements Closeable
     @Override
     public Object get(final ByteBuffer buf, final int position)
     {
+      log.info("!!!：BufferAggregatorAdapter内部聚合器为："+aggregator.getClass());
       return aggregator.get(buf, position);
     }
 

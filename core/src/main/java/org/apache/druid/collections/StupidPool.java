@@ -115,6 +115,8 @@ public class StupidPool<T> implements NonBlockingPool<T>
 
   private ObjectResourceHolder makeObjectWithHandler()
   {
+    /** {@link org.apache.druid.segment.CompressedPool}*/
+    log.info("!!!：StupidPool中generator类型："+generator.getClass());
     T object = generator.get();
     createdObjectsCounter.incrementAndGet();
     ObjectId objectId = new ObjectId();

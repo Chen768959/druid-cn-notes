@@ -25,6 +25,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import org.apache.druid.collections.NonBlockingPool;
 import org.apache.druid.collections.ResourceHolder;
+import org.apache.druid.collections.StupidPool;
 import org.apache.druid.common.config.NullHandling;
 import org.apache.druid.java.util.common.DateTimes;
 import org.apache.druid.java.util.common.IAE;
@@ -130,8 +131,30 @@ public class GroupByQueryEngineV2
       throw new IAE("Should only have one interval, got[%s]", intervals);
     }
 
+    /**
+     * intermediateResultsBufferPool是启动时注入进来的
+     * 1、确定intermediateResultsBufferPool类型
+     * {@link org.apache.druid.collections.StupidPool}
+     * 2、确定bufferHolder类型
+     * {@link StupidPool#take()}->ObjectResourceHolder
+     * 3、确定bufferHolder.get()类型
+     * {@link java.nio.DirectByteBuffer}
+     *
+     * {@link StupidPool#take()}获取bufferHolder的流程
+     * 1、objects.poll()
+     * 2、objects的产生
+     * makeObjectWithHandler()
+     * generator.get()会获得一个Object对象（byteBuffer）
+     *
+     * 后续bufferHolder.get()获取的也是这个Object
+     * 而产生该对象的generator为：{@link org.apache.druid.segment.CompressedPools#LITTLE_ENDIAN_BYTE_BUF_POOL}
+     *
+     *
+     */
+    log.info("!!!：intermediateResultsBufferPool类型："+intermediateResultsBufferPool.getClass());
     final ResourceHolder<ByteBuffer> bufferHolder = intermediateResultsBufferPool.take();
 
+    log.info("!!!：bufferHolder类型："+bufferHolder.getClass());
     try {
       final String fudgeTimestampString = NullHandling.emptyToNullIfNeeded(
           query.getContextValue(GroupByStrategyV2.CTX_KEY_FUDGE_TIMESTAMP, null)
@@ -150,13 +173,16 @@ public class GroupByQueryEngineV2
 
       final Sequence<ResultRow> result;
 
+      ByteBuffer byteBuffer = bufferHolder.get();
+      //java.nio.DirectByteBuffer[pos=0 lim=52428800 cap=52428800]
+      log.info("!!!：bufferHolder.get()后buffer类型："+byteBuffer);
       //此处doVectorize为true
       if (doVectorize) {
         log.info("!!!：GroupByQueryEngineV2，process执行向量化");
         result = VectorGroupByEngine.process(
             query,
             storageAdapter,
-            bufferHolder.get(),
+            byteBuffer,
             fudgeTimestamp,
             filter,
             interval,
