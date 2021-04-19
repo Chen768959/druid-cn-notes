@@ -152,7 +152,6 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
       buffer.position(usedFlagBufferEnd);
       buffer.limit(buffer.capacity());
       valBuffer = buffer.slice();
-
       reset();
 
       initialized = true;
@@ -232,7 +231,9 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
 
         initializeSlotIfNeeded(dimIndex);
       }
-
+      /**
+       * 查询聚合结果
+       */
       aggregators.aggregateVector(
           valBuffer,
           numRows,
@@ -366,11 +367,10 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
            * 其只是从valBuffer中getLong(recordOffset)
            *
            * 所以结果早就在valBuffer中了。
-           *
-           *
+           * 得找到valBuffer是何时被填充了聚合结果
            */
-          log.info("!!!：查询聚合结果position："+recordOffset);
           values[i] = aggregators.get(valBuffer, recordOffset, i);
+          log.info("!!!：查询聚合结果position："+recordOffset+"...value："+values[i]);
         }
         // shift by -1 since values are initially shifted by +1 so they are all positive and
         // GroupByColumnSelectorStrategy.GROUP_BY_MISSING_VALUE is -1

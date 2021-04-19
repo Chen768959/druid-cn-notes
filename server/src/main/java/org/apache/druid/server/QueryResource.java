@@ -317,7 +317,8 @@ public class QueryResource implements QueryCountStatsProvider
        * 创建方法为{@link org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine.VectorGroupByEngineIterator#initNewDelegate()}
        *
        * 直接关注“获取聚合函数的迭代器的next方法”和“获取dimension值的匿名方法”
-       * 1、{@link BufferArrayGrouper#iterator(boolean)}创建了查询聚合函数的迭代器
+       * 1、{@link BufferArrayGrouper#iterator(boolean)}创建了查询聚合函数的迭代器，其next()方法获取了该行聚合结果
+       *
        *
        * 2、{@link org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine.VectorGroupByEngineIterator#initNewDelegate()}
        * 其中就包含了获取dimension值的匿名方法

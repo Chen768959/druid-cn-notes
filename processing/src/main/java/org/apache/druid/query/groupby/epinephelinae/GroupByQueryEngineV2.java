@@ -174,11 +174,13 @@ public class GroupByQueryEngineV2
       final Sequence<ResultRow> result;
 
       ByteBuffer byteBuffer = bufferHolder.get();
+
       //java.nio.DirectByteBuffer[pos=0 lim=52428800 cap=52428800]
       log.info("!!!：bufferHolder.get()后buffer类型："+byteBuffer);
       //此处doVectorize为true
       if (doVectorize) {
         log.info("!!!：GroupByQueryEngineV2，process执行向量化");
+        //result是BaseSequence类型对象，其中包含了make函数，在获取结果是通过该函数执行真正的查询逻辑。
         result = VectorGroupByEngine.process(
             query,
             storageAdapter,
@@ -188,7 +190,6 @@ public class GroupByQueryEngineV2
             interval,
             querySpecificConfig
         );
-
         result.toList().forEach(x->{
           int len = x.getArray().length;
           log.info("!!!：tmp!，x.getArray().length："+len);

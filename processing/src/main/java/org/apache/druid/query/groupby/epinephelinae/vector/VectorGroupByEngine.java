@@ -331,11 +331,25 @@ public class VectorGroupByEngine
      *
      * （4）vectorGrouper.iterator().next()
      * 指的也就是上面创建的匿名迭代器的next方法
+     * {@link BufferArrayGrouper#iterator(boolean)}
+     * 此方法是从valBuffer（ByteBuffer类型）中获取聚合结果，而聚合结果在之前就已经写入到了valBuffer中
+     *
+     * --------------------------------------------------
+     * valBuffer内数据出处：
+     * 在调用此next方法时，会先调用hasNext()方法，
+     * 其相当于初始化，其中就获取了聚合结果并放入了valBuffer内。
+     * |->{@link this#initNewDelegate()}
+     * |->{@link BufferArrayGrouper#aggregateVector(Memory, int, int)}
+     * |->{@link AggregatorAdapters#aggregateVector(ByteBuffer, int, int[], int[])}
+     *
      */
     @Override
     public ResultRow next()
     {
-      // 执行hasNext()，顺便就初始化了delegate
+      /**
+       * 执行hasNext()，顺便就初始化了delegate
+       * 其中将聚合结果传入了bytebuffer
+       */
       if (!hasNext()) {
         throw new NoSuchElementException();
       }
@@ -451,6 +465,7 @@ public class VectorGroupByEngine
           }
 
           // Aggregate this vector.
+          // 查询聚合结果
           final AggregateResult result = vectorGrouper.aggregateVector(
               keySpace,
               startOffset,

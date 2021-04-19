@@ -197,6 +197,13 @@ public class AggregatorAdapters implements Closeable
   {
     for (int i = 0; i < adapters.size(); i++) {
       final Adapter adapter = adapters.get(i);
+      /**
+       * adapter：org.apache.druid.query.aggregation.AggregatorAdapters$VectorAggregatorAdapter
+       * VectorAggregator：org.apache.druid.query.aggregation.LongSumVectorAggregator
+       *
+       * buf在此处被填充
+       */
+      log.info("!!!：aggregateVector，adapter类型："+adapter.getClass()+"...VectorAggregator类型："+adapter.asVectorAggregator().getClass());
       adapter.asVectorAggregator().aggregate(buf, numRows, positions, rows, aggregatorPositions[i]);
     }
   }
