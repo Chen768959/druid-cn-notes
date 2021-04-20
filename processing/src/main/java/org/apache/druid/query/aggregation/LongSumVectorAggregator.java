@@ -19,6 +19,9 @@
 
 package org.apache.druid.query.aggregation;
 
+import org.apache.druid.collections.bitmap.ImmutableBitmap;
+import org.apache.druid.java.util.common.logger.Logger;
+import org.apache.druid.segment.vector.ReadableVectorOffset;
 import org.apache.druid.segment.vector.VectorValueSelector;
 
 import javax.annotation.Nullable;
@@ -26,6 +29,8 @@ import java.nio.ByteBuffer;
 
 public class LongSumVectorAggregator implements VectorAggregator
 {
+  private static final Logger log = new Logger(LongSumVectorAggregator.class);
+
   private final VectorValueSelector selector;
 
   public LongSumVectorAggregator(final VectorValueSelector selector)
@@ -61,11 +66,19 @@ public class LongSumVectorAggregator implements VectorAggregator
       final int positionOffset
   )
   {
+    log.info("!!!：LongSumVectorAggregator，selector类型："+selector.getClass());
+    /**
+     * selector：{@link org.apache.druid.segment.data.ColumnarLongs#makeVectorValueSelector}
+     *
+     * $1ColumnarLongsVectorValueSelector
+     */
     final long[] vector = selector.getLongVector();
 
     for (int i = 0; i < numRows; i++) {
       final int position = positions[i] + positionOffset;
-      buf.putLong(position, buf.getLong(position) + vector[rows != null ? rows[i] : i]);
+      long value = buf.getLong(position) + vector[rows != null ? rows[i] : i];
+      log.info("!!!：LongSumVectorAggregator.aggregate聚合结果"+i+"："+value);
+      buf.putLong(position, value);
     }
   }
 

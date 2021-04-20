@@ -21,6 +21,8 @@ package org.apache.druid.segment.data;
 
 import org.apache.druid.collections.bitmap.ImmutableBitmap;
 import org.apache.druid.common.config.NullHandling;
+import org.apache.druid.java.util.common.logger.Logger;
+import org.apache.druid.query.aggregation.LongSumVectorAggregator;
 import org.apache.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import org.apache.druid.segment.ColumnValueSelector;
 import org.apache.druid.segment.LongColumnSelector;
@@ -33,6 +35,7 @@ import org.roaringbitmap.PeekableIntIterator;
 
 import javax.annotation.Nullable;
 import java.io.Closeable;
+import java.util.Arrays;
 
 /**
  * Resource that provides random access to a packed array of primitive longs. Backs up {@link
@@ -40,6 +43,8 @@ import java.io.Closeable;
  */
 public interface ColumnarLongs extends Closeable
 {
+  static final Logger log = new Logger(ColumnarLongs.class);
+
   int size();
 
   long get(int index);
@@ -154,6 +159,7 @@ public interface ColumnarLongs extends Closeable
     {
       private final long[] longVector;
 
+      // 初始无id，为-1
       private int id = ReadableVectorOffset.NULL_ID;
 
       private PeekableIntIterator nullIterator = nullValueBitmap.peekableIterator();
@@ -179,28 +185,82 @@ public interface ColumnarLongs extends Closeable
       @Override
       public long[] getLongVector()
       {
+        log.info("!!!：进入getLongVector，当前类"+this.getClass());
+        for (long a:longVector){
+          if (a!=0){
+            log.info("!!!：selector.getLongVector，计算之前:"+a);
+          }
+        }
+
         computeVectorsIfNeeded();
+        for (long a:longVector){
+          if (a!=0){
+            log.info("!!!：selector.getLongVector，计算之后:"+a);
+          }
+        }
         return longVector;
       }
 
       private void computeVectorsIfNeeded()
       {
+        /**
+         * 如果当前id和offset中的id相等，则不进行以下逻辑
+         * offset为final属性，类型为：{@link ReadableVectorOffset}
+         *
+         * 由此处逻辑可推测：
+         * 会不会存在某种缓存机制，此逻辑只执行一遍，
+         * 且当前对象为VectorValueSelector，
+         * 该对象可能存在多个，每个selector都有个offset属性作为该对象缓存机制
+         *
+         * 第一次请求
+         */
         if (id == offset.getId()) {
+          log.info("!!!：computeVectorsIfNeeded，id == offset.getId()");
           return;
         }
 
+        /**
+         * offset.isContiguous()：
+         * 注释为“判断当前批次是否为连续范围”
+         * 批次、连续范围
+         */
         if (offset.isContiguous()) {
+          log.info("!!!：computeVectorsIfNeeded，offset.isContiguous()成立");
           if (offset.getStartOffset() < offsetMark) {
             nullIterator = nullValueBitmap.peekableIterator();
           }
           offsetMark = offset.getStartOffset() + offset.getCurrentVectorSize();
+
+          // 将数据填充进longVector
+          /**
+           * longVector是一个long[]
+           * offset.getStartOffset()是个int，表示start
+           * offset.getCurrentVectorSize()也是个int，表示offset数组长度
+           *
+           * 此处将offset中每一个“下标index”+ offset.getStartOffset()作为参数传给了"get()"方法，
+           * 然后将返回结果赋值给相同下标的longVector中
+           */
           ColumnarLongs.this.get(longVector, offset.getStartOffset(), offset.getCurrentVectorSize());
+
+        /**
+         * 当前批次不为连续范围
+         */
         } else {
+          log.info("!!!：computeVectorsIfNeeded，isContiguous()不成立");
           final int[] offsets = offset.getOffsets();
           if (offsets[offsets.length - 1] < offsetMark) {
             nullIterator = nullValueBitmap.peekableIterator();
           }
           offsetMark = offsets[offsets.length - 1];
+
+          // 将数据填充进longVector
+          /**
+           * longVector是一个long[]
+           * offsets是一个int[]
+           *
+           * 此处将offsets中每一个下标的内容,作为参数传给了"get()"方法，
+           * 然后将返回结果赋值给相同下标的longVector中
+           */
           ColumnarLongs.this.get(longVector, offsets, offset.getCurrentVectorSize());
         }
 

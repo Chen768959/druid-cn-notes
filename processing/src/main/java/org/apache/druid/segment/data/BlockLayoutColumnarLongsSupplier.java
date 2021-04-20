@@ -22,6 +22,7 @@ package org.apache.druid.segment.data;
 import com.google.common.base.Supplier;
 import org.apache.druid.collections.ResourceHolder;
 import org.apache.druid.java.util.common.guava.CloseQuietly;
+import org.apache.druid.java.util.common.logger.Logger;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -69,6 +70,10 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
           @Override
           public long get(int index)
           {
+            /**
+             * 请求第一次到达此逻辑，返回了
+             */
+            log.info("!!!：调用BlockLayoutColumnarLongsSupplier中if成立get");
             // optimize division and remainder for powers of 2
             final int bufferNum = index >> div;
 
@@ -98,6 +103,7 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
           @Override
           public long get(int index)
           {
+            log.info("!!!：调用BlockLayoutColumnarLongsSupplier中if不成立get");
             // optimize division and remainder for powers of 2
             final int bufferNum = index >> div;
 
@@ -138,6 +144,7 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
     @Override
     public long get(int index)
     {
+      log.info("!!!：调用BlockLayoutColumnarLongs中get");
       // division + remainder is optimized by the compiler so keep those together
       final int bufferNum = index / sizePer;
       final int bufferIndex = index % sizePer;
