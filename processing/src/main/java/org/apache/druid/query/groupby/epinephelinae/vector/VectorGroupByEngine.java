@@ -340,7 +340,7 @@ public class VectorGroupByEngine
      * 其相当于初始化，其中就获取了聚合结果并放入了valBuffer内。
      * |->{@link this#initNewDelegate()}
      * |->{@link BufferArrayGrouper#aggregateVector(Memory, int, int)}
-     * |->{@link AggregatorAdapters#aggregateVector(ByteBuffer, int, int[], int[])}
+     * |->{@link AggregatorAdapters#aggregateVector(ByteBuffer, int, int[], int[])}（buffer在此处被填充）
      *
      */
     @Override

@@ -75,6 +75,7 @@ public class StupidPool<T> implements NonBlockingPool<T>
 
   public StupidPool(String name, Supplier<T> generator, int initCount, int objectsCacheMaxCount)
   {
+    log.info("!!!：创建StupidPool对象，name为："+name);
     Preconditions.checkArgument(
         initCount <= objectsCacheMaxCount,
         "initCount[%s] must be less/equal to objectsCacheMaxCount[%s]",
@@ -85,10 +86,12 @@ public class StupidPool<T> implements NonBlockingPool<T>
     this.generator = generator;
     this.objectsCacheMaxCount = objectsCacheMaxCount;
 
+    //创建队列的初始ObjectResourceHolder对象
     for (int i = 0; i < initCount; i++) {
       objects.add(makeObjectWithHandler());
       poolSize.incrementAndGet();
     }
+    log.info("!!!：StupidPool对象创建完毕，内部队列长度："+objects.size()+"...initCount："+initCount+"...name为："+name);
   }
 
   @Override
@@ -101,13 +104,24 @@ public class StupidPool<T> implements NonBlockingPool<T>
            "}";
   }
 
+  /**
+   * 当前StupidPool相当于装了ObjectResourceHolder对象的队列
+   * 此处的take就是从队列头部“取出”（取出后队列中就不存在了）一个ObjectResourceHolder对象
+   *
+   * 这个ObjectResourceHolder对象定义于StupidPool内部，
+   * 其作用很简单，相当于对于某个泛型T对象的封装，可以其通过get()方法获取内部这个泛型对象。
+   * 如获取long向量bytebuffer，也是通过此方法
+   */
   @Override
   public ResourceHolder<T> take()
   {
     ObjectResourceHolder resourceHolder = objects.poll();
     if (resourceHolder == null) {
+      log.info("!!!：StupidPool.take()，不存在resourceHolder");
       return makeObjectWithHandler();
     } else {
+      log.info("!!!：StupidPool.take()，存在resourceHolder");
+      // 当前池大小减一
       poolSize.decrementAndGet();
       return resourceHolder;
     }
@@ -163,6 +177,7 @@ public class StupidPool<T> implements NonBlockingPool<T>
       }
     } while (!poolSize.compareAndSet(currentPoolSize, currentPoolSize + 1));
     if (!objects.offer(new ObjectResourceHolder(object, objectId, cleanable, notifier))) {
+      log.info("!!!：");
       impossibleOffsetFailed(object, objectId, cleanable, notifier);
     }
   }
@@ -198,6 +213,9 @@ public class StupidPool<T> implements NonBlockingPool<T>
     private Cleaners.Cleanable cleanable;
     private ObjectLeakNotifier notifier;
 
+    /**
+     * 可以看到此包装类真正的对象object是在创建ObjectResourceHolder时被传入的
+     */
     ObjectResourceHolder(
         final T object,
         final ObjectId objectId,
@@ -230,6 +248,7 @@ public class StupidPool<T> implements NonBlockingPool<T>
       final T object = objectRef.get();
       if (object != null && objectRef.compareAndSet(object, null)) {
         try {
+          log.info("!!!：close，尝试将ObjectResourceHolder返回Pool，PoolName："+name);
           tryReturnToPool(object, objectId, cleanable, notifier);
         }
         finally {

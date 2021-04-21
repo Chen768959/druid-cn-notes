@@ -31,6 +31,7 @@ import org.apache.druid.java.util.common.guava.Comparators;
 import org.apache.druid.java.util.common.io.Closer;
 import org.apache.druid.java.util.common.io.smoosh.FileSmoosher;
 import org.apache.druid.java.util.common.io.smoosh.SmooshedFileMapper;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import org.apache.druid.segment.serde.MetaSerdeHelper;
 import org.apache.druid.segment.serde.Serializer;
@@ -78,6 +79,8 @@ import java.util.Iterator;
  */
 public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
 {
+  private static final Logger log = new Logger(GenericIndexed.class);
+
   static final byte VERSION_ONE = 0x1;
   static final byte VERSION_TWO = 0x2;
   static final byte REVERSE_LOOKUP_ALLOWED = 0x1;

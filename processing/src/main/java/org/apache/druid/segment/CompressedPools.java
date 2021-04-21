@@ -111,8 +111,13 @@ public class CompressedPools
   public static ResourceHolder<ByteBuffer> getByteBuf(ByteOrder order)
   {
     if (order == ByteOrder.LITTLE_ENDIAN) {
+      /**
+       * {@link StupidPool#take()}
+       */
+      log.info("!!!：getByteBuf中返回LITTLE_ENDIAN_BYTE_BUF_POOL：");
       return LITTLE_ENDIAN_BYTE_BUF_POOL.take();
     }
+    log.info("!!!：getByteBuf中返回BIG_ENDIAN_BYTE_BUF_POOL");
     return BIG_ENDIAN_BYTE_BUF_POOL.take();
   }
 }

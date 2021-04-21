@@ -19,27 +19,34 @@
 
 package org.apache.druid.segment.data;
 
+import org.apache.druid.java.util.common.logger.Logger;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.LongBuffer;
 
 public class LongsLongEncodingReader implements CompressionFactory.LongEncodingReader
 {
+  private static final Logger log = new Logger(CompressionFactory.class);
+
   private LongBuffer buffer;
 
   public LongsLongEncodingReader(ByteBuffer fromBuffer, ByteOrder order)
   {
+    log.info("!!!：reader中buffer出处1");
     this.buffer = fromBuffer.asReadOnlyBuffer().order(order).asLongBuffer();
   }
 
   private LongsLongEncodingReader(LongBuffer buffer)
   {
+    log.info("!!!：reader中buffer出处2");
     this.buffer = buffer;
   }
 
   @Override
   public void setBuffer(ByteBuffer buffer)
   {
+    log.info("!!!：reader中buffer出处3");
     this.buffer = buffer.asLongBuffer();
   }
 
@@ -52,6 +59,7 @@ public class LongsLongEncodingReader implements CompressionFactory.LongEncodingR
   @Override
   public void read(final long[] out, final int outPosition, final int startIndex, final int length)
   {
+    log.info("!!!调用LongsLongEncodingReader.read");
     final int oldPosition = buffer.position();
     try {
       buffer.position(oldPosition + startIndex);

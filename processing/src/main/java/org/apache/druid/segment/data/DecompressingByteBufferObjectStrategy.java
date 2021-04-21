@@ -20,6 +20,8 @@
 package org.apache.druid.segment.data;
 
 import org.apache.druid.collections.ResourceHolder;
+import org.apache.druid.collections.StupidPool;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.CompressedPools;
 
 import java.nio.ByteBuffer;
@@ -27,6 +29,8 @@ import java.nio.ByteOrder;
 
 public class DecompressingByteBufferObjectStrategy implements ObjectStrategy<ResourceHolder<ByteBuffer>>
 {
+  private static final Logger log = new Logger(DecompressingByteBufferObjectStrategy.class);
+
   private final ByteOrder order;
   private final CompressionStrategy.Decompressor decompressor;
 
@@ -47,6 +51,22 @@ public class DecompressingByteBufferObjectStrategy implements ObjectStrategy<Res
   public ResourceHolder<ByteBuffer> fromByteBuffer(ByteBuffer buffer, int numBytes)
   {
     final ResourceHolder<ByteBuffer> bufHolder = CompressedPools.getByteBuf(order);
+    /**
+     * bufHolder:{@link org.apache.druid.collections.StupidPool.ObjectResourceHolder}
+     * bufHolder是StupidPool中的一个“容器对象”
+     * 其get方法只是将内部的buffer属性拿出来而已，
+     * 所以真正的ByteBuffer是在创建bufHolder对象时作为参数传进去的，
+     *
+     * CompressedPools.getByteBuf(order);
+     * 就是创建一个StupidPool池{@link CompressedPools.LITTLE_ENDIAN_BYTE_BUF_POOL}，用于返回bufHolder包装类。
+     *
+     * 每次创建StupidPool对象时，都要传入一个
+     *
+     * CompressedPools.getByteBuf(order)创建好StupidPool后，调用此方法获取ByteBuffer的包装类
+     * {@link StupidPool#take()}
+     *
+     */
+    log.info("!!!：DecompressingByteBufferObjectStrategy.fromByteBuffer中bufHolder为："+bufHolder.getClass());
     final ByteBuffer buf = bufHolder.get();
     buf.clear();
 
@@ -59,6 +79,7 @@ public class DecompressingByteBufferObjectStrategy implements ObjectStrategy<Res
       @Override
       public ByteBuffer get()
       {
+        log.info("!!!：调用DecompressingByteBufferObjectStrategy中匿名ResourceHolder.get()");
         return buf;
       }
 

@@ -182,6 +182,9 @@ public interface ColumnarLongs extends Closeable
         return nullVector;
       }
 
+      /**
+       * 该方法返回需要被写入buffer中的vector数组
+       */
       @Override
       public long[] getLongVector()
       {
@@ -192,6 +195,7 @@ public interface ColumnarLongs extends Closeable
           }
         }
 
+        // 该方法进行longVector数组的计算
         computeVectorsIfNeeded();
         for (long a:longVector){
           if (a!=0){
@@ -212,7 +216,7 @@ public interface ColumnarLongs extends Closeable
          * 且当前对象为VectorValueSelector，
          * 该对象可能存在多个，每个selector都有个offset属性作为该对象缓存机制
          *
-         * 第一次请求
+         * 第一次请求不会走此if条件
          */
         if (id == offset.getId()) {
           log.info("!!!：computeVectorsIfNeeded，id == offset.getId()");
@@ -231,14 +235,11 @@ public interface ColumnarLongs extends Closeable
           }
           offsetMark = offset.getStartOffset() + offset.getCurrentVectorSize();
 
-          // 将数据填充进longVector
           /**
-           * longVector是一个long[]
-           * offset.getStartOffset()是个int，表示start
-           * offset.getCurrentVectorSize()也是个int，表示offset数组长度
+           * 将数据填充进longVector
            *
-           * 此处将offset中每一个“下标index”+ offset.getStartOffset()作为参数传给了"get()"方法，
-           * 然后将返回结果赋值给相同下标的longVector中
+           * 此处调用
+           * {@link org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier.BlockLayoutColumnarLongs#get(long[], int, int)}
            */
           ColumnarLongs.this.get(longVector, offset.getStartOffset(), offset.getCurrentVectorSize());
 
@@ -254,13 +255,6 @@ public interface ColumnarLongs extends Closeable
           offsetMark = offsets[offsets.length - 1];
 
           // 将数据填充进longVector
-          /**
-           * longVector是一个long[]
-           * offsets是一个int[]
-           *
-           * 此处将offsets中每一个下标的内容,作为参数传给了"get()"方法，
-           * 然后将返回结果赋值给相同下标的longVector中
-           */
           ColumnarLongs.this.get(longVector, offsets, offset.getCurrentVectorSize());
         }
 

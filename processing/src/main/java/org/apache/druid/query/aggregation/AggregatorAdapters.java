@@ -23,6 +23,8 @@ import com.google.common.primitives.Ints;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.ColumnSelectorFactory;
+import org.apache.druid.segment.CompressedPools;
+import org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier;
 import org.apache.druid.segment.vector.VectorColumnSelectorFactory;
 
 import javax.annotation.Nullable;
@@ -195,19 +197,43 @@ public class AggregatorAdapters implements Closeable
       @Nullable final int[] rows
   )
   {
+    /**
+     * 循环调用多个adapter
+     */
     for (int i = 0; i < adapters.size(); i++) {
       final Adapter adapter = adapters.get(i);
       /**
-       * buf在此处被填充
+       * buf在此处被填充，
+       * 每一次循环都是往buffer中putLong
        *
-       * adapter：org.apache.druid.query.aggregation.AggregatorAdapters$VectorAggregatorAdapter
-       * VectorAggregator：org.apache.druid.query.aggregation.LongSumVectorAggregator
+       * adapter：{@link VectorAggregatorAdapter}
+       * adapter.asVectorAggregator().aggregate()：
        * {@link org.apache.druid.query.aggregation.LongSumVectorAggregator#aggregate(ByteBuffer, int, int[], int[], int)}
+       * 其中主要是将vector（long[]）中的数据按一定算法填充进buffer中。
+       * 所以主要关注vector数组如何生成：final long[] vector = selector.getLongVector();
        *
+       * vector由{@link org.apache.druid.segment.data.ColumnarLongs#makeVectorValueSelector}中的getLongVector()方法创建
+       * 而getLongVector()中又通过以下方法为vector数组赋值
+       * {@link org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier.BlockLayoutColumnarLongs#get(long[], int, int)}
+       * （该方法第一个long[]参数就是vector数组）
+       * 此BlockLayoutColumnarLongs#get方法中：
+       * 又从一个“buffer”中读取数据到vector数组中，所以这个“buffer”才是一切数据的来源，
+       * 该buffer的产生逻辑为：
+       * {@link BlockLayoutColumnarLongsSupplier.BlockLayoutColumnarLongs#loadBuffer(int)}的子类
+       * 其中：
+       * 直接调用{@link CompressedPools.LITTLE_ENDIAN_BYTE_BUF_POOL}StupidPool队列的take()方法，从中取了一个holder，buffer就在其中。
+       * todo 根据StupidPool产生holder的逻辑，第一次take全新StupidPool队列时会产生一个holder（此时holder无数据），
+       * todo 然后holder.close又会被装回StupidPool，第二次StupidPool take()时，拿的就是这个holder。
+       * todo 得找到第一次产生holder到装回StupidPool之间，发生了什么，此期间是否将查询结果装入了其内部buffer中
        *
+       * 所以整个逻辑可看成：
+       * “buf”中包含了整个查询的各种结果值，
+       * 此时每一次循环都是为了将一部分查询结果值放入“buf”中，
+       * 而这查询结果其底层是StupidPool队列返回的holder中的数据
        */
       log.info("!!!：aggregateVector，adapter类型："+adapter.getClass()+"...VectorAggregator类型："+adapter.asVectorAggregator().getClass());
       adapter.asVectorAggregator().aggregate(buf, numRows, positions, rows, aggregatorPositions[i]);
+
     }
   }
 
