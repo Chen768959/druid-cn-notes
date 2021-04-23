@@ -30,6 +30,7 @@ import org.apache.druid.java.util.common.StringUtils;
 import org.apache.druid.java.util.common.io.Closer;
 import org.apache.druid.java.util.common.io.smoosh.FileSmoosher;
 import org.apache.druid.java.util.common.io.smoosh.SmooshedWriter;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.serde.MetaSerdeHelper;
 import org.apache.druid.segment.serde.Serializer;
 import org.apache.druid.segment.writeout.SegmentWriteOutMedium;
@@ -49,6 +50,8 @@ import java.nio.channels.WritableByteChannel;
  */
 public class GenericIndexedWriter<T> implements Serializer
 {
+  private static final Logger log = new Logger(GenericIndexedWriter.class);
+
   private static final int PAGE_SIZE = 4096;
 
   private static final MetaSerdeHelper<GenericIndexedWriter> SINGLE_FILE_META_SERDE_HELPER = MetaSerdeHelper
@@ -281,6 +284,7 @@ public class GenericIndexedWriter<T> implements Serializer
     ByteBuffer bb = ByteBuffer.allocate(valueSize);
     valuesOut.readFully(startOffset, bb);
     bb.clear();
+    log.info("!!!：从从StupidPool队列中取出一个holder（3）");
     return strategy.fromByteBuffer(bb, valueSize);
   }
 

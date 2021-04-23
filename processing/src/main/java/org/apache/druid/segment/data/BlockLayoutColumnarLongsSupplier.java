@@ -68,6 +68,12 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
       if (baseReader instanceof LongsLongEncodingReader) {
         return new BlockLayoutColumnarLongs()
         {
+
+          /**
+           * 一共会调用两次此get方法，
+           * 可获取查询的起始行时间戳，和结束行时间戳。
+           * 且会将该范围内的所有记录的时间戳都加入。
+           */
           @Override
           public long get(int index)
           {
@@ -79,11 +85,24 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
             // optimize division and remainder for powers of 2
             final int bufferNum = index >> div;
 
+            // 初始加载buffer之前buffer为空
+
             if (bufferNum != currBufferNum) {
+              log.info("!!!：准备加载buffer");
               loadBuffer(bufferNum);
             }
 
+            /**
+             * 第一次会将所有结果行的对应时间戳装入buffer
+             */
             final int bufferIndex = index & rem;
+            log.info("!!!：BlockLayoutColumnarLongs准备遍历longBuffer");
+            for(int i=0;i<longBuffer.capacity();i++){
+              if (longBuffer.get(i)!=0){
+                log.info("!!!：BlockLayoutColumnarLongs，longBuffer，i="+i+"...long="+longBuffer.get(i));
+              }
+            }
+            log.info("!!!：BlockLayoutColumnarLongs遍历完毕longBuffer");
             return longBuffer.get(bufferIndex);
           }
 
@@ -93,12 +112,9 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
             //此处的close(holder)会调用holder.close，然后会尝试将holder装回StupidPool
             CloseQuietly.close(holder);
             /**
-             * singleThreadedLongBuffers：{@link org.apache.druid.segment.data.GenericIndexed}$2
+             * singleThreadedLongBuffers：{@link GenericIndexed.BufferIndexed#singleThreadedVersionOne()}
              *
-             * 最终由此方法创建holder：
-             * {@link org.apache.druid.segment.data.GenericIndexed.BufferIndexed#bufferedIndexedGet(ByteBuffer, int, int)}
-             * |->{@link DecompressingByteBufferObjectStrategy#fromByteBuffer(ByteBuffer, int)}
-             *
+             * 关于holder：
              * holder是一个容器，下面的get方法只是将holder中的对象（即buffer）拿出来而已。
              * holder全部都是从StupidPool队列中取出来的（队列为空的话则创建），
              * 此处用到的StupidPool队列就是{@link CompressedPools.LITTLE_ENDIAN_BYTE_BUF_POOL}
@@ -109,15 +125,36 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
              * 所以StupidPool中存在一个逻辑：“创建一个空buffer的holder后，将查询结果存入此buffer，然后又将此holder放回StupidPool队列”
              * （存在这个逻辑：此StupidPool初始化时不会创建任何holder，然后第一次调用take()会创建并返回出一个holder，
              * “然后调用holder.close时，又会将此holder放回StupidPool，然后下一次take时，就会直接拿取此holder”）
+             *
+             * 注意：
+             * 第一次调用此方法，创建的是一个新的holder，里面也是个空buffer，
+             * 以下get方法中
+             * {@link GenericIndexed.BufferIndexed#singleThreadedVersionOne()}.get(final int index)
+             * 有一个“copyBuffer”
+             * 这个buffer里面才是查询的结果
+             * 所以关键是关注此copyBuffer的由来
              */
             log.info("!!!：singleThreadedLongBuffers类型："+singleThreadedLongBuffers.getClass());
             holder = singleThreadedLongBuffers.get(bufferNum);
-            log.info("!!!：loadBuffer中holder类型："+holder.getClass());
             buffer = holder.get();
+            log.info("!!!：取出holder");
+
+            if (buffer!=null){
+              log.info("!!!：BlockLayoutColumnarLongs遍历StupidPool中buffer");
+              for(int i=0;i<buffer.capacity();i++){
+                if (buffer.get(i)!=0){
+                  log.info("!!!：BlockLayoutColumnarLongs，StupidPool中buffer，i="+i+"...long="+buffer.get(i));
+                }
+              }
+            }else log.info("!!!：BlockLayoutColumnarLongs，StupidPool中buffer为空");
+
             // asLongBuffer() makes the longBuffer's position = 0
+            // 将StupidPool中获取的buffer转换赋值给longBuffer
             longBuffer = buffer.asLongBuffer();
+
             // 将buffer传入reader，后续将buffer中的数据读取到out数组中
             reader.setBuffer(buffer);
+
             currBufferNum = bufferNum;
           }
         };

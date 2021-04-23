@@ -111,6 +111,13 @@ public class StupidPool<T> implements NonBlockingPool<T>
    * 这个ObjectResourceHolder对象定义于StupidPool内部，
    * 其作用很简单，相当于对于某个泛型T对象的封装，可以其通过get()方法获取内部这个泛型对象。
    * 如获取long向量bytebuffer，也是通过此方法
+   *
+   * 如果内部队列中没有元素（是个新的StupidPool），
+   * 则此take方法会调用makeObjectWithHandler()创建个新的holder包装类，
+   * 包装类中的初始对象就是StupidPool中generator工具产生的，
+   * 以long聚合器来说，此时往StupidPool中产生的是个空buffer。
+   *
+   * 然后返回该holder
    */
   @Override
   public ResourceHolder<T> take()
@@ -176,8 +183,11 @@ public class StupidPool<T> implements NonBlockingPool<T>
         return;
       }
     } while (!poolSize.compareAndSet(currentPoolSize, currentPoolSize + 1));
+    /**
+     * 将此次关闭的holder中的被包装对象放入一个新holder中，然后添加进内部队列
+     */
     if (!objects.offer(new ObjectResourceHolder(object, objectId, cleanable, notifier))) {
-      log.info("!!!：");
+      // 如果添加失败
       impossibleOffsetFailed(object, objectId, cleanable, notifier);
     }
   }
@@ -242,13 +252,17 @@ public class StupidPool<T> implements NonBlockingPool<T>
       return object;
     }
 
+    /**
+     * 关闭某个holder时调用
+     * 这里会尝试再将此holder装回内部队列
+     */
     @Override
     public void close()
     {
       final T object = objectRef.get();
       if (object != null && objectRef.compareAndSet(object, null)) {
         try {
-          log.info("!!!：close，尝试将ObjectResourceHolder返回Pool，PoolName："+name);
+          log.info("!!!：close，尝试将ObjectResourceHolder返回Pool，PoolName："+name+"...objId；"+objectId);
           tryReturnToPool(object, objectId, cleanable, notifier);
         }
         finally {

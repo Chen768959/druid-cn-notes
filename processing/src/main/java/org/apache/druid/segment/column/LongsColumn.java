@@ -20,10 +20,12 @@
 package org.apache.druid.segment.column;
 
 import org.apache.druid.collections.bitmap.ImmutableBitmap;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import org.apache.druid.segment.ColumnValueSelector;
 import org.apache.druid.segment.IndexIO;
 import org.apache.druid.segment.data.ColumnarLongs;
+import org.apache.druid.segment.data.GenericIndexed;
 import org.apache.druid.segment.data.ReadableOffset;
 import org.apache.druid.segment.vector.ReadableVectorOffset;
 import org.apache.druid.segment.vector.VectorValueSelector;
@@ -32,6 +34,7 @@ import org.apache.druid.segment.vector.VectorValueSelector;
  */
 public class LongsColumn implements NumericColumn
 {
+  private static final Logger log = new Logger(LongsColumn.class);
   /**
    * Factory method to create LongsColumn.
    */
@@ -72,7 +75,10 @@ public class LongsColumn implements NumericColumn
   @Override
   public long getLongSingleValueRow(int rowNum)
   {
-    return column.get(rowNum);
+    log.info("!!!：调用get方法获取ColumnarLongs（0）");
+    long res = column.get(rowNum);
+    log.info("!!!：调用get方法获取ColumnarLongs（0），完毕，long="+res);
+    return res;
   }
 
   @Override

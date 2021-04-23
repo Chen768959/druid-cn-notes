@@ -115,7 +115,8 @@ public class CompressedPools
        * {@link StupidPool#take()}
        */
       log.info("!!!：getByteBuf中返回LITTLE_ENDIAN_BYTE_BUF_POOL：");
-      return LITTLE_ENDIAN_BYTE_BUF_POOL.take();
+      ResourceHolder<ByteBuffer> res = LITTLE_ENDIAN_BYTE_BUF_POOL.take();
+      return res;
     }
     log.info("!!!：getByteBuf中返回BIG_ENDIAN_BYTE_BUF_POOL");
     return BIG_ENDIAN_BYTE_BUF_POOL.take();

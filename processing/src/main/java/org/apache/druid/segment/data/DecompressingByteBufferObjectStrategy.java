@@ -50,7 +50,13 @@ public class DecompressingByteBufferObjectStrategy implements ObjectStrategy<Res
   @Override
   public ResourceHolder<ByteBuffer> fromByteBuffer(ByteBuffer buffer, int numBytes)
   {
+    log.info("!!!：DecompressingByteBufferObjectStrategy.fromByteBuffer，准备获取holder");
+    /**
+     * 从StupidPool队列（LITTLE_ENDIAN_BYTE_BUF_POOL）中取出一个holder，
+     * 第一次取时holder中的buffer是空的
+     */
     final ResourceHolder<ByteBuffer> bufHolder = CompressedPools.getByteBuf(order);
+
     /**
      * bufHolder:{@link org.apache.druid.collections.StupidPool.ObjectResourceHolder}
      * bufHolder是StupidPool中的一个“容器对象”
@@ -66,14 +72,21 @@ public class DecompressingByteBufferObjectStrategy implements ObjectStrategy<Res
      * {@link StupidPool#take()}
      *
      */
-    log.info("!!!：DecompressingByteBufferObjectStrategy.fromByteBuffer中bufHolder为："+bufHolder.getClass());
     final ByteBuffer buf = bufHolder.get();
+
+    // 将position移到初始位置，且limit被设置成capacity，相当于还原了buffer的初始属性，但其中的数据没有清除
     buf.clear();
 
+    log.info("!!!：fromByteBuffer取出holder");
+
+    // 将buffer中的数据传给buf（第一次调用时buf为新建holder是空的，但是buffer中已经有了所有行的时间戳）
     decompressor.decompress(buffer, numBytes, buf);
+
     // Needed, because if e. g. if this compressed buffer contains 3-byte integers, it should be possible to getInt()
     // from the buffer, including padding. See CompressedVSizeColumnarIntsSupplier.bufferPadding().
+    //由于上面的解压缩操作，重新设置
     buf.limit(buf.capacity());
+
     return new ResourceHolder<ByteBuffer>()
     {
       @Override

@@ -25,6 +25,7 @@ import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.ColumnSelectorFactory;
 import org.apache.druid.segment.CompressedPools;
 import org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier;
+import org.apache.druid.segment.data.GenericIndexed;
 import org.apache.druid.segment.vector.VectorColumnSelectorFactory;
 
 import javax.annotation.Nullable;
@@ -218,13 +219,21 @@ public class AggregatorAdapters implements Closeable
        * （该方法第一个long[]参数就是vector数组）
        * 此BlockLayoutColumnarLongs#get方法中：
        * 又从一个“buffer”中读取数据到vector数组中，所以这个“buffer”才是一切数据的来源，
+       *
        * 该buffer的产生逻辑为：
-       * {@link BlockLayoutColumnarLongsSupplier.BlockLayoutColumnarLongs#loadBuffer(int)}的子类
-       * 其中：
-       * 直接调用{@link CompressedPools.LITTLE_ENDIAN_BYTE_BUF_POOL}StupidPool队列的take()方法，从中取了一个holder，buffer就在其中。
-       * todo 根据StupidPool产生holder的逻辑，第一次take全新StupidPool队列时会产生一个holder（此时holder无数据），
-       * todo 然后holder.close又会被装回StupidPool，第二次StupidPool take()时，拿的就是这个holder。
-       * todo 得找到第一次产生holder到装回StupidPool之间，发生了什么，此期间是否将查询结果装入了其内部buffer中
+       * {@link BlockLayoutColumnarLongsSupplier.BlockLayoutColumnarLongs#loadBuffer(int)}的子类，以下为获取语句
+       * holder = singleThreadedLongBuffers.get(bufferNum);
+       * buffer = holder.get();
+       * 其中singleThreadedLongBuffers.get(bufferNum)为：
+       * {@link GenericIndexed.BufferIndexed#singleThreadedVersionOne()}.get(final int index)
+       * （holder的由来：
+       * {@link CompressedPools.LITTLE_ENDIAN_BYTE_BUF_POOL}StupidPool队列的take()方法，从中取了一个holder，buffer就在其中，
+       * 不过此holder和buffer都是空的）
+       *
+       * 真正的数据来自
+       * {@link GenericIndexed.BufferIndexed#singleThreadedVersionOne()}.get(final int index)
+       * 方法中的copyBuffer
+       * todo 查明copyBuffer由来
        *
        * 所以整个逻辑可看成：
        * “buf”中包含了整个查询的各种结果值，

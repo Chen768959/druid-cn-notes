@@ -384,6 +384,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
     }
     copyValueBuffer.position(startOffset);
     // fromByteBuffer must not modify the buffer limit
+    log.info("!!!：从从StupidPool队列中取出一个holder（1）");
     return strategy.fromByteBuffer(copyValueBuffer, size);
   }
 
@@ -445,6 +446,10 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
       // value buffer(s) initial limit equals to capacity.
       copyValueBuffer.clear();
       copyValueBuffer.position(startOffset);
+      /**
+       * 此处第一次从LITTLE_ENDIAN_BYTE_BUF_POOL队列中取出一个空buffer的holder
+       */
+      log.info("!!!：从StupidPool队列中取出一个holder（2）");
       return strategy.fromByteBuffer(copyValueBuffer, size);
     }
 
@@ -587,6 +592,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
       @Override
       public T get(final int index)
       {
+        log.info("!!!：singleThreadedLongBuffers.get（1）");
         checkIndex(index);
 
         final int startOffset;
@@ -600,6 +606,11 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
           startOffset = headerBuffer.getInt(headerPosition) + Integer.BYTES;
           endOffset = headerBuffer.getInt(headerPosition + Integer.BYTES);
         }
+        /**
+         * !!!这个copyBuffer很关键，
+         * 实际上后面从StupidPool中取出来的是一个空buffer的holder，
+         * 然后将此copyBuffer的内容填充进了此holder
+         */
         return bufferedIndexedGet(copyBuffer, startOffset, endOffset);
       }
 
@@ -696,6 +707,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
       @Override
       public T get(final int index)
       {
+        log.info("!!!：singleThreadedLongBuffers.get（2）");
         checkIndex(index);
 
         final int startOffset;

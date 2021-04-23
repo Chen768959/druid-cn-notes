@@ -20,6 +20,7 @@
 package org.apache.druid.segment.data;
 
 import org.apache.druid.guice.annotations.ExtensionPoint;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.writeout.WriteOutBytes;
 
 import javax.annotation.Nullable;
@@ -30,6 +31,8 @@ import java.util.Comparator;
 @ExtensionPoint
 public interface ObjectStrategy<T> extends Comparator<T>
 {
+  static final Logger log = new Logger(GenericIndexed.class);
+
   Class<? extends T> getClazz();
 
   /**
@@ -60,7 +63,7 @@ public interface ObjectStrategy<T> extends Comparator<T>
     ByteBuffer bufferToUse = buffer.asReadOnlyBuffer();
     bufferToUse.limit(bufferToUse.position() + size);
     buffer.position(bufferToUse.limit());
-
+    log.info("!!!：从从StupidPool队列中取出一个holder（4）");
     return fromByteBuffer(bufferToUse, size);
   }
 
