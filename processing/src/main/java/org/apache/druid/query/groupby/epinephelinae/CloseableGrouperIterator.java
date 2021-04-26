@@ -64,9 +64,8 @@ public class CloseableGrouperIterator<KeyType, T> implements CloseableIterator<T
      */
     Entry<KeyType> memoryEntry = iterator.next();
 
+    log.info("!!!：delegate.next()，memoryEntry获取完毕");
     /**
-     *
-     *
      * 获取列值，并将上面的聚合结果和其进行组合，然后返回ResultRow
      */
     T resultRow = transformer.apply(memoryEntry);

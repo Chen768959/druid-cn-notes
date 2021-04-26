@@ -26,6 +26,7 @@ import org.apache.druid.segment.ColumnSelectorFactory;
 import org.apache.druid.segment.CompressedPools;
 import org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier;
 import org.apache.druid.segment.data.GenericIndexed;
+import org.apache.druid.segment.data.ObjectStrategy;
 import org.apache.druid.segment.vector.VectorColumnSelectorFactory;
 
 import javax.annotation.Nullable;
@@ -233,7 +234,17 @@ public class AggregatorAdapters implements Closeable
        * 真正的数据来自
        * {@link GenericIndexed.BufferIndexed#singleThreadedVersionOne()}.get(final int index)
        * 方法中的copyBuffer
-       * todo 查明copyBuffer由来
+       * 每一个copyBuffer中都包含了各种查询的结果数据，或者数据源中的各种数据
+       * 每一个copyBuffer都存在于一个对应的GenericIndexed对象，
+       * 在创建GenericIndexed对象时
+       * {@link GenericIndexed#GenericIndexed(ByteBuffer, ObjectStrategy, boolean)}
+       * 就会将copyBuffer作为参数传入其中。
+       *
+       * 可以理解为在启动历史节点时，就会初始化创建很多GenericIndexed对象，然后每个GenericIndexed对象中的copyBuffer包含了各种查询信息。
+       * // todo 历史节点启动时是从哪里获取的copyBuffer，然后用于生成GenericIndexed对象的？
+       * // todo 按现有逻辑，一次查询用的数据都是启动时已有的GenericIndexed中的buffer的数据，
+       * // todo 那么意味着在启动时加载本地所有segment信息进入GenericIndexed吗？
+       * // todo 还是说存在某种缓存机制，只把缓存内容在启动时加载进GenericIndexed？
        *
        * 所以整个逻辑可看成：
        * “buf”中包含了整个查询的各种结果值，

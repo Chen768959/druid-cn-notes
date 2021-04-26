@@ -226,7 +226,20 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
     buffer.position(valuesOffset);
     // Ensure the value buffer's limit equals to capacity.
     firstValueBuffer = buffer.slice();
+
+    log.info("!!!：创建GenericIndexed，当前GenericIndexed对象为："+super.toString());
+    if (firstValueBuffer!=null){
+      log.info("!!!：创建GenericIndexed，遍历firstValueBuffer");
+      for(int i=0;i<firstValueBuffer.capacity();i++){
+        if (firstValueBuffer.get(i)!=0){
+          log.info("!!!：创建GenericIndexed中firstValueBuffer，i="+i+"...byte="+firstValueBuffer.get(i));
+        }
+      }
+      log.info("!!!：创建GenericIndexed，遍历firstValueBuffer END");
+    }
+
     valueBuffers = new ByteBuffer[]{firstValueBuffer};
+
     buffer.position(indexOffset);
     headerBuffer = buffer.slice();
   }
@@ -249,6 +262,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
     this.theBuffer = null;
     this.strategy = strategy;
     this.allowReverseLookup = allowReverseLookup;
+
     this.valueBuffers = valueBuffs;
     this.firstValueBuffer = valueBuffers[0];
     this.headerBuffer = headerBuff;
@@ -385,7 +399,8 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
     copyValueBuffer.position(startOffset);
     // fromByteBuffer must not modify the buffer limit
     log.info("!!!：从从StupidPool队列中取出一个holder（1）");
-    return strategy.fromByteBuffer(copyValueBuffer, size);
+    T res = strategy.fromByteBuffer(copyValueBuffer, size);
+    return res;
   }
 
   @Override
@@ -581,7 +596,9 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
       startOffset = headerBuffer.getInt(headerPosition) + Integer.BYTES;
       endOffset = headerBuffer.getInt(headerPosition + Integer.BYTES);
     }
-    return copyBufferAndGet(firstValueBuffer, startOffset, endOffset);
+
+    T res = copyBufferAndGet(firstValueBuffer, startOffset, endOffset);
+    return res;
   }
 
   private BufferIndexed singleThreadedVersionOne()
@@ -592,7 +609,23 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
       @Override
       public T get(final int index)
       {
+        /**
+         * 进入此方法时，需要get的数据已被写在copyBuffer中
+         */
+
         log.info("!!!：singleThreadedLongBuffers.get（1）");
+
+        log.info("!!!：创建新BufferIndexed，获取GenericIndexed中copyBuffer");
+        if (firstValueBuffer!=null){
+          log.info("!!!：创建新BufferIndexed，遍历GenericIndexed中copyBuffer");
+          for(int i=0;i<firstValueBuffer.capacity();i++){
+            if (firstValueBuffer.get(i)!=0){
+              log.info("!!!：singleThreadedVersionOne中buffer，i="+i+"...byte="+firstValueBuffer.get(i));
+            }
+          }
+          log.info("!!!：创建新BufferIndexed，遍历GenericIndexed中copyBuffer END");
+        }
+
         checkIndex(index);
 
         final int startOffset;

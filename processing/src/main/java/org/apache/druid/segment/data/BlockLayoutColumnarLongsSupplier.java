@@ -139,15 +139,6 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
             buffer = holder.get();
             log.info("!!!：取出holder");
 
-            if (buffer!=null){
-              log.info("!!!：BlockLayoutColumnarLongs遍历StupidPool中buffer");
-              for(int i=0;i<buffer.capacity();i++){
-                if (buffer.get(i)!=0){
-                  log.info("!!!：BlockLayoutColumnarLongs，StupidPool中buffer，i="+i+"...long="+buffer.get(i));
-                }
-              }
-            }else log.info("!!!：BlockLayoutColumnarLongs，StupidPool中buffer为空");
-
             // asLongBuffer() makes the longBuffer's position = 0
             // 将StupidPool中获取的buffer转换赋值给longBuffer
             longBuffer = buffer.asLongBuffer();
