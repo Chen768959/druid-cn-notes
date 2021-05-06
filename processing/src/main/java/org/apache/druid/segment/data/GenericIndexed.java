@@ -124,11 +124,13 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
     }
   };
 
+  // 历史节点启动时会调用此方法，传入buffer
   public static <T> GenericIndexed<T> read(ByteBuffer buffer, ObjectStrategy<T> strategy)
   {
     byte versionFromBuffer = buffer.get();
 
     if (VERSION_ONE == versionFromBuffer) {
+      log.info("createGenericIndexedVersionOne 1111111111111111111111111");
       return createGenericIndexedVersionOne(buffer, strategy);
     } else if (VERSION_TWO == versionFromBuffer) {
       throw new IAE(
@@ -139,11 +141,13 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
     throw new IAE("Unknown version[%d]", (int) versionFromBuffer);
   }
 
+  // 历史节点启动时会调用此方法，传入buffer
   public static <T> GenericIndexed<T> read(ByteBuffer buffer, ObjectStrategy<T> strategy, SmooshedFileMapper fileMapper)
   {
     byte versionFromBuffer = buffer.get();
 
     if (VERSION_ONE == versionFromBuffer) {
+      log.info("createGenericIndexedVersionOne 2222222222222222");
       return createGenericIndexedVersionOne(buffer, strategy);
     } else if (VERSION_TWO == versionFromBuffer) {
       return createGenericIndexedVersionTwo(buffer, strategy, fileMapper);
@@ -501,6 +505,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
   // VERSION ONE
   ///////////////
 
+  //历史节点启动时由此方法传入初始数据buffer
   private static <T> GenericIndexed<T> createGenericIndexedVersionOne(ByteBuffer byteBuffer, ObjectStrategy<T> strategy)
   {
     boolean allowReverseLookup = byteBuffer.get() == REVERSE_LOOKUP_ALLOWED;

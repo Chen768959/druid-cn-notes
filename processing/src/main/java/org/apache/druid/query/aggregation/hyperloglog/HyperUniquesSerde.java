@@ -22,6 +22,7 @@ package org.apache.druid.query.aggregation.hyperloglog;
 import org.apache.druid.data.input.InputRow;
 import org.apache.druid.hll.HyperLogLogCollector;
 import org.apache.druid.hll.HyperLogLogHash;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.GenericColumnSerializer;
 import org.apache.druid.segment.column.ColumnBuilder;
 import org.apache.druid.segment.data.GenericIndexed;

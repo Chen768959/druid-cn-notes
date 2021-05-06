@@ -21,6 +21,7 @@ package org.apache.druid.segment;
 
 import org.apache.druid.common.utils.SerializerUtils;
 import org.apache.druid.java.util.common.ISE;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.data.CompressedColumnarFloatsSupplier;
 import org.apache.druid.segment.data.GenericIndexed;
 import org.apache.druid.segment.serde.ComplexMetricSerde;

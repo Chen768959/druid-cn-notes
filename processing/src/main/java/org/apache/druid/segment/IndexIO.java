@@ -521,6 +521,7 @@ public class IndexIO
       this.columnConfig = columnConfig;
     }
 
+    // 历史节点启动时会调用此方法，解析inDir文件
     @Override
     public QueryableIndex load(File inDir, ObjectMapper mapper, boolean lazy) throws IOException
     {
@@ -539,11 +540,13 @@ public class IndexIO
        * Index.drd should consist of the segment version, the columns and dimensions of the segment as generic
        * indexes, the interval start and end millis as longs (in 16 bytes), and a bitmap index type.
        */
+      new Logger(GenericIndexed.class).info("GenericIndexed.read2 13000000000000000000000");
       final GenericIndexed<String> cols = GenericIndexed.read(
           indexBuffer,
           GenericIndexed.STRING_STRATEGY,
           smooshedFiles
       );
+      new Logger(GenericIndexed.class).info("GenericIndexed.read2 140000000000000000000");
       final GenericIndexed<String> dims = GenericIndexed.read(
           indexBuffer,
           GenericIndexed.STRING_STRATEGY,

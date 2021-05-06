@@ -28,6 +28,7 @@ import org.apache.druid.collections.spatial.ImmutableRTree;
 import org.apache.druid.io.Channels;
 import org.apache.druid.java.util.common.IAE;
 import org.apache.druid.java.util.common.io.smoosh.FileSmoosher;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.column.ColumnBuilder;
 import org.apache.druid.segment.column.ColumnConfig;
 import org.apache.druid.segment.column.ValueType;
@@ -287,6 +288,7 @@ public class DictionaryEncodedColumnPartSerde implements ColumnPartSerde
   {
     return new Deserializer()
     {
+      // 历史节点启动时会调用此方法，传入buffer
       @Override
       public void read(ByteBuffer buffer, ColumnBuilder builder, ColumnConfig columnConfig)
       {
@@ -302,7 +304,7 @@ public class DictionaryEncodedColumnPartSerde implements ColumnPartSerde
         }
 
         final boolean hasMultipleValues = Feature.MULTI_VALUE.isSet(rFlags) || Feature.MULTI_VALUE_V3.isSet(rFlags);
-
+        new Logger(GenericIndexed.class).info("GenericIndexed.read2 170000000000000000000");
         final GenericIndexed<String> rDictionary = GenericIndexed.read(
             buffer,
             GenericIndexed.STRING_STRATEGY,
@@ -335,6 +337,7 @@ public class DictionaryEncodedColumnPartSerde implements ColumnPartSerde
             .setDictionaryEncodedColumnSupplier(dictionaryEncodedColumnSupplier);
 
         if (!Feature.NO_BITMAP_INDEX.isSet(rFlags)) {
+          new Logger(GenericIndexed.class).info("GenericIndexed.read2 1800000000000000000000000000");
           GenericIndexed<ImmutableBitmap> rBitmaps = GenericIndexed.read(
               buffer,
               bitmapSerdeFactory.getObjectStrategy(),

@@ -21,6 +21,7 @@ package org.apache.druid.query.aggregation.variance;
 
 import com.google.common.collect.Ordering;
 import org.apache.druid.data.input.InputRow;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.GenericColumnSerializer;
 import org.apache.druid.segment.column.ColumnBuilder;
 import org.apache.druid.segment.data.GenericIndexed;

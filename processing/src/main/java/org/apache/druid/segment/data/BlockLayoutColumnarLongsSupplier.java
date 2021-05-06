@@ -40,6 +40,7 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
   private final int sizePer;
   private final CompressionFactory.LongEncodingReader baseReader;
 
+  // 历史节点启动时调用此逻辑传入buffer
   public BlockLayoutColumnarLongsSupplier(
       int totalSize,
       int sizePer,
@@ -49,6 +50,7 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
       CompressionStrategy strategy
   )
   {
+    new Logger(GenericIndexed.class).info("GenericIndexed.read 777777777777777");
     baseLongBuffers = GenericIndexed.read(fromBuffer, new DecompressingByteBufferObjectStrategy(order, strategy));
     this.totalSize = totalSize;
     this.sizePer = sizePer;
