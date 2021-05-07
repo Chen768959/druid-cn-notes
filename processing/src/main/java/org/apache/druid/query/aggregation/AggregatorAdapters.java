@@ -19,19 +19,30 @@
 
 package org.apache.druid.query.aggregation;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.primitives.Ints;
 import org.apache.druid.java.util.common.ISE;
+import org.apache.druid.java.util.common.io.smoosh.SmooshedFileMapper;
 import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.ColumnSelectorFactory;
 import org.apache.druid.segment.CompressedPools;
+import org.apache.druid.segment.column.ColumnBuilder;
+import org.apache.druid.segment.column.ColumnConfig;
 import org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier;
+import org.apache.druid.segment.data.CompressionFactory;
+import org.apache.druid.segment.data.CompressionStrategy;
 import org.apache.druid.segment.data.GenericIndexed;
 import org.apache.druid.segment.data.ObjectStrategy;
+import org.apache.druid.segment.serde.ColumnPartSerde;
+import org.apache.druid.segment.serde.DictionaryEncodedColumnPartSerde;
+import org.apache.druid.segment.serde.LongNumericColumnPartSerde;
 import org.apache.druid.segment.vector.VectorColumnSelectorFactory;
 
 import javax.annotation.Nullable;
 import java.io.Closeable;
+import java.io.File;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -241,10 +252,46 @@ public class AggregatorAdapters implements Closeable
        * 就会将copyBuffer作为参数传入其中。
        *
        * 可以理解为在启动历史节点时，就会初始化创建很多GenericIndexed对象，然后每个GenericIndexed对象中的copyBuffer包含了各种查询信息。
-       * // todo 历史节点启动时是从哪里获取的copyBuffer，然后用于生成GenericIndexed对象的？
-       * // todo 按现有逻辑，一次查询用的数据都是启动时已有的GenericIndexed中的buffer的数据，
-       * // todo 那么意味着在启动时加载本地所有segment信息进入GenericIndexed吗？
-       * // todo 还是说存在某种缓存机制，只把缓存内容在启动时加载进GenericIndexed？
+       * GenericIndexed构建流程1：
+       * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#load(File, ObjectMapper, boolean)}
+       * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#deserializeColumn(ObjectMapper, ByteBuffer, SmooshedFileMapper)}
+       * {@link org.apache.druid.segment.column.ColumnDescriptor#read(ByteBuffer, ColumnConfig, SmooshedFileMapper)}
+       * {@link LongNumericColumnPartSerde#getDeserializer()}
+       * {@link org.apache.druid.segment.data.CompressedColumnarLongsSupplier#fromByteBuffer(ByteBuffer, ByteOrder)}
+       * {@link CompressionFactory#getLongSupplier(int, int, ByteBuffer, ByteOrder, CompressionFactory.LongEncodingFormat, CompressionStrategy)}
+       * {@link BlockLayoutColumnarLongsSupplier#BlockLayoutColumnarLongsSupplier(int, int, ByteBuffer, ByteOrder, CompressionFactory.LongEncodingReader, CompressionStrategy)}
+       * {@link GenericIndexed#read(ByteBuffer, ObjectStrategy)}
+       * {@link GenericIndexed#createGenericIndexedVersionOne(ByteBuffer, ObjectStrategy)}
+       * {@link GenericIndexed#GenericIndexed(ByteBuffer, ObjectStrategy, boolean)} //创建GenericIndexed对象
+       *
+       * GenericIndexed构建流程2：
+       * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#load(File, ObjectMapper, boolean)}
+       * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#deserializeColumn(ObjectMapper, ByteBuffer, SmooshedFileMapper)}
+       * {@link org.apache.druid.segment.column.ColumnDescriptor#read(ByteBuffer, ColumnConfig, SmooshedFileMapper)}
+       * {@link DictionaryEncodedColumnPartSerde#getDeserializer()}.readSingleValuedColumn(VERSION version, ByteBuffer buffer)
+       * {@link org.apache.druid.segment.data.CompressedVSizeColumnarIntsSupplier#fromByteBuffer(ByteBuffer, ByteOrder)}
+       * {@link GenericIndexed#read(ByteBuffer, ObjectStrategy)}
+       * {@link GenericIndexed#createGenericIndexedVersionOne(ByteBuffer, ObjectStrategy)}
+       * {@link GenericIndexed#GenericIndexed(ByteBuffer, ObjectStrategy, boolean)} //创建GenericIndexed对象
+       *
+       * GenericIndexed构建流程3：
+       * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#load(File, ObjectMapper, boolean)}
+       * {@link GenericIndexed#read(ByteBuffer, ObjectStrategy, SmooshedFileMapper)}// GenericIndexed.read2 13、14进入
+       * {@link GenericIndexed#createGenericIndexedVersionOne(ByteBuffer, ObjectStrategy)}
+       * {@link GenericIndexed#GenericIndexed(ByteBuffer, ObjectStrategy, boolean)} //创建GenericIndexed对象
+       *
+       * GenericIndexed构建流程4：
+       * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#load(File, ObjectMapper, boolean)}
+       * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#deserializeColumn(ObjectMapper, ByteBuffer, SmooshedFileMapper)}
+       * {@link org.apache.druid.segment.column.ColumnDescriptor#read(ByteBuffer, ColumnConfig, SmooshedFileMapper)}
+       * {@link DictionaryEncodedColumnPartSerde#getDeserializer()}.read(ByteBuffer buffer, ObjectStrategy<T> strategy, SmooshedFileMapper fileMapper)
+       * {@link GenericIndexed#read(ByteBuffer, ObjectStrategy, SmooshedFileMapper)}// GenericIndexed.read2 17、18进入
+       * {@link GenericIndexed#createGenericIndexedVersionOne(ByteBuffer, ObjectStrategy)}
+       * {@link GenericIndexed#GenericIndexed(ByteBuffer, ObjectStrategy, boolean)} //创建GenericIndexed对象
+       *
+       * 由此可见，所有历史节点启动时创建的GenericIndexed，都由
+       * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#load(File, ObjectMapper, boolean)}
+       * 创建得来
        *
        * 所以整个逻辑可看成：
        * “buf”中包含了整个查询的各种结果值，

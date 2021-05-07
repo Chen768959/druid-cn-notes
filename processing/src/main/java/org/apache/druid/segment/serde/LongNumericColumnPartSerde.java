@@ -21,9 +21,11 @@ package org.apache.druid.segment.serde;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.IndexIO;
 import org.apache.druid.segment.column.ValueType;
 import org.apache.druid.segment.data.CompressedColumnarLongsSupplier;
+import org.apache.druid.segment.data.GenericIndexed;
 
 import javax.annotation.Nullable;
 
@@ -94,10 +96,12 @@ public class LongNumericColumnPartSerde implements ColumnPartSerde
     return serializer;
   }
 
+  // 历史节点启动时会调用此方法，传入buffer
   @Override
   public Deserializer getDeserializer()
   {
     return (buffer, builder, columnConfig) -> {
+      new Logger(GenericIndexed.class).info("fromByteBuffer 222222222222");
       final CompressedColumnarLongsSupplier column = CompressedColumnarLongsSupplier.fromByteBuffer(
           buffer,
           byteOrder

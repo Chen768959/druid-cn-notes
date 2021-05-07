@@ -367,6 +367,7 @@ public class DictionaryEncodedColumnPartSerde implements ColumnPartSerde
           case UNCOMPRESSED_WITH_FLAGS:
             return VSizeColumnarInts.readFromByteBuffer(buffer);
           case COMPRESSED:
+            new Logger(GenericIndexed.class).info("fromByteBuffer2 444444444444444");
             return CompressedVSizeColumnarIntsSupplier.fromByteBuffer(buffer, byteOrder);
           default:
             throw new IAE("Unsupported single-value version[%s]", version);

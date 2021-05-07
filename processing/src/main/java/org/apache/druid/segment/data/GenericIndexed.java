@@ -130,7 +130,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
     byte versionFromBuffer = buffer.get();
 
     if (VERSION_ONE == versionFromBuffer) {
-      log.info("createGenericIndexedVersionOne 1111111111111111111111111");
+      new Logger(GenericIndexed.class).info("createGenericIndexedVersionOne 1111111111111111111111111");
       return createGenericIndexedVersionOne(buffer, strategy);
     } else if (VERSION_TWO == versionFromBuffer) {
       throw new IAE(
@@ -147,7 +147,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
     byte versionFromBuffer = buffer.get();
 
     if (VERSION_ONE == versionFromBuffer) {
-      log.info("createGenericIndexedVersionOne 2222222222222222");
+      new Logger(GenericIndexed.class).info("createGenericIndexedVersionOne 2222222222222222");
       return createGenericIndexedVersionOne(buffer, strategy);
     } else if (VERSION_TWO == versionFromBuffer) {
       return createGenericIndexedVersionTwo(buffer, strategy, fileMapper);
