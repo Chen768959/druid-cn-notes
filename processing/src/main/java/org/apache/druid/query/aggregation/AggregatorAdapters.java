@@ -37,6 +37,7 @@ import org.apache.druid.segment.serde.ColumnPartSerde;
 import org.apache.druid.segment.serde.DictionaryEncodedColumnPartSerde;
 import org.apache.druid.segment.serde.LongNumericColumnPartSerde;
 import org.apache.druid.segment.vector.VectorColumnSelectorFactory;
+import org.apache.druid.timeline.DataSegment;
 
 import javax.annotation.Nullable;
 import java.io.Closeable;
@@ -292,6 +293,15 @@ public class AggregatorAdapters implements Closeable
        * 由此可见，所有历史节点启动时创建的GenericIndexed，都由
        * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#load(File, ObjectMapper, boolean)}
        * 创建得来
+       * 其请求路径
+       *
+       * SegmentLoadDropHandler.loadSegment(DataSegment segment, DataSegmentChangeCallback callback, boolean lazy) throws SegmentLoadingException
+       * druid-server:SegmentManager.loadSegment(final DataSegment segment, boolean lazy) throws SegmentLoadingException
+       * druid-server:SegmentManager.getAdapter(final DataSegment segment, boolean lazy) throws SegmentLoadingException
+       * druid-server:SegmentLoaderLocalCacheManager.getSegment(DataSegment segment, boolean lazy) throws SegmentLoadingException
+       * {@link org.apache.druid.segment.loading.MMappedQueryableSegmentizerFactory#factorize(DataSegment, File, boolean)}
+       * {@link org.apache.druid.segment.IndexIO#loadIndex(File, boolean)}
+       * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#load(File, ObjectMapper, boolean)}
        *
        * 所以整个逻辑可看成：
        * “buf”中包含了整个查询的各种结果值，

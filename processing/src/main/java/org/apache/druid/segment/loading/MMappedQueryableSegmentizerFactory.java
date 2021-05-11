@@ -21,9 +21,11 @@ package org.apache.druid.segment.loading;
 
 import com.fasterxml.jackson.annotation.JacksonInject;
 import com.google.common.base.Preconditions;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.IndexIO;
 import org.apache.druid.segment.QueryableIndexSegment;
 import org.apache.druid.segment.Segment;
+import org.apache.druid.segment.data.GenericIndexed;
 import org.apache.druid.timeline.DataSegment;
 
 import java.io.File;
@@ -45,6 +47,7 @@ public class MMappedQueryableSegmentizerFactory implements SegmentizerFactory
   public Segment factorize(DataSegment dataSegment, File parentDir, boolean lazy) throws SegmentLoadingException
   {
     try {
+      new Logger(GenericIndexed.class).info("loadIndex 33333333333333");
       return new QueryableIndexSegment(indexIO.loadIndex(parentDir, lazy), dataSegment.getId());
     }
     catch (IOException e) {

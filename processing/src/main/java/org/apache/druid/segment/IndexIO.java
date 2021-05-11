@@ -184,8 +184,11 @@ public class IndexIO
   {
     return loadIndex(inDir, false);
   }
+
+
   public QueryableIndex loadIndex(File inDir, boolean lazy) throws IOException
   {
+
     final int version = SegmentUtils.getVersionFromDir(inDir);
 
     final IndexLoader loader = indexLoaders.get(version);
@@ -525,7 +528,7 @@ public class IndexIO
     @Override
     public QueryableIndex load(File inDir, ObjectMapper mapper, boolean lazy) throws IOException
     {
-      log.debug("Mapping v9 index[%s]", inDir);
+      log.info("Mapping v9 index[%s]", inDir);
       long startTime = System.currentTimeMillis();
 
       final int theVersion = Ints.fromByteArray(Files.toByteArray(new File(inDir, "version.bin")));
