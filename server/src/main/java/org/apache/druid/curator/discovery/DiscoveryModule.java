@@ -57,6 +57,8 @@ import org.apache.druid.guice.LifecycleModule;
 import org.apache.druid.guice.PolyBind;
 import org.apache.druid.guice.annotations.Self;
 import org.apache.druid.java.util.common.lifecycle.Lifecycle;
+import org.apache.druid.java.util.common.logger.Logger;
+import org.apache.druid.segment.data.GenericIndexed;
 import org.apache.druid.server.DruidNode;
 import org.apache.druid.server.initialization.CuratorDiscoveryConfig;
 import org.apache.druid.server.initialization.ZkPathsConfig;

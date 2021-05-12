@@ -21,6 +21,9 @@ package org.apache.druid.java.util.common.lifecycle;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.inject.Key;
+import com.google.inject.Provider;
+import com.google.inject.Scope;
 import org.apache.commons.lang.StringUtils;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.logger.Logger;
@@ -113,6 +116,15 @@ public class Lifecycle
     Preconditions.checkArgument(StringUtils.isNotEmpty(name), "Lifecycle name must not be null or empty");
     this.name = name;
     handlers = new TreeMap<>();
+    /**
+     * 初始化handles
+     * 一共有四种handle，被定义在Stage.values()中：
+     * INIT,NORMAL,SERVER,ANNOUNCEMENTS
+     *
+     * 此处为每一种类型都初始化了个空list，
+     * 后续的各个handle直接存入对应类型的list中
+     */
+    log.info("初始化Lifecycle-handlers");
     for (Stage stage : Stage.values()) {
       handlers.put(stage, new CopyOnWriteArrayList<>());
     }
@@ -238,6 +250,7 @@ public class Lifecycle
    */
   public <T> T addMaybeStartManagedInstance(T o, Stage stage) throws Exception
   {
+    log.info("addMaybeStartHandler");
     addMaybeStartHandler(new AnnotationBasedHandler(o), stage);
     return o;
   }
@@ -320,6 +333,10 @@ public class Lifecycle
           handler.start();
         }
       }
+      /**
+       * 此处将包装类handler AnnotationBasedHandler装入handlers，等待被调用start
+       */
+      log.info("填充handler，stage："+stage+"...handler类型："+handler.getClass()+"...地址"+handler.toString());
       handlers.get(stage).add(handler);
     }
     finally {
@@ -438,6 +455,33 @@ public class Lifecycle
     @Override
     public void start() throws Exception
     {
+      log.info("AnnotationBasedHandler包装类start()被调用，this地址"+this.toString()+"...内部o地址："+o.toString()+"...class:"+o.getClass());
+      /**
+       * 此处遍历“o”对象中所有方法，
+       * 检查是否有方法被@LifecycleStart所注解，
+       * 如果被注解，则在此处调用此方法。
+       *
+       * 目前逻辑来看，一个AnnotationBasedHandler对象包装一个o对象，
+       *
+       * 当前AnnotationBasedHandler包装类的start()由{@link Lifecycle#start()}调用，
+       * {@link Lifecycle#start()}是在命令行对象启动时被调用的，
+       * Lifecycle对象中包含一个handles对象，其{@link Lifecycle#start()}也是遍历handles，并调用其每个handle的start()方法。
+       *
+       * 也就是说当前AnnotationBasedHandler包装对象，最初被定义在Lifecycle中的handles里{@link Lifecycle#handlers}，
+       * 然后等待被依次调用。
+       *
+       * {@link Lifecycle#handlers}填充逻辑：
+       * {@link org.apache.druid.guice.LifecycleScope#scope(Key, Provider)}.get()
+       * {@link Lifecycle#addMaybeStartManagedInstance(Object, Stage)}
+       * {@link Lifecycle#addMaybeStartHandler(Handler, Stage)}
+       *
+       *
+       * Lifecycle中handlers属性如何被定义？
+       * AnnotationBasedHandler中包装的o对象从哪来？
+       *
+       *
+       *
+       */
       for (Method method : o.getClass().getMethods()) {
         boolean doStart = false;
         for (Annotation annotation : method.getAnnotations()) {
@@ -448,6 +492,7 @@ public class Lifecycle
         }
         if (doStart) {
           log.debug("Invoking start method[%s] on object[%s].", method, o);
+          // 调用被注解方法
           method.invoke(o);
         }
       }

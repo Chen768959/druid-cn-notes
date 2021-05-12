@@ -28,11 +28,14 @@ import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.emitter.EmittingLogger;
 import org.apache.druid.segment.IndexIO;
 import org.apache.druid.segment.Segment;
+import org.apache.druid.server.coordination.DataSegmentChangeCallback;
+import org.apache.druid.server.coordination.SegmentLoadDropHandler;
 import org.apache.druid.timeline.DataSegment;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -119,6 +122,16 @@ public class SegmentLoaderLocalCacheManager implements SegmentLoader
     return null;
   }
 
+  /**
+   * 调用factorize路径
+   * {@link SegmentLoadDropHandler#start()}
+   * {@link SegmentLoadDropHandler#loadLocalCache()}
+   * {@link org.apache.druid.server.coordination.SegmentLoadDropHandler#addSegments(Collection, DataSegmentChangeCallback)}
+   * {@link org.apache.druid.server.coordination.SegmentLoadDropHandler#loadSegment(DataSegment, DataSegmentChangeCallback, boolean)}
+   * {@link org.apache.druid.server.SegmentManager#loadSegment(DataSegment, boolean)}
+   * {@link org.apache.druid.server.SegmentManager#getAdapter(DataSegment, boolean)}
+   * {@link org.apache.druid.segment.loading.SegmentLoaderLocalCacheManager#getSegment(DataSegment, boolean)}
+   */
   @Override
   public Segment getSegment(DataSegment segment, boolean lazy) throws SegmentLoadingException
   {

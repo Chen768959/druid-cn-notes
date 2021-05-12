@@ -54,6 +54,13 @@ public class LifecycleScope implements Scope
     }
   }
 
+  /**
+   * Provider类型为被注入对象的包装类，
+   * 其get方法返回需要注入的对象。
+   *
+   * 此处接受unscoped调用get获取需要被注入的对象，
+   * 然后放入lifecycle.addMaybeStartManagedInstance中
+   */
   @Override
   public <T> Provider<T> scope(final Key<T> key, final Provider<T> unscoped)
   {
@@ -66,6 +73,7 @@ public class LifecycleScope implements Scope
       {
         if (value == null) {
           final T retVal = unscoped.get();
+          new Logger(Scope.class).info("scope，unscoped："+unscoped.toString()+"...retVal："+retVal.toString()+"...class："+retVal.getClass());
 
           synchronized (instances) {
             if (lifecycle == null) {

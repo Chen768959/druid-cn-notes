@@ -294,11 +294,9 @@ public class AggregatorAdapters implements Closeable
        * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#load(File, ObjectMapper, boolean)}
        * 创建得来
        * 其请求路径
-       *
-       * SegmentLoadDropHandler.loadSegment(DataSegment segment, DataSegmentChangeCallback callback, boolean lazy) throws SegmentLoadingException
-       * druid-server:SegmentManager.loadSegment(final DataSegment segment, boolean lazy) throws SegmentLoadingException
-       * druid-server:SegmentManager.getAdapter(final DataSegment segment, boolean lazy) throws SegmentLoadingException
-       * druid-server:SegmentLoaderLocalCacheManager.getSegment(DataSegment segment, boolean lazy) throws SegmentLoadingException
+       * druid-server:
+       * SegmentLoaderLocalCacheManager.getSegment(DataSegment segment, boolean lazy) throws SegmentLoadingException
+       * druid-processing:
        * {@link org.apache.druid.segment.loading.MMappedQueryableSegmentizerFactory#factorize(DataSegment, File, boolean)}
        * {@link org.apache.druid.segment.IndexIO#loadIndex(File, boolean)}
        * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#load(File, ObjectMapper, boolean)}
@@ -310,7 +308,6 @@ public class AggregatorAdapters implements Closeable
        */
       log.info("!!!：aggregateVector，adapter类型："+adapter.getClass()+"...VectorAggregator类型："+adapter.asVectorAggregator().getClass());
       adapter.asVectorAggregator().aggregate(buf, numRows, positions, rows, aggregatorPositions[i]);
-
     }
   }
 

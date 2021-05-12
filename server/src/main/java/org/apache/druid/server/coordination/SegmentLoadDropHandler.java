@@ -37,9 +37,11 @@ import org.apache.druid.guice.ManageLifecycle;
 import org.apache.druid.guice.ServerTypeConfig;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.concurrent.Execs;
+import org.apache.druid.java.util.common.lifecycle.Lifecycle;
 import org.apache.druid.java.util.common.lifecycle.LifecycleStart;
 import org.apache.druid.java.util.common.lifecycle.LifecycleStop;
 import org.apache.druid.java.util.emitter.EmittingLogger;
+import org.apache.druid.segment.IndexIO;
 import org.apache.druid.segment.loading.SegmentLoaderConfig;
 import org.apache.druid.segment.loading.SegmentLoadingException;
 import org.apache.druid.server.SegmentManager;
@@ -145,9 +147,17 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
     requestStatuses = CacheBuilder.newBuilder().maximumSize(config.getStatusQueueMaxSize()).initialCapacity(8).build();
   }
 
+  /**
+   * 此处非直接调用，
+   * 在历史节点启动时，此对象作为一个handler被检查其中是否有@LifecycleStart注解
+   * 如果存在，则调用被此注解注解的方法，也就是调用此start()，
+   *
+   * 处理逻辑在：{@link Lifecycle.AnnotationBasedHandler#start()}
+   */
   @LifecycleStart
   public void start() throws IOException
   {
+    log.info("SegmentLoadDropHandler.satrt()被调用，this地址："+this.toString());
     synchronized (startStopLock) {
       if (started) {
         return;
