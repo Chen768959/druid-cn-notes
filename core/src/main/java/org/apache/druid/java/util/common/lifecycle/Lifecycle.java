@@ -474,13 +474,6 @@ public class Lifecycle
        * {@link org.apache.druid.guice.LifecycleScope#scope(Key, Provider)}.get()
        * {@link Lifecycle#addMaybeStartManagedInstance(Object, Stage)}
        * {@link Lifecycle#addMaybeStartHandler(Handler, Stage)}
-       *
-       *
-       * Lifecycle中handlers属性如何被定义？
-       * AnnotationBasedHandler中包装的o对象从哪来？
-       *
-       *
-       *
        */
       for (Method method : o.getClass().getMethods()) {
         boolean doStart = false;

@@ -221,6 +221,7 @@ public class SegmentManager
    */
   public boolean loadSegment(final DataSegment segment, boolean lazy) throws SegmentLoadingException
   {
+    // 将segment（DataSegment）交由segmentLoader.getSegment处理，最后得到缓存信息对象所描述的真正的segment数据对象
     final Segment adapter = getAdapter(segment, lazy);
 
     final SettableSupplier<Boolean> resultSupplier = new SettableSupplier<>();

@@ -148,11 +148,16 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
   }
 
   /**
-   * 此处非直接调用，
-   * 在历史节点启动时，此对象作为一个handler被检查其中是否有@LifecycleStart注解
-   * 如果存在，则调用被此注解注解的方法，也就是调用此start()，
+   * 此start方法非直接调用，
+   * {@link Lifecycle.AnnotationBasedHandle}是一个handler包装类，
+   * 其内部会装一个handler，也就是当前SegmentLoadDropHandler，
    *
-   * 处理逻辑在：{@link Lifecycle.AnnotationBasedHandler#start()}
+   * 在历史节点启动时，会调用SegmentLoadDropHandler的包装类，也就是
+   * {@link Lifecycle.AnnotationBasedHandler#start()}方法。
+   *
+   * 该方法会检查内部handler对象中是否有@LifecycleStart注解
+   * 如果存在，则调用被此注解注解的方法，也就是调用此start()。
+   *
    */
   @LifecycleStart
   public void start() throws IOException
@@ -166,6 +171,18 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
       log.info("Starting...");
       try {
         if (!config.getLocations().isEmpty()) {
+          /**
+           * 加载本地segment文件缓存
+           * {@link SegmentLoadDropHandler#start()}
+           * {@link SegmentLoadDropHandler#loadLocalCache()}
+           * {@link org.apache.druid.server.coordination.SegmentLoadDropHandler#addSegments(Collection, DataSegmentChangeCallback)}
+           * {@link org.apache.druid.server.coordination.SegmentLoadDropHandler#loadSegment(DataSegment, DataSegmentChangeCallback, boolean)}
+           * {@link org.apache.druid.server.SegmentManager#loadSegment(DataSegment, boolean)}
+           * {@link org.apache.druid.server.SegmentManager#getAdapter(DataSegment, boolean)}
+           * {@link org.apache.druid.segment.loading.SegmentLoaderLocalCacheManager#getSegment(DataSegment, boolean)}
+           *
+           *
+           */
           loadLocalCache();
           serverAnnouncer.announce();
         }
@@ -210,7 +227,12 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
 
   private void loadLocalCache()
   {
+    // 获取系统当前时间
     final long start = System.currentTimeMillis();
+    // 获取info_dir路径，
+    // 如：apache-druid-0.20.1/var/druid/segment-cache/info_dir
+    // 该路径包含了“缓存信息文件”（并不是缓存数据），其内部是json格式数据
+    // 每个文件中都包含了关于缓存数据的真正文件路径，已经对应时间区间、包含列、所属数据源等
     File baseDir = config.getInfoDir();
     if (!baseDir.isDirectory()) {
       if (baseDir.exists()) {
@@ -223,14 +245,18 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
     List<DataSegment> cachedSegments = new ArrayList<>();
     File[] segmentsToLoad = baseDir.listFiles();
     int ignored = 0;
+    // 迭代info_dir路径中的每一个“缓存信息文件”
     for (int i = 0; i < segmentsToLoad.length; i++) {
       File file = segmentsToLoad[i];
       log.info("Loading segment cache file [%d/%d][%s].", i + 1, segmentsToLoad.length, file);
       try {
+        // 将“缓存信息文件”反序列化成DataSegment对象
         final DataSegment segment = jsonMapper.readValue(file, DataSegment.class);
 
+        // 缓存信息文件中的identifier字段就是文件本身的文件名
         if (!segment.getId().toString().equals(file.getName())) {
           log.warn("Ignoring cache file[%s] for segment[%s].", file.getPath(), segment.getId());
+          // 文件名与文件内容identifier字段不符则忽略该文件
           ignored++;
         } else if (segmentManager.isSegmentCached(segment)) {
           cachedSegments.add(segment);
@@ -256,6 +282,8 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
          .emit();
     }
 
+    // 将segment缓存加载进内存
+    // cachedSegments中包含了所有segment缓存信息文件对象
     addSegments(
         cachedSegments,
         () -> log.info("Cache load took %,d ms", System.currentTimeMillis() - start)
@@ -270,6 +298,7 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
    */
   private void loadSegment(DataSegment segment, DataSegmentChangeCallback callback, boolean lazy) throws SegmentLoadingException
   {
+    // segment为缓存信息文件的对象实体
     final boolean loaded;
     try {
       loaded = segmentManager.loadSegment(segment, lazy);
@@ -349,6 +378,7 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
     try (final BackgroundSegmentAnnouncer backgroundSegmentAnnouncer =
              new BackgroundSegmentAnnouncer(announcer, exec, config.getAnnounceIntervalMillis())) {
 
+      // 开启广播，
       backgroundSegmentAnnouncer.startAnnouncing();
 
       loadingExecutor = Execs.multiThreaded(config.getNumBootstrapThreads(), "Segment-Load-Startup-%s");
@@ -367,8 +397,10 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
                     numSegments,
                     segment.getId()
                 );
+                // 加载segment
                 loadSegment(segment, callback, config.isLazyLoadOnStart());
                 try {
+                  // 将segment传入backgroundSegmentAnnouncer对象内部队列中，等待被广播
                   backgroundSegmentAnnouncer.announceSegment(segment);
                 }
                 catch (InterruptedException e) {
@@ -615,7 +647,7 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
       queue.put(segment);
     }
 
-    public void startAnnouncing()
+    public void startAnnouncing() // 开始广播
     {
       if (intervalMillis <= 0) {
         return;
@@ -628,14 +660,17 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
           new Runnable()
           {
             @Override
-            public void run()
+            public void run() // 延迟，只执行一次
             {
               synchronized (lock) {
                 try {
                   if (!(finished && queue.isEmpty())) {
                     final List<DataSegment> segments = new ArrayList<>();
+                    // 将queue队列中对象取出到segments中
                     queue.drainTo(segments);
                     try {
+                      // announcer为注入对象
+                      log.info("广播器announcer类型："+announcer.getClass());
                       announcer.announceSegments(segments);
                       nextAnnoucement = exec.schedule(this, intervalMillis, TimeUnit.MILLISECONDS);
                     }

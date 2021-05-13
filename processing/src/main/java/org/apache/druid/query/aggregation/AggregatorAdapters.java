@@ -295,11 +295,16 @@ public class AggregatorAdapters implements Closeable
        * 创建得来
        * 其请求路径
        * druid-server:
-       * SegmentLoaderLocalCacheManager.getSegment(DataSegment segment, boolean lazy) throws SegmentLoadingException
+       * SegmentLoadDropHandler.start()// 历史节点启动时作为handler被调用start方法
+       * ·····
+       * SegmentLoaderLocalCacheManager.getSegment(DataSegment segment, boolean lazy)
        * druid-processing:
        * {@link org.apache.druid.segment.loading.MMappedQueryableSegmentizerFactory#factorize(DataSegment, File, boolean)}
        * {@link org.apache.druid.segment.IndexIO#loadIndex(File, boolean)}
        * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#load(File, ObjectMapper, boolean)}
+       *
+       * 在历史节点启动时，SegmentLoadDropHandler的start方法会被Lifecycle调用，由此开始加载segment缓存文件
+       * SegmentLoadDropHandler.start()
        *
        * 所以整个逻辑可看成：
        * “buf”中包含了整个查询的各种结果值，
