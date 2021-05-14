@@ -52,8 +52,10 @@ public class SmooshedFileMapper implements Closeable
 
   public static SmooshedFileMapper load(File baseDir) throws IOException
   {
+    // meta.smoosh文件
     File metaFile = FileSmoosher.metaFile(baseDir);
 
+    // 读取meta.smoosh文件，转化成SmooshedFileMapper对象返回
     BufferedReader in = null;
     try {
       in = new BufferedReader(new InputStreamReader(new FileInputStream(metaFile), StandardCharsets.UTF_8));
@@ -63,33 +65,46 @@ public class SmooshedFileMapper implements Closeable
         throw new ISE("First line should be version,maxChunkSize,numChunks, got null.");
       }
 
+      // 每行按逗号分隔，
+      // meta.smoosh文件的每行都是固定格式，先是列名(也可能是index.drd和metadata.drd)，
+      // 然后就是该信息对应的文件中位置始末偏移量
       String[] splits = line.split(",");
+      // 第一行肯定是v1,2147483647,1
       if (!"v1".equals(splits[0])) {
         throw new ISE("Unknown version[%s], v1 is all I know.", splits[0]);
       }
       if (splits.length != 3) {
         throw new ISE("Wrong number of splits[%d] in line[%s]", splits.length, line);
       }
+      // splits[2]表示当前文件夹下的smooth文件数
       final Integer numFiles = Integer.valueOf(splits[2]);
+      // 由此可见outFiles集合中装了当前文件夹下的每个smooth文件对象
       List<File> outFiles = Lists.newArrayListWithExpectedSize(numFiles);
 
+      // 填充所有smooth文件对象
       for (int i = 0; i < numFiles; ++i) {
         outFiles.add(FileSmoosher.makeChunkFile(baseDir, i));
       }
 
       Map<String, Metadata> internalFiles = new TreeMap<>();
+      // 遍历meta.smoosh文件剩余行
       while ((line = in.readLine()) != null) {
         splits = line.split(",");
 
         if (splits.length != 4) {
           throw new ISE("Wrong number of splits[%d] in line[%s]", splits.length, line);
         }
+        // key是列名(也可能是"index.drd"或"metadata.drd")
+        // value是一个Metadata数据，其实就是存放对应始末偏移量的一个包装对象
         internalFiles.put(
             STRING_INTERNER.intern(splits[0]),
             new Metadata(Integer.parseInt(splits[1]), Integer.parseInt(splits[2]), Integer.parseInt(splits[3]))
         );
       }
 
+      // 所以最后返回的SmooshedFileMapper对象中包含了：
+      // outFiles：包含了meta.smoosh同文件夹下的所有smoosh文件
+      // internalFiles为meta.smoosh内的所有数据信息
       return new SmooshedFileMapper(outFiles, internalFiles);
     }
     finally {
@@ -97,7 +112,9 @@ public class SmooshedFileMapper implements Closeable
     }
   }
 
+  // outFiles：包含了meta.smoosh同文件夹下的所有smoosh文件
   private final List<File> outFiles;
+  // internalFiles为meta.smoosh内的所有数据信息
   private final Map<String, Metadata> internalFiles;
   private final List<MappedByteBuffer> buffersList = new ArrayList<>();
 
@@ -126,6 +143,7 @@ public class SmooshedFileMapper implements Closeable
       return null;
     }
 
+    // 所属第几个文件
     final int fileNum = metadata.getFileNum();
     while (buffersList.size() <= fileNum) {
       buffersList.add(null);

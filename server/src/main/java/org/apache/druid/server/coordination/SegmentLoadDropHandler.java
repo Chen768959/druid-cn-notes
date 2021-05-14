@@ -301,6 +301,10 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
     // segment为缓存信息文件的对象实体
     final boolean loaded;
     try {
+      // 根据信息文件加载具体segment文件，
+      // 此处指的加载，实际上是将此segment加载成ReferenceCountingSegment对象，该对象可直接执行查询引擎，
+      // true为新加载，且成功生成为此时间区间上的数据生成ReferenceCountingSegment对象
+      // false表示该数据源，该时间区间上已经生成过ReferenceCountingSegment对象
       loaded = segmentManager.loadSegment(segment, lazy);
     }
     catch (Exception e) {
@@ -308,10 +312,18 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
       throw new SegmentLoadingException(e, "Exception loading segment[%s]", segment.getId());
     }
 
+    // 如果此次segment为新加载，则执行此逻辑
+    // 第一次还未被加载的segment信息文件中的json数据应该是不全的，
+    // 经过此次加载后，再由此处写回文件，才是完全的信息文件，下次再启动时就无需写入了
     if (loaded) {
+      // config.getInfoDir()：segment信息文件所在目录
+      // segment.getId().toString()：具体当前segment信息文件文件名
       File segmentInfoCacheFile = new File(config.getInfoDir(), segment.getId().toString());
       if (!segmentInfoCacheFile.exists()) {
         try {
+          // 将segment信息对象写回对应文件中
+          // 由此可看出，第一次还未被加载的segment信息文件中的json数据应该是不全的，
+          // 经过此次加载后，再由此处写回文件，才是完全的信息文件，下次再启动时就无需写入了
           jsonMapper.writeValue(segmentInfoCacheFile, segment);
         }
         catch (IOException e) {

@@ -221,27 +221,40 @@ public class SegmentManager
    */
   public boolean loadSegment(final DataSegment segment, boolean lazy) throws SegmentLoadingException
   {
-    // 将segment（DataSegment）交由segmentLoader.getSegment处理，最后得到缓存信息对象所描述的真正的segment数据对象
+    // 将segment（DataSegment）交由segmentLoader.getSegment处理，并返回得到缓存信息对象所描述的真正的segment数据对象
+    /**{@link org.apache.druid.segment.loading.SegmentLoaderLocalCacheManager#getSegment(DataSegment, boolean)}*/
     final Segment adapter = getAdapter(segment, lazy);
 
     final SettableSupplier<Boolean> resultSupplier = new SettableSupplier<>();
 
     // compute() is used to ensure that the operation for a data source is executed atomically
+    // dataSources是个map，其key是各segment对应数据源名字符串
+    // 在此处针对当前数据源，进行其value的计算，并将计算后value重新放入map中
     dataSources.compute(
         segment.getDataSource(),
         (k, v) -> {
+          // 判断该数据源是否被加载过，之前未被加载过的话，此处其对应v就是null
+          // DataSourceState包含数据源时间区间、包含segment数量，大小等。
           final DataSourceState dataSourceState = v == null ? new DataSourceState() : v;
+          // 该数据源的时间轴信息，包含了时间轴以及其上的各个ReferenceCountingSegment对象
+          // ReferenceCountingSegment也是segment，但是ReferenceCountingSegment可以执行运行查询引擎
           final VersionedIntervalTimeline<String, ReferenceCountingSegment> loadedIntervals =
               dataSourceState.getTimeline();
+          // 上面一步获取到了该数据源时间轴上的所有ReferenceCountingSegment（loadedIntervals），
+          // 此处根据此次加载的segment的时间区间，从对应数据源上获取所有包含该区间的ReferenceCountingSegment
           final PartitionHolder<ReferenceCountingSegment> entry = loadedIntervals.findEntry(
               segment.getInterval(),
               segment.getVersion()
           );
+          // 所以以上三个final对象，最终的目的就是找到此次加载的segment对应那些ReferenceCountingSegment
 
+          // 启动时新加载segment，不应该已经存在对应ReferenceCountingSegment，所以如果存在则og.warn
           if ((entry != null) && (entry.getChunk(segment.getShardSpec().getPartitionNum()) != null)) {
             log.warn("Told to load an adapter for segment[%s] that already exists", segment.getId());
-            resultSupplier.set(false);
+            resultSupplier.set(false); // 该时间区间上已经存在对应ReferenceCountingSegment对象，则返回false
           } else {
+            // 此次segment在数据源时间轴上不存在对应的ReferenceCountingSegment对象
+            // 此处为其创建ReferenceCountingSegment对象，并存入
 
             IndexedTable table = adapter.as(IndexedTable.class);
             if (table != null) {
@@ -276,6 +289,8 @@ public class SegmentManager
   {
     final Segment adapter;
     try {
+      // 根据信息文件，加载segment并返回
+      /**{@link org.apache.druid.segment.loading.SegmentLoaderLocalCacheManager#getSegment(DataSegment, boolean)}*/
       adapter = segmentLoader.getSegment(segment, lazy);
     }
     catch (SegmentLoadingException e) {

@@ -194,6 +194,7 @@ public class IndexIO
     final IndexLoader loader = indexLoaders.get(version);
 
     if (loader != null) {
+      /**{@link org.apache.druid.segment.IndexIO.V9IndexLoader#load(File, ObjectMapper, boolean)}*/
       return loader.load(inDir, mapper, lazy);
     } else {
       throw new ISE("Unknown index version[%s]", version);
@@ -524,18 +525,32 @@ public class IndexIO
       this.columnConfig = columnConfig;
     }
 
-    // 历史节点启动时会调用此方法，解析inDir文件
+    // 历史节点启动时会调用此方法，解析inDir目录
+    // inDir目录为此次需要被加载的时间区间的缓存目录，
+    // 目录里包含了segment缓存数据文件，以及版本号等文件
     @Override
     public QueryableIndex load(File inDir, ObjectMapper mapper, boolean lazy) throws IOException
     {
       log.info("Mapping v9 index[%s]", inDir);
       long startTime = System.currentTimeMillis();
-
+      // 读取版本号
       final int theVersion = Ints.fromByteArray(Files.toByteArray(new File(inDir, "version.bin")));
-      if (theVersion != V9_VERSION) {
+      if (theVersion != V9_VERSION) {// 版本号需为9
         throw new IAE("Expected version[9], got[%d]", theVersion);
       }
 
+      /**
+       * {@link SmooshedFileMapper#load(File)}
+       *
+       * 此处读取meta.smoosh文件为SmooshedFileMapper对象，
+       * meta.smoosh文件内容：
+       * meta.smoosh中记录了当前文件夹下其他xxxx.smoosh文件的各种数据的所在位置偏移量，
+       * 即各列在文件中的起始与结束位置的偏移量，以及“index.drd”和“metadata.drd”这两个信息在文件中的始末位置偏移量。
+       * index.drd中包含了所属的segment中有哪些维度、时间区间、以及使用哪种bitmap。
+       * metadata.drd中存储了指标聚合函数、查询粒度、时间戳配置等
+       *
+       * SmooshedFileMapper里面包含了meta.smoosh同文件夹下的所有smoosh文件的File对象，以及meta.smoosh内的所有数据信息
+       */
       SmooshedFileMapper smooshedFiles = Smoosh.map(inDir);
 
       ByteBuffer indexBuffer = smooshedFiles.mapFile("index.drd");
@@ -543,13 +558,11 @@ public class IndexIO
        * Index.drd should consist of the segment version, the columns and dimensions of the segment as generic
        * indexes, the interval start and end millis as longs (in 16 bytes), and a bitmap index type.
        */
-      new Logger(GenericIndexed.class).info("GenericIndexed.read2 13000000000000000000000");
       final GenericIndexed<String> cols = GenericIndexed.read(
           indexBuffer,
           GenericIndexed.STRING_STRATEGY,
           smooshedFiles
       );
-      new Logger(GenericIndexed.class).info("GenericIndexed.read2 140000000000000000000");
       final GenericIndexed<String> dims = GenericIndexed.read(
           indexBuffer,
           GenericIndexed.STRING_STRATEGY,

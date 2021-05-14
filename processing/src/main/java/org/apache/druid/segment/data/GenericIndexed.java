@@ -142,10 +142,12 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
   }
 
   // 历史节点启动时会调用此方法，传入buffer
+  // buffer为index.drd信息
   public static <T> GenericIndexed<T> read(ByteBuffer buffer, ObjectStrategy<T> strategy, SmooshedFileMapper fileMapper)
   {
     byte versionFromBuffer = buffer.get();
 
+    //
     if (VERSION_ONE == versionFromBuffer) {
       new Logger(GenericIndexed.class).info("createGenericIndexedVersionOne 2222222222222222");
       return createGenericIndexedVersionOne(buffer, strategy);

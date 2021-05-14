@@ -139,12 +139,16 @@ public class SegmentLoaderLocalCacheManager implements SegmentLoader
     final File segmentFiles;
     synchronized (lock) {
       try {
+        // 根据“缓存信息文件对象”，获取该时间区间上的真正segment缓存数据所在的文件夹
+        // 如（apache-druid-0.20.1/var/druid/segment-cache/test-file/2020-03-01T00:00:00.000Z_2020-04-01T00:00:00.000Z/2021-03-11T12:41:03.686Z/0）
         segmentFiles = getSegmentFiles(segment);
       }
       finally {
         unlock(segment, lock);
       }
     }
+    // 该时间区间文件夹下除了对应的segment数据文件，还有factory.json文件，
+    // 该文件中只有一个信息，也就是指定了SegmentizerFactory，即用哪一种工厂类，可以加载这些segment文件
     File factoryJson = new File(segmentFiles, "factory.json");
     final SegmentizerFactory factory;
 
@@ -159,6 +163,14 @@ public class SegmentLoaderLocalCacheManager implements SegmentLoader
       factory = new MMappedQueryableSegmentizerFactory(indexIO);
     }
 
+    /**
+     * {@link org.apache.druid.segment.loading.MMappedQueryableSegmentizerFactory#factorize(DataSegment, File, boolean)}
+     * {@link org.apache.druid.segment.IndexIO#loadIndex(File, boolean)}
+     * {@link org.apache.druid.segment.IndexIO.V9IndexLoader#load(File, ObjectMapper, boolean)}
+     *
+     * segment：本次需要加载的segment的“缓存文件信息”
+     * segmentFiles：真正的segment缓存数据文件所在文件夹
+     */
     return factory.factorize(segment, segmentFiles, lazy);
   }
 
