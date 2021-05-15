@@ -553,6 +553,7 @@ public class IndexIO
        */
       SmooshedFileMapper smooshedFiles = Smoosh.map(inDir);
 
+      // 解析出index.drd的真正内容，即返回的indexBuffer就是index.drd在所属xxxx.smoosh文件中的真正数据
       ByteBuffer indexBuffer = smooshedFiles.mapFile("index.drd");
       /**
        * Index.drd should consist of the segment version, the columns and dimensions of the segment as generic

@@ -147,7 +147,6 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
   {
     byte versionFromBuffer = buffer.get();
 
-    //
     if (VERSION_ONE == versionFromBuffer) {
       new Logger(GenericIndexed.class).info("createGenericIndexedVersionOne 2222222222222222");
       return createGenericIndexedVersionOne(buffer, strategy);
@@ -508,6 +507,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
   ///////////////
 
   //历史节点启动时由此方法传入初始数据buffer
+  // byteBuffer为index.drd信息的始末位置
   private static <T> GenericIndexed<T> createGenericIndexedVersionOne(ByteBuffer byteBuffer, ObjectStrategy<T> strategy)
   {
     boolean allowReverseLookup = byteBuffer.get() == REVERSE_LOOKUP_ALLOWED;
