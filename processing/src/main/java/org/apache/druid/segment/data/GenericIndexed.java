@@ -142,14 +142,16 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
   }
 
   // 历史节点启动时会调用此方法，传入buffer
-  // buffer为index.drd信息
+  // buffer为index.drd信息,index.drd中包含了所属的segment中有哪些维度、时间区间、以及使用哪种bitmap。
   public static <T> GenericIndexed<T> read(ByteBuffer buffer, ObjectStrategy<T> strategy, SmooshedFileMapper fileMapper)
   {
     byte versionFromBuffer = buffer.get();
 
+    // V1版本的GenericIndex适用于元素个数较少的情况
     if (VERSION_ONE == versionFromBuffer) {
       new Logger(GenericIndexed.class).info("createGenericIndexedVersionOne 2222222222222222");
       return createGenericIndexedVersionOne(buffer, strategy);
+    // V2版本的GenericIndex适用于元素个数较多的情况
     } else if (VERSION_TWO == versionFromBuffer) {
       return createGenericIndexedVersionTwo(buffer, strategy, fileMapper);
     }
@@ -507,13 +509,16 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
   ///////////////
 
   //历史节点启动时由此方法传入初始数据buffer
-  // byteBuffer为index.drd信息的始末位置
+  // byteBuffer为index.drd信息,index.drd中包含了所属的segment中有哪些维度、时间区间、以及使用哪种bitmap。
   private static <T> GenericIndexed<T> createGenericIndexedVersionOne(ByteBuffer byteBuffer, ObjectStrategy<T> strategy)
   {
     boolean allowReverseLookup = byteBuffer.get() == REVERSE_LOOKUP_ALLOWED;
+    // byteBuffer中的首int为后续内容长度，也是此次读取的长度
     int size = byteBuffer.getInt();
+    // bufferToUse为此次要读取的buffer，起始位为0或者接着上一次开始读，limit位为此次内容的末尾位
     ByteBuffer bufferToUse = byteBuffer.asReadOnlyBuffer();
     bufferToUse.limit(bufferToUse.position() + size);
+    // 下一次进此方法时byteBuffer的起始读取位为“上一次读取内容（bufferToUse）的末尾位”，也就是顺着上一次接着读
     byteBuffer.position(bufferToUse.limit());
 
     return new GenericIndexed<>(

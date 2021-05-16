@@ -559,6 +559,10 @@ public class IndexIO
        * Index.drd should consist of the segment version, the columns and dimensions of the segment as generic
        * indexes, the interval start and end millis as longs (in 16 bytes), and a bitmap index type.
        */
+      // 读取indexBuffer也就是index.drd中的内容，每次读取一部分，其读取长度由首int决定，
+      // 每次开始读的第一位都是int型，指定了后续一段内容的结束长度，
+      // 下次再调用read方法后，就接着上次的位置再读取接下来的首位int所指定的长度内容。
+      // 所以此处连续两次read能读出cols和dims
       final GenericIndexed<String> cols = GenericIndexed.read(
           indexBuffer,
           GenericIndexed.STRING_STRATEGY,
