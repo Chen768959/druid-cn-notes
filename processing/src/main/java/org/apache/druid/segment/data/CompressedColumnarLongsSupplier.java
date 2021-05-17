@@ -97,8 +97,14 @@ public class CompressedColumnarLongsSupplier implements Supplier<ColumnarLongs>,
     Channels.writeFully(channel, buffer.asReadOnlyBuffer());
   }
 
+  /**
+   *
+   * @param buffer bytebuffer，其中包含了指定列的所有值
+   * @param order 该列排序格式
+   */
   public static CompressedColumnarLongsSupplier fromByteBuffer(ByteBuffer buffer, ByteOrder order)
   {
+    // 第一位为version信息
     byte versionFromBuffer = buffer.get();
 
     if (versionFromBuffer == LZF_VERSION || versionFromBuffer == VERSION) {

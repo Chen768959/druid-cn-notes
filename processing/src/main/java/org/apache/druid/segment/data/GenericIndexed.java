@@ -42,7 +42,11 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.CharBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
 import java.util.Arrays;
 import java.util.Iterator;
 
@@ -235,15 +239,6 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
     firstValueBuffer = buffer.slice();
 
     log.info("!!!：创建GenericIndexed，当前GenericIndexed对象为："+super.toString());
-    if (firstValueBuffer!=null){
-      log.info("!!!：创建GenericIndexed，遍历firstValueBuffer");
-      for(int i=0;i<firstValueBuffer.capacity();i++){
-        if (firstValueBuffer.get(i)!=0){
-          log.info("!!!：创建GenericIndexed中firstValueBuffer，i="+i+"...byte="+firstValueBuffer.get(i));
-        }
-      }
-      log.info("!!!：创建GenericIndexed，遍历firstValueBuffer END");
-    }
 
     valueBuffers = new ByteBuffer[]{firstValueBuffer};
 
@@ -405,7 +400,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
     }
     copyValueBuffer.position(startOffset);
     // fromByteBuffer must not modify the buffer limit
-    log.info("!!!：从从StupidPool队列中取出一个holder（1）");
+    // fromByteBuffer即调用“StringUtils.fromUtf8(buffer, numBytes);”逻辑，还是从copyValueBuffer中取值
     T res = strategy.fromByteBuffer(copyValueBuffer, size);
     return res;
   }

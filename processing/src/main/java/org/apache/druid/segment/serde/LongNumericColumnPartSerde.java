@@ -96,20 +96,27 @@ public class LongNumericColumnPartSerde implements ColumnPartSerde
     return serializer;
   }
 
-  // 历史节点启动时会调用此方法，传入buffer
   @Override
   public Deserializer getDeserializer()
   {
+    /**
+     * 该方法主要是解析“columnSupplier”，然后传给builder
+     * buffer: bytebuffer，其中包含了指定列的所有值
+     * builder: 一个工具类，用于构建最终所需的对象，在该方法中产生的各种数据需要传给builder对象
+     * columnConfig:
+     */
     return (buffer, builder, columnConfig) -> {
-      new Logger(GenericIndexed.class).info("fromByteBuffer 222222222222");
       final CompressedColumnarLongsSupplier column = CompressedColumnarLongsSupplier.fromByteBuffer(
           buffer,
           byteOrder
       );
+
+      // 包装类，其只负责包装column和IndexIO.LEGACY_FACTORY.getBitmapFactory().makeEmptyImmutableBitmap()
       LongNumericColumnSupplier columnSupplier = new LongNumericColumnSupplier(
           column,
           IndexIO.LEGACY_FACTORY.getBitmapFactory().makeEmptyImmutableBitmap()
       );
+
       builder.setType(ValueType.LONG)
              .setHasMultipleValues(false)
              .setNumericColumnSupplier(columnSupplier);

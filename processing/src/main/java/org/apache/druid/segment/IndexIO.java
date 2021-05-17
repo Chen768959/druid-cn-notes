@@ -563,11 +563,19 @@ public class IndexIO
       // 每次开始读的第一位都是int型，指定了后续一段内容的结束长度，
       // 下次再调用read方法后，就接着上次的位置再读取接下来的首位int所指定的长度内容。
       // 所以此处连续两次read能读出cols和dims
+
+      // GenericIndexed.read方法并没有真正将列名从indexBuffer中解析出来
+      // 简单来说只是确定索要获取的cols列或dims列在整个indexBuffer中的位置，并存储这个位置以及indexBuffer，
+      // 在需要解析值时，再从buffer中依次读取，
+      // read方法返回的GenericIndexed对象也提供迭代器方法用于获得buffer中的各个值内容。
+
+      // cols为该数据源的所有列名
       final GenericIndexed<String> cols = GenericIndexed.read(
           indexBuffer,
           GenericIndexed.STRING_STRATEGY,
           smooshedFiles
       );
+      // dims为所有的“维度”列名，即其中不包含count列和value列，dims中的所有列在上面cols中也都能找到
       final GenericIndexed<String> dims = GenericIndexed.read(
           indexBuffer,
           GenericIndexed.STRING_STRATEGY,
@@ -588,10 +596,13 @@ public class IndexIO
       }
 
       Metadata metadata = null;
+      // 解析出metadata.drd的真正内容，即返回的byteBuffer就是metadata.drd在所属xxxx.smoosh文件中的真正数据的buffer
       ByteBuffer metadataBB = smooshedFiles.mapFile("metadata.drd");
       if (metadataBB != null) {
         try {
+          // 将metadata.drd转化成Metadata.class类型对象
           metadata = mapper.readValue(
+              // 将metadataBB转化成byte数组并返回
               SERIALIZER_UTILS.readBytes(metadataBB, metadataBB.remaining()),
               Metadata.class
           );
@@ -606,14 +617,23 @@ public class IndexIO
         }
       }
 
+      // key为列名，value为
       Map<String, Supplier<ColumnHolder>> columns = new HashMap<>();
 
+      /**   {@link GenericIndexed#get(int)}
+       * -> {@link GenericIndexed#getVersionOne(int)}
+       * -> {@link GenericIndexed#copyBufferAndGet(ByteBuffer, int, int)}
+       *
+       * 即从GenericIndexed<String> cols中的bytebuffer中，依次解析出具体值并返回
+       */
       for (String columnName : cols) {
         if (Strings.isNullOrEmpty(columnName)) {
           log.warn("Null or Empty Dimension found in the file : " + inDir);
           continue;
         }
 
+        // 解析出columnName列的真正内容，即返回的byteBuffer就是该列在所属xxxx.smoosh文件中的真正数据的buffer
+        // 在xxxx.smoosh中，每一列的起始内容为描述信息，包括列类型等，这一段描述信息为json格式，之后才是该列的所有值
         ByteBuffer colBuffer = smooshedFiles.mapFile(columnName);
 
         if (lazy) {
@@ -628,6 +648,9 @@ public class IndexIO
               }
           ));
         } else {
+          // mapper：json解析工具
+          // colBuffer：bytebuffer，其中包含了指定列的所有值
+          // smooshedFiles：包含了meta.smoosh同文件夹下的所有smoosh文件的File对象，以及meta.smoosh内的所有数据信息
           ColumnHolder columnHolder = deserializeColumn(mapper, colBuffer, smooshedFiles);
           columns.put(columnName, () -> columnHolder);
         }
@@ -667,12 +690,23 @@ public class IndexIO
       return index;
     }
 
+    /**
+     *
+     * @param mapper json解析工具
+     * @param byteBuffer bytebuffer，其中包含了指定列的所有值
+     * @param smooshedFiles 包含了meta.smoosh同文件夹下的所有smoosh文件的File对象，以及meta.smoosh内的所有数据信息
+     *
+     * @return org.apache.druid.segment.column.ColumnHolder
+     */
     private ColumnHolder deserializeColumn(ObjectMapper mapper, ByteBuffer byteBuffer, SmooshedFileMapper smooshedFiles)
         throws IOException
     {
+      // 将指定列的描述信息内容（json格式）装入ColumnDescriptor类型对象并返回（注：此处只解析了列的首部信息内容，后续的真正值还未解析）
       ColumnDescriptor serde = mapper.readValue(
           SERIALIZER_UTILS.readString(byteBuffer), ColumnDescriptor.class
       );
+
+      // 该read方法才是将byteBuffer中的该类所有值读入serde对象中
       return serde.read(byteBuffer, columnConfig, smooshedFiles);
     }
   }
