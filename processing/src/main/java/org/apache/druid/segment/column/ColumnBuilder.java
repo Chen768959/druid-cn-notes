@@ -22,8 +22,11 @@ package org.apache.druid.segment.column;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Supplier;
 import org.apache.druid.java.util.common.io.smoosh.SmooshedFileMapper;
+import org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier;
+import org.apache.druid.segment.serde.LongNumericColumnPartSerde;
 
 import javax.annotation.Nullable;
+import java.nio.ByteBuffer;
 
 /**
  */
@@ -41,6 +44,10 @@ public class ColumnBuilder
   private SmooshedFileMapper fileMapper = null;
 
 
+  /**
+   * 由{@link ColumnDescriptor#read(ByteBuffer, ColumnConfig, SmooshedFileMapper)}逻辑传入
+   * fileMapper:包含了meta.smoosh同文件夹下的所有smoosh文件的File对象，以及meta.smoosh内的所有数据信息
+   */
   public ColumnBuilder setFileMapper(SmooshedFileMapper fileMapper)
   {
     this.fileMapper = fileMapper;
@@ -52,12 +59,20 @@ public class ColumnBuilder
     return this.fileMapper;
   }
 
+  /**
+   * 由{@link ColumnDescriptor#read(ByteBuffer, ColumnConfig, SmooshedFileMapper)}逻辑传入
+   * type为该列的数据类型
+   */
   public ColumnBuilder setType(ValueType type)
   {
     this.capabilitiesBuilder.setType(type);
     return this;
   }
 
+  /**
+   * 由{@link ColumnDescriptor#read(ByteBuffer, ColumnConfig, SmooshedFileMapper)}逻辑传入
+   * hasMultipleValues为该列上每行是否有多个值
+   */
   public ColumnBuilder setHasMultipleValues(boolean hasMultipleValues)
   {
     this.capabilitiesBuilder.setHasMultipleValues(hasMultipleValues);
@@ -86,6 +101,13 @@ public class ColumnBuilder
     return this;
   }
 
+  /**
+   * 由{@link LongNumericColumnPartSerde#getDeserializer()}返回的read()匿名函数中定义
+   * (不过调用该匿名函数的地方还是{@link ColumnDescriptor#read(ByteBuffer, ColumnConfig, SmooshedFileMapper)})
+   * columnSupplier：包装类，其只负责包装“column”和IndexIO.LEGACY_FACTORY.getBitmapFactory().makeEmptyImmutableBitmap()
+   * 其中column是{@link BlockLayoutColumnarLongsSupplier}简单工厂，
+   * 该工厂get方法可根据以上信息构建{@link org.apache.druid.segment.data.ColumnarLongs}对象.
+   */
   public ColumnBuilder setNumericColumnSupplier(Supplier<? extends NumericColumn> columnSupplier)
   {
     this.columnSupplier = columnSupplier;
@@ -121,6 +143,13 @@ public class ColumnBuilder
   {
     Preconditions.checkState(capabilitiesBuilder.getType() != null, "Type must be set.");
 
+    /**
+     * capabilitiesBuilder:capabilitiesBuilder包含了列的数据类型等列描述信息
+     * columnSupplier:其中包含了一个{@link BlockLayoutColumnarLongsSupplier}简单工厂，
+     *                该工厂get方法可根据以上信息构建{@link org.apache.druid.segment.data.ColumnarLongs}对象.
+     * bitmapIndex:
+     * spatialIndex:
+     */
     return new SimpleColumnHolder(capabilitiesBuilder, columnSupplier, bitmapIndex, spatialIndex);
   }
 }

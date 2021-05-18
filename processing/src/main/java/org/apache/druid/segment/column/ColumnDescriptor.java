@@ -26,6 +26,8 @@ import com.google.common.base.Preconditions;
 import org.apache.druid.java.util.common.IAE;
 import org.apache.druid.java.util.common.io.smoosh.FileSmoosher;
 import org.apache.druid.java.util.common.io.smoosh.SmooshedFileMapper;
+import org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier;
+import org.apache.druid.segment.data.ColumnarLongs;
 import org.apache.druid.segment.serde.ColumnPartSerde;
 import org.apache.druid.segment.serde.LongNumericColumnPartSerde;
 import org.apache.druid.segment.serde.Serializer;
@@ -125,17 +127,36 @@ public class ColumnDescriptor implements Serializer
     /**
      * parts中包含了当前列的描述信息，如果当前列中只有一种类型数据，则只有一个part
      * part中包含了列名、列排序策略等信息
-     *
      * {@link ColumnPartSerde}接口中描述了每一种类型对应哪一种ColumnPartSerde实现类，
-     * 以long类型数据为例，对应{@link org.apache.druid.segment.serde.LongNumericColumnPartSerde}
-     * 此处即调用
-     * {@link LongNumericColumnPartSerde#getDeserializer()}中描述的read方法
-     * 其中将该列的各值转化成了“column”对象，
+     * 以long类型数据为例，part对应{@link org.apache.druid.segment.serde.LongNumericColumnPartSerde}
      */
     for (ColumnPartSerde part : parts) {
+      /**
+       * {@link LongNumericColumnPartSerde#getDeserializer()}：
+       * 该方法返回了一个匿名函数，也就是这个read方法，
+       *
+       * 其调用.read(buffer, builder, columnConfig)，
+       * 就是调用{@link LongNumericColumnPartSerde#getDeserializer()}返回的匿名函数：
+       * read()方法解析出了当前列的类型、压缩策略、排序、编码等信息，
+       * 然后又创建了个{@link BlockLayoutColumnarLongsSupplier}简单工厂，
+       * 该工厂get方法可根据以上信息构建{@link ColumnarLongs}对象.
+       * 最后把这些信息全部传给builder对象。
+       */
       part.getDeserializer().read(buffer, builder, columnConfig);
     }
 
+    /**
+     * 经过上面的逻辑，read中已经拥有了该列的各种信息，
+     * 此处调用{@link ColumnBuilder#build()}
+     * 仅仅只是将builder中的列关键信息传构造方法创建{@link SimpleColumnHolder}对象，
+     * 具体传了那些参数可看其构造方法
+     *
+     * 返回的也是这个{@link SimpleColumnHolder}对象，
+     * 该对象中包含了两个比较重要的参数，
+     * 1、capabilitiesBuilder:capabilitiesBuilder包含了列的数据类型等列描述信息。
+     * 2、其中包含了一个{@link BlockLayoutColumnarLongsSupplier}简单工厂，该工厂在创建时拥有了“包含该列所有值信息的bytebuffer”
+     * 该工厂get方法可根据以上信息构建{@link org.apache.druid.segment.data.ColumnarLongs}对象.
+     */
     return builder.build();
   }
 

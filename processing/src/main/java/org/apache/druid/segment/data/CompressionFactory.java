@@ -308,6 +308,17 @@ public class CompressionFactory
     LongEncodingReader duplicate();
   }
 
+  /**
+   *
+   * @param totalSize 头部第一个int
+   * @param sizePer 头部第二个int
+   * @param fromBuffer 其中包含了指定列的所有值，目前头部的size和压缩id等已读完
+   * @param order 排序规则
+   * @param encodingFormat 编码
+   * @param strategy 压缩策略
+   *
+   * @return com.google.common.base.Supplier<org.apache.druid.segment.data.ColumnarLongs>
+   */
   public static Supplier<ColumnarLongs> getLongSupplier(
       int totalSize,
       int sizePer,
@@ -319,7 +330,7 @@ public class CompressionFactory
   {
     if (strategy == CompressionStrategy.NONE) {
       return new EntireLayoutColumnarLongsSupplier(totalSize, encodingFormat.getReader(fromBuffer, order));
-    } else {
+    } else {// 进入此条件
       return new BlockLayoutColumnarLongsSupplier(
           totalSize,
           sizePer,

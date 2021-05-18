@@ -52,9 +52,11 @@ import org.apache.druid.segment.column.ColumnCapabilities;
 import org.apache.druid.segment.column.ColumnConfig;
 import org.apache.druid.segment.column.ColumnDescriptor;
 import org.apache.druid.segment.column.ColumnHolder;
+import org.apache.druid.segment.column.SimpleColumnHolder;
 import org.apache.druid.segment.column.ValueType;
 import org.apache.druid.segment.data.BitmapSerde;
 import org.apache.druid.segment.data.BitmapSerdeFactory;
+import org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier;
 import org.apache.druid.segment.data.CompressedColumnarLongsSupplier;
 import org.apache.druid.segment.data.GenericIndexed;
 import org.apache.druid.segment.data.ImmutableRTreeObjectStrategy;
@@ -617,7 +619,7 @@ public class IndexIO
         }
       }
 
-      // key为列名，value为
+      // key为列名，value为该列的包装类
       Map<String, Supplier<ColumnHolder>> columns = new HashMap<>();
 
       /**   {@link GenericIndexed#get(int)}
@@ -671,7 +673,17 @@ public class IndexIO
             }
         ));
       } else {
+        /**
+         * 最终目的是解析出指定列的包装类，通过此包装类可直接返回列中各个信息
+         * 返回的是{@link SimpleColumnHolder}对象，
+         * 该对象中包含了两个比较重要的参数，
+         * 1、capabilitiesBuilder:capabilitiesBuilder包含了列的数据类型等列描述信息。
+         * 2、其中包含了一个{@link BlockLayoutColumnarLongsSupplier}简单工厂，该工厂在创建时拥有了“包含该列所有值信息的bytebuffer”
+         * 该工厂get方法可根据以上信息构建{@link org.apache.druid.segment.data.ColumnarLongs}对象.
+         */
         ColumnHolder columnHolder = deserializeColumn(mapper, timeBuffer, smooshedFiles);
+
+        // 将列名与该列的包装类以k-v形式存储
         columns.put(ColumnHolder.TIME_COLUMN_NAME, () -> columnHolder);
       }
 
@@ -691,6 +703,12 @@ public class IndexIO
     }
 
     /**
+     * 最终目的是解析出指定列的包装类，通过此包装类可直接返回列中各个信息
+     * 返回的是{@link SimpleColumnHolder}对象，
+     * 该对象中包含了两个比较重要的参数，
+     * 1、capabilitiesBuilder:capabilitiesBuilder包含了列的数据类型等列描述信息。
+     * 2、其中包含了一个{@link BlockLayoutColumnarLongsSupplier}简单工厂，该工厂在创建时拥有了“包含该列所有值信息的bytebuffer”
+     * 该工厂get方法可根据以上信息构建{@link org.apache.druid.segment.data.ColumnarLongs}对象.
      *
      * @param mapper json解析工具
      * @param byteBuffer bytebuffer，其中包含了指定列的所有值
@@ -706,7 +724,16 @@ public class IndexIO
           SERIALIZER_UTILS.readString(byteBuffer), ColumnDescriptor.class
       );
 
-      // 该read方法才是将byteBuffer中的该类所有值读入serde对象中
+      /**
+       * serde.read可看成进一步解析指定列，最终创造一个包装类，
+       * 这个“包装类”可直接返回该列的各种信息值
+       *
+       * 返回的是{@link SimpleColumnHolder}对象，
+       * 该对象中包含了两个比较重要的参数，
+       * 1、capabilitiesBuilder:capabilitiesBuilder包含了列的数据类型等列描述信息。
+       * 2、其中包含了一个{@link BlockLayoutColumnarLongsSupplier}简单工厂，该工厂在创建时拥有了“包含该列所有值信息的bytebuffer”
+       * 该工厂get方法可根据以上信息构建{@link org.apache.druid.segment.data.ColumnarLongs}对象.
+       */
       return serde.read(byteBuffer, columnConfig, smooshedFiles);
     }
   }

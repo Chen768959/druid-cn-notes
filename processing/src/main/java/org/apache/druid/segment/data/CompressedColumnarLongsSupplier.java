@@ -61,6 +61,17 @@ public class CompressedColumnarLongsSupplier implements Supplier<ColumnarLongs>,
   private final CompressionStrategy compression;
   private final CompressionFactory.LongEncodingFormat encoding;
 
+  /**
+   *
+   * @param totalSize 头部第一个int
+   * @param sizePer 头部第二个int
+   * @param buffer 其中包含了指定列的所有值，目前头部的size和压缩id等已读完
+   * @param supplier 工厂对象，可创建<ColumnarLongs>，该工厂对象为：{@link BlockLayoutColumnarLongsSupplier}
+   * @param compression 压缩策略
+   * @param encoding 编码
+   *
+   * @return
+   */
   CompressedColumnarLongsSupplier(
       int totalSize,
       int sizePer,
@@ -98,6 +109,8 @@ public class CompressedColumnarLongsSupplier implements Supplier<ColumnarLongs>,
   }
 
   /**
+   * 解析出压缩策略等信息，然后把这些信息以及buffer全部传给{@link BlockLayoutColumnarLongsSupplier}简单工厂，
+   * 该工厂get方法可根据以上信息构建{@link ColumnarLongs}对象，
    *
    * @param buffer bytebuffer，其中包含了指定列的所有值
    * @param order 该列排序格式
@@ -110,7 +123,10 @@ public class CompressedColumnarLongsSupplier implements Supplier<ColumnarLongs>,
     if (versionFromBuffer == LZF_VERSION || versionFromBuffer == VERSION) {
       final int totalSize = buffer.getInt();
       final int sizePer = buffer.getInt();
+
+      // 压缩策略，默认CompressionStrategy.LZF
       CompressionStrategy compression = CompressionStrategy.LZF;
+
       CompressionFactory.LongEncodingFormat encoding = CompressionFactory.LEGACY_LONG_ENCODING_FORMAT;
       if (versionFromBuffer == VERSION) {
         byte compressionId = buffer.get();
@@ -118,8 +134,14 @@ public class CompressedColumnarLongsSupplier implements Supplier<ColumnarLongs>,
           encoding = CompressionFactory.LongEncodingFormat.forId(buffer.get());
           compressionId = CompressionFactory.clearEncodingFlag(compressionId);
         }
+        // 指定压缩策略
         compression = CompressionStrategy.forId(compressionId);
       }
+
+      /** 返回{@link BlockLayoutColumnarLongsSupplier}工厂
+       * （Supplier类型对象为简单工厂模式，其作用是通过get方法创造所需类型对象）
+       * 此处只是将这些参数都传入工厂，并返回工厂对象
+       */
       Supplier<ColumnarLongs> supplier = CompressionFactory.getLongSupplier(
           totalSize,
           sizePer,
@@ -128,6 +150,8 @@ public class CompressedColumnarLongsSupplier implements Supplier<ColumnarLongs>,
           encoding,
           compression
       );
+
+      // 还是一个简单工厂，其内部又包裹了supplier工厂
       return new CompressedColumnarLongsSupplier(
           totalSize,
           sizePer,

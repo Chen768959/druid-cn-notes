@@ -24,6 +24,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.IndexIO;
 import org.apache.druid.segment.column.ValueType;
+import org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier;
+import org.apache.druid.segment.data.ColumnarLongs;
 import org.apache.druid.segment.data.CompressedColumnarLongsSupplier;
 import org.apache.druid.segment.data.GenericIndexed;
 
@@ -106,6 +108,10 @@ public class LongNumericColumnPartSerde implements ColumnPartSerde
      * columnConfig:
      */
     return (buffer, builder, columnConfig) -> {
+      /**
+       * 解析出压缩策略等信息，然后把这些信息以及buffer全部传给{@link BlockLayoutColumnarLongsSupplier}简单工厂，
+       * 该工厂get方法可根据以上信息构建{@link ColumnarLongs}对象.
+       */
       final CompressedColumnarLongsSupplier column = CompressedColumnarLongsSupplier.fromByteBuffer(
           buffer,
           byteOrder

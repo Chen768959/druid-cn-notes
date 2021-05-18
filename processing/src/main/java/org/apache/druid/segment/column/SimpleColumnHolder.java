@@ -22,12 +22,21 @@ package org.apache.druid.segment.column;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Supplier;
 import org.apache.druid.segment.ColumnValueSelector;
+import org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier;
 import org.apache.druid.segment.selector.settable.SettableColumnValueSelector;
 import org.apache.druid.segment.selector.settable.SettableObjectColumnValueSelector;
 
 import javax.annotation.Nullable;
 
 /**
+ * SimpleColumnHolder可看成指定列的一个包装类，
+ * 这个“包装类”可直接返回该列的各种信息值
+ *
+ * 返回的是{@link SimpleColumnHolder}对象，
+ * 该对象中包含了两个比较重要的参数，
+ * 1、capabilitiesBuilder:capabilitiesBuilder包含了列的数据类型等列描述信息。
+ * 2、其中包含了一个{@link BlockLayoutColumnarLongsSupplier}简单工厂，该工厂在创建时拥有了“包含该列所有值信息的bytebuffer”
+ * 该工厂get方法可根据以上信息构建{@link org.apache.druid.segment.data.ColumnarLongs}对象.
  */
 class SimpleColumnHolder implements ColumnHolder
 {
@@ -40,6 +49,13 @@ class SimpleColumnHolder implements ColumnHolder
   private static final InvalidComplexColumnTypeValueSelector INVALID_COMPLEX_COLUMN_TYPE_VALUE_SELECTOR
       = new InvalidComplexColumnTypeValueSelector();
 
+  /**
+   * capabilitiesBuilder:capabilitiesBuilder包含了列的数据类型等列描述信息
+   * columnSupplier:其中包含了一个{@link BlockLayoutColumnarLongsSupplier}简单工厂，该工厂在创建时拥有了“包含该列所有值信息的bytebuffer”
+   *                该工厂get方法可根据以上信息构建{@link org.apache.druid.segment.data.ColumnarLongs}对象.
+   * bitmapIndex:
+   * spatialIndex:
+   */
   SimpleColumnHolder(
       ColumnCapabilities capabilities,
       @Nullable Supplier<? extends BaseColumn> columnSupplier,
