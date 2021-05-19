@@ -39,6 +39,7 @@ public class LongDimensionHandler implements DimensionHandler<Long, Long, Long>
     }
   };
 
+  // 列名
   private final String dimensionName;
 
   public LongDimensionHandler(String dimensionName)

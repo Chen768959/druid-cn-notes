@@ -66,6 +66,12 @@ public final class DimensionHandlerUtils
   {
   }
 
+  /**
+   *
+   * @param dimensionName 维度列名
+   * @param capabilities 该列的描述信息对象capabilities
+   * @param multiValueHandling null
+   */
   public static DimensionHandler<?, ?, ?> getHandlerFromCapabilities(
       String dimensionName,
       @Nullable ColumnCapabilities capabilities,
@@ -76,8 +82,10 @@ public final class DimensionHandlerUtils
       return new StringDimensionHandler(dimensionName, multiValueHandling, true, false);
     }
 
+    // 使用默认值SORTED_ARRAY
     multiValueHandling = multiValueHandling == null ? MultiValueHandling.ofDefault() : multiValueHandling;
 
+    // capabilities.getType()为当前列存储字段类型，不同类型创建不同handler对象
     if (capabilities.getType() == ValueType.STRING) {
       if (!capabilities.isDictionaryEncoded().isTrue()) {
         throw new IAE("String column must have dictionary encoding.");

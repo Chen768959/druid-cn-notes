@@ -119,10 +119,11 @@ public class ColumnDescriptor implements Serializer
      * builder相当于是一个生成ColumnHolder对象的工具，期间会把各个阶段的参数都传入builder对象，
      * 最后再由builder生成ColumnHolder对象
      */
+    /** 该json内容由{@link org.apache.druid.segment.IndexIO.V9IndexLoader#deserializeColumn(ObjectMapper, ByteBuffer, SmooshedFileMapper)} */
     final ColumnBuilder builder = new ColumnBuilder()
-        .setType(valueType)
-        .setHasMultipleValues(hasMultipleValues)
-        .setFileMapper(smooshedFiles);
+        .setType(valueType) // 该列的数据类型
+        .setHasMultipleValues(hasMultipleValues) // 该列上每行是否有多个值
+        .setFileMapper(smooshedFiles); // 包含了meta.smoosh同文件夹下的所有smoosh文件的File对象，以及meta.smoosh内的所有数据信息
 
     /**
      * parts中包含了当前列的描述信息，如果当前列中只有一种类型数据，则只有一个part

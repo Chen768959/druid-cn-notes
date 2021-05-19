@@ -527,9 +527,17 @@ public class IndexIO
       this.columnConfig = columnConfig;
     }
 
-    // 历史节点启动时会调用此方法，解析inDir目录
-    // inDir目录为此次需要被加载的时间区间的缓存目录，
-    // 目录里包含了segment缓存数据文件，以及版本号等文件
+    /**
+     * 历史节点启动时会调用此方法，解析inDir目录
+     * inDir目录为此次需要被加载的时间区间的缓存目录，目录里包含了segment缓存数据文件，以及版本号等文件
+     *
+     * 最终返回的{@link SimpleQueryableIndex}本身没有逻辑，只是个包装类，将所有的inDir目录下的segment信息存储其中。
+     * 此index对象中较为重要的解析结果为：
+     * 1、metadata：xxxx.smoosh文件中的metadata.drd信息所转化
+     * 2、columns：map类型 key为所有列名，value为该列的包装类
+     * 3、dimensionHandlers：map类型，key为各维度列名，value为该列数据类型对应的handler对象
+     * 4、fileMapper：包含了同文件夹下所有smoosh文件的File对象，以及meta.smoosh内的所有数据信息
+     */
     @Override
     public QueryableIndex load(File inDir, ObjectMapper mapper, boolean lazy) throws IOException
     {
@@ -551,7 +559,9 @@ public class IndexIO
        * index.drd中包含了所属的segment中有哪些维度、时间区间、以及使用哪种bitmap。
        * metadata.drd中存储了指标聚合函数、查询粒度、时间戳配置等
        *
-       * SmooshedFileMapper里面包含了meta.smoosh同文件夹下的所有smoosh文件的File对象，以及meta.smoosh内的所有数据信息
+       * SmooshedFileMapper里面包含了
+       * 1、meta.smoosh同文件夹下的“所有smoosh文件的File对象”，
+       * 2、meta.smoosh内的所有数据信息
        */
       SmooshedFileMapper smooshedFiles = Smoosh.map(inDir);
 
@@ -602,7 +612,7 @@ public class IndexIO
       ByteBuffer metadataBB = smooshedFiles.mapFile("metadata.drd");
       if (metadataBB != null) {
         try {
-          // 将metadata.drd转化成Metadata.class类型对象
+          // 将xxxx.smoosh文件中的metadata.drd信息转化成Metadata.class类型对象
           metadata = mapper.readValue(
               // 将metadataBB转化成byte数组并返回
               SERIALIZER_UTILS.readBytes(metadataBB, metadataBB.remaining()),
@@ -687,6 +697,22 @@ public class IndexIO
         columns.put(ColumnHolder.TIME_COLUMN_NAME, () -> columnHolder);
       }
 
+      /**
+       *
+       * @param dataInterval
+       * @param dims 所有的“维度”列名，即其中不包含count列和value列，dims中的所有列在上面cols中也都能找到
+       * @param bitmapFactory
+       * @param columns key为列名，value为该列的包装类
+       * @param smooshedFiles 包含了meta.smoosh同文件夹下的所有smoosh文件的File对象，以及meta.smoosh内的所有数据信息
+       * @param metadata Metadata.class对象由xxxx.smoosh文件中的metadata.drd信息所转化
+       * @param lazy
+       *
+       * 将所有参数都传入此index，其中比较重要的参数为
+       * 1、metadata：xxxx.smoosh文件中的metadata.drd信息所转化
+       * 2、columns：map类型 key为所有列名，value为该列的包装类
+       * 3、dimensionHandlers：map类型，key为各维度列名，value为该列数据类型对应的handler对象
+       * 4、fileMapper：包含了同文件夹下所有smoosh文件的File对象，以及meta.smoosh内的所有数据信息
+       */
       final QueryableIndex index = new SimpleQueryableIndex(
           dataInterval,
           dims,

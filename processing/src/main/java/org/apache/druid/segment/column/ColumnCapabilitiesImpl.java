@@ -22,14 +22,17 @@ package org.apache.druid.segment.column;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
 import org.apache.druid.common.config.NullHandling;
 import org.apache.druid.java.util.common.ISE;
+import org.apache.druid.java.util.common.io.smoosh.SmooshedFileMapper;
 
 import javax.annotation.Nullable;
+import java.nio.ByteBuffer;
 
 /**
- *
+ * 指定列的描述信息包装类
  */
 public class ColumnCapabilitiesImpl implements ColumnCapabilities
 {
@@ -184,12 +187,16 @@ public class ColumnCapabilitiesImpl implements ColumnCapabilities
     return builder;
   }
 
+  /** 该内容由{@link ColumnDescriptor#read(ByteBuffer, ColumnConfig, SmooshedFileMapper)} */
+  // 该列的数据类型
   @Nullable
   private ValueType type = null;
 
   private boolean hasInvertedIndexes = false;
   private boolean hasSpatialIndexes = false;
   private Capable dictionaryEncoded = Capable.UNKNOWN;
+  /** 该内容由{@link ColumnDescriptor#read(ByteBuffer, ColumnConfig, SmooshedFileMapper)} */
+  // 该列上每行是否有多个值
   private Capable hasMultipleValues = Capable.UNKNOWN;
 
   // These capabilities are computed at query time and not persisted in the segment files.
