@@ -30,6 +30,15 @@ public class QueryableIndexSegment implements Segment
   private final QueryableIndexStorageAdapter storageAdapter;
   private final SegmentId segmentId;
 
+  /**
+   * index对象{@link SimpleQueryableIndex}本身没有逻辑，只是个包装类，将所有的inDir目录下的segment信息存储其中。
+   * 此index对象中较为重要的解析结果为：
+   * 1、metadata：xxxx.smoosh文件中的metadata.drd信息所转化
+   * 2、columns：map类型 key为所有列名，value为该列的包装类
+   * 3、dimensionHandlers：map类型，key为各维度列名，value为该列数据类型对应的handler对象
+   * 4、fileMapper：包含了同文件夹下所有smoosh文件的File对象，以及meta.smoosh内的所有数据信息
+   *
+   */
   public QueryableIndexSegment(QueryableIndex index, final SegmentId segmentId)
   {
     this.index = index;

@@ -75,6 +75,7 @@ public class ReferenceCountingSegment extends ReferenceCountingCloseableObject<S
       short atomicUpdateGroupSize
   )
   {
+    // 将baseSegment信息赋值给父类的baseObject属性
     super(baseSegment);
     this.startRootPartitionId = (short) startRootPartitionId;
     this.endRootPartitionId = (short) endRootPartitionId;

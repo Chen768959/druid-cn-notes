@@ -28,6 +28,7 @@ import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.emitter.EmittingLogger;
 import org.apache.druid.segment.IndexIO;
 import org.apache.druid.segment.Segment;
+import org.apache.druid.segment.SimpleQueryableIndex;
 import org.apache.druid.server.coordination.DataSegmentChangeCallback;
 import org.apache.druid.server.coordination.SegmentLoadDropHandler;
 import org.apache.druid.timeline.DataSegment;
@@ -139,8 +140,13 @@ public class SegmentLoaderLocalCacheManager implements SegmentLoader
     final File segmentFiles;
     synchronized (lock) {
       try {
-        // 根据“缓存信息文件对象”，获取该时间区间上的真正segment缓存数据所在的文件夹
-        // 如（apache-druid-0.20.1/var/druid/segment-cache/test-file/2020-03-01T00:00:00.000Z_2020-04-01T00:00:00.000Z/2021-03-11T12:41:03.686Z/0）
+        /**
+         * segment是缓存信息对象（不是真正的segment对象），
+         * 该segment缓存信息对象原文件所属于/home/operation/software/apache-druid-0.20.1/var/druid/segment-cache/info_dir目录
+         * 根据“缓存信息文件对象”，获取该时间区间上的真正segment缓存数据所在的文件夹对象
+         *
+         * 如（apache-druid-0.20.1/var/druid/segment-cache/test-file/2020-03-01T00:00:00.000Z_2020-04-01T00:00:00.000Z/2021-03-11T12:41:03.686Z/0）
+         */
         segmentFiles = getSegmentFiles(segment);
       }
       finally {
@@ -170,6 +176,16 @@ public class SegmentLoaderLocalCacheManager implements SegmentLoader
      *
      * segment：本次需要加载的segment的“缓存文件信息”
      * segmentFiles：真正的segment缓存数据文件所在文件夹
+     *
+     * 返回的是一个Segment对象，其中有两部分
+     * （1）segmentId，由传参segment得来，根据此id可知返回的Segment对象是哪一个segment
+     * （2）根据segmentFiles目录，得到该目录下所有segment相关文件的解析结果对象，一个SimpleQueryableIndex：
+     * SimpleQueryableIndex{@link SimpleQueryableIndex}本身没有逻辑，只是个包装类，将所有的inDir目录下的segment信息存储其中。
+     * 此index对象中较为重要的解析结果为：
+     * 1、metadata：xxxx.smoosh文件中的metadata.drd信息所转化
+     * 2、columns：map类型 key为所有列名，value为该列的包装类
+     * 3、dimensionHandlers：map类型，key为各维度列名，value为该列数据类型对应的handler对象
+     * 4、fileMapper：包含了同文件夹下所有smoosh文件的File对象，以及meta.smoosh内的所有数据信
      */
     return factory.factorize(segment, segmentFiles, lazy);
   }

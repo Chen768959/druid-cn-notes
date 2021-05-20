@@ -19,6 +19,7 @@
 
 package org.apache.druid.server;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Ordering;
 import com.google.inject.Inject;
@@ -29,8 +30,10 @@ import org.apache.druid.java.util.common.io.Closer;
 import org.apache.druid.java.util.emitter.EmittingLogger;
 import org.apache.druid.query.TableDataSource;
 import org.apache.druid.query.planning.DataSourceAnalysis;
+import org.apache.druid.segment.QueryableIndexSegment;
 import org.apache.druid.segment.ReferenceCountingSegment;
 import org.apache.druid.segment.Segment;
+import org.apache.druid.segment.SimpleQueryableIndex;
 import org.apache.druid.segment.join.table.IndexedTable;
 import org.apache.druid.segment.join.table.ReferenceCountingIndexedTable;
 import org.apache.druid.segment.loading.SegmentLoader;
@@ -43,6 +46,7 @@ import org.apache.druid.timeline.partition.PartitionHolder;
 import org.apache.druid.timeline.partition.ShardSpec;
 import org.apache.druid.utils.CollectionUtils;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
@@ -61,10 +65,20 @@ public class SegmentManager
   private static final EmittingLogger log = new EmittingLogger(SegmentManager.class);
 
   private final SegmentLoader segmentLoader;
+  /**
+   * dataSources是个map，表示“各数据源已加载的segment信息”
+   * key：各数据源名称，
+   * value：即该数据源上的“总加载信息”，其中包含2个重要属性
+   * （1）该数据源已加载的所有segment数量和大小
+   * （2）Timeline:“用来储存该数据源的各时间轴以及其上的各个ReferenceCountingSegment对象(segement真正的本体)”
+   */
   private final ConcurrentHashMap<String, DataSourceState> dataSources = new ConcurrentHashMap<>();
 
   /**
    * Represent the state of a data source including the timeline, total segment size, and number of segments.
+   * 即该数据源上的“总加载信息”，其中包含2个重要属性
+   * （1）该数据源已加载的所有segment数量和大小
+   * （2）timeline:“用来储存该数据源的各时间轴以及其上的各个ReferenceCountingSegment对象(segement真正的本体)”
    */
   public static class DataSourceState
   {
@@ -218,30 +232,65 @@ public class SegmentManager
    * @return true if the segment was newly loaded, false if it was already loaded
    *
    * @throws SegmentLoadingException if the segment cannot be loaded
+   *
+   * 该方法功能就一句话“将DataSegment加载成Segment对象，然后放入dataSources与对应的数据源进行绑定”
+   * 对应该功能，整个方法分为两部分
+   * 1、调用{@link this#getAdapter(DataSegment, boolean)}方法将DataSegment加载成Segment对象并返回。
+   * 2、{@link dataSources}是个map，表示“各数据源已加载的segment信息”。
+   * 所以该方法第二部分就是把刚刚加载出的segment与数据源的“总加载信息对象”绑定，具体是和时间轴绑定的。
+   * 这样后面查询时，通过某数据源的时间轴信息就直接能从{@link dataSources}中找到其上面的segment对象，用于查询
    */
   public boolean loadSegment(final DataSegment segment, boolean lazy) throws SegmentLoadingException
   {
-    // 将segment（DataSegment）交由segmentLoader.getSegment处理，并返回得到缓存信息对象所描述的真正的segment数据对象
+    // 根据信息文件，找到其真正segment相关smoosh文件所属文件夹，然后将去内容加载成真正segment对象并返回
     /**{@link org.apache.druid.segment.loading.SegmentLoaderLocalCacheManager#getSegment(DataSegment, boolean)}*/
+    /**
+     * segment是缓存信息对象（不是真正的segment对象），
+     * 该segment缓存信息对象原文件所属于/home/operation/software/apache-druid-0.20.1/var/druid/segment-cache/info_dir目录
+     * 根据“缓存信息文件对象”，获取该时间区间上的真正segment缓存数据所在的文件夹对象
+     *
+     * 返回的是一个Segment对象，其中有两部分
+     * （1）segmentId：由传参segment（缓存信息对象）得来，根据此id可知返回的Segment对象是哪一个segment
+     * （2）segment：根据segment缓存信息对象找到真正segment缓存数据所在的文件夹，
+     * 得到该目录下所有segment相关文件的解析结果对象，一个SimpleQueryableIndex：
+     * SimpleQueryableIndex{@link SimpleQueryableIndex}本身没有逻辑，只是个包装类，将所有的inDir目录下的segment信息存储其中。
+     * 此index对象中较为重要的解析结果为：
+     * 1、metadata：xxxx.smoosh文件中的metadata.drd信息所转化
+     * 2、columns：map类型 key为所有列名，value为该列的包装类
+     * 3、dimensionHandlers：map类型，key为各维度列名，value为该列数据类型对应的handler对象
+     * 4、fileMapper：包含了同文件夹下所有smoosh文件的File对象，以及meta.smoosh内的所有数据信
+     */
     final Segment adapter = getAdapter(segment, lazy);
 
     final SettableSupplier<Boolean> resultSupplier = new SettableSupplier<>();
 
     // compute() is used to ensure that the operation for a data source is executed atomically
-    // dataSources是个map，其key是各segment对应数据源名字符串
-    // 在此处针对当前数据源，进行其value的计算，并将计算后value重新放入map中
+    /**
+     * dataSources是个map，
+     * key：各数据源名称，
+     * value：DataSourceState类型
+     * 即该数据源上的“总加载信息”，其中包含2个重要属性
+     * （1）该数据源已加载的所有segment数量和大小
+     * （2）timeline:“用来储存该数据源的各时间轴以及其上的各个ReferenceCountingSegment对象(segement真正的本体)”
+     *
+     * 此处将当前segment所属数据源作为key，查找是否有对应DataSourceState，没有则新建，
+     * 因为此次加载了新的segment，所以数据源的已加载时间区间上对应的segment数量和大小都要新增，
+     * 将新增后的value重新放入map中
+     */
     dataSources.compute(
         segment.getDataSource(),
         (k, v) -> {
           // 判断该数据源是否被加载过，之前未被加载过的话，此处其对应v就是null
-          // DataSourceState包含数据源时间区间、包含segment数量，大小等。
+          // DataSourceState指“已加载的某个时间区间”，以及该时间区间上的“segment数量和大小”
           final DataSourceState dataSourceState = v == null ? new DataSourceState() : v;
-          // 该数据源的时间轴信息，包含了时间轴以及其上的各个ReferenceCountingSegment对象
-          // ReferenceCountingSegment也是segment，但是ReferenceCountingSegment可以执行运行查询引擎
+          //
+          /**
+           * loadedIntervals是DataSourceState中的Timeline属性，
+           * 用来储存数据源的各时间轴以及其上的各个ReferenceCountingSegment对象
+           * ReferenceCountingSegment相当于adapter对象（segement真正的本体）
+           */
           final VersionedIntervalTimeline<String, ReferenceCountingSegment> loadedIntervals =
               dataSourceState.getTimeline();
-          // 上面一步获取到了该数据源时间轴上的所有ReferenceCountingSegment（loadedIntervals），
-          // 此处根据此次加载的segment的时间区间，从对应数据源上获取所有包含该区间的ReferenceCountingSegment
           final PartitionHolder<ReferenceCountingSegment> entry = loadedIntervals.findEntry(
               segment.getInterval(),
               segment.getVersion()
@@ -252,20 +301,38 @@ public class SegmentManager
           if ((entry != null) && (entry.getChunk(segment.getShardSpec().getPartitionNum()) != null)) {
             log.warn("Told to load an adapter for segment[%s] that already exists", segment.getId());
             resultSupplier.set(false); // 该时间区间上已经存在对应ReferenceCountingSegment对象，则返回false
-          } else {
-            // 此次segment在数据源时间轴上不存在对应的ReferenceCountingSegment对象
-            // 此处为其创建ReferenceCountingSegment对象，并存入
 
+          // 此次segment在数据源时间轴上不存在对应的ReferenceCountingSegment对象
+          } else {
+            /** 此处{@link QueryableIndexSegment#as(Class)}返回的是null */
             IndexedTable table = adapter.as(IndexedTable.class);
             if (table != null) {
               if (dataSourceState.isEmpty() || dataSourceState.numSegments == dataSourceState.tablesLookup.size()) {
                 dataSourceState.tablesLookup.put(segment.getId(), new ReferenceCountingIndexedTable(table));
-              } else {
-                log.error("Cannot load segment[%s] with IndexedTable, no existing segments are joinable", segment.getId());
-              }
-            } else if (dataSourceState.tablesLookup.size() > 0) {
-              log.error("Cannot load segment[%s] without IndexedTable, all existing segments are joinable", segment.getId());
-            }
+
+              } else { log.error("Cannot load segment[%s] with IndexedTable, no existing segments are joinable", segment.getId()); }
+            } else if (dataSourceState.tablesLookup.size() > 0) { log.error("Cannot load segment[%s] without IndexedTable, all existing segments are joinable", segment.getId()); }
+
+            /**
+             * loadedIntervals是DataSourceState中的Timeline属性，
+             * 用来储存数据源的各时间轴以及其上的各个ReferenceCountingSegment对象
+             * ReferenceCountingSegment相当于adapter对象（segement真正的本体）
+             *
+             * ReferenceCountingSegment：相当于adapter的包装类
+             * adapter：是一个Segment对象，其中有两部分很重要
+             * （1）segmentId：由传参segment（缓存信息对象）得来，根据此id可知返回的Segment对象是哪一个segment
+             * （2）segment：根据segment缓存信息对象找到真正segment缓存数据所在的文件夹，
+             * 得到该目录下所有segment相关文件的解析结果对象，一个SimpleQueryableIndex：
+             * SimpleQueryableIndex{@link SimpleQueryableIndex}本身没有逻辑，只是个包装类，将所有的inDir目录下的segment信息存储其中。
+             * 此index对象中较为重要的解析结果为：
+             * 1、metadata：xxxx.smoosh文件中的metadata.drd信息所转化
+             * 2、columns：map类型 key为所有列名，value为该列的包装类
+             * 3、dimensionHandlers：map类型，key为各维度列名，value为该列数据类型对应的handler对象
+             * 4、fileMapper：包含了同文件夹下所有smoosh文件的File对象，以及meta.smoosh内的所有数据信
+             *
+             * 此处相当于把adapter对象与时间轴进行绑定，并存入loadedIntervals，
+             * 也相当于对应的数据源的时间轴上加载了该segment
+             */
             loadedIntervals.add(
                 segment.getInterval(),
                 segment.getVersion(),
@@ -273,24 +340,40 @@ public class SegmentManager
                     ReferenceCountingSegment.wrapSegment(adapter, segment.getShardSpec())
                 )
             );
+            //加载了新的segment，所以dataSourceState内的segment数量和大小都要增加
             dataSourceState.addSegment(segment);
-            resultSupplier.set(true);
-
+            resultSupplier.set(true);// 加载成功
           }
-
+          // 返回新的dataSourceState与作为数据源的value
           return dataSourceState;
         }
     );
 
-    return resultSupplier.get();
+    return resultSupplier.get();// segment加载成功或失败
   }
 
   private Segment getAdapter(final DataSegment segment, boolean lazy) throws SegmentLoadingException
   {
     final Segment adapter;
     try {
-      // 根据信息文件，加载segment并返回
+      // 根据信息文件，找到其真正segment相关smoosh文件所属文件夹，然后将去内容加载成真正segment对象并返回
       /**{@link org.apache.druid.segment.loading.SegmentLoaderLocalCacheManager#getSegment(DataSegment, boolean)}*/
+      /**
+       * segment是缓存信息对象（不是真正的segment对象），
+       * 该segment缓存信息对象原文件所属于/home/operation/software/apache-druid-0.20.1/var/druid/segment-cache/info_dir目录
+       * 根据“缓存信息文件对象”，获取该时间区间上的真正segment缓存数据所在的文件夹对象
+       *
+       * 返回的是一个Segment对象，其中有两部分
+       * （1）segmentId：由传参segment（缓存信息对象）得来，根据此id可知返回的Segment对象是哪一个segment
+       * （2）segment：根据segment缓存信息对象找到真正segment缓存数据所在的文件夹，
+       * 得到该目录下所有segment相关文件的解析结果对象，一个SimpleQueryableIndex：
+       * SimpleQueryableIndex{@link SimpleQueryableIndex}本身没有逻辑，只是个包装类，将所有的inDir目录下的segment信息存储其中。
+       * 此index对象中较为重要的解析结果为：
+       * 1、metadata：xxxx.smoosh文件中的metadata.drd信息所转化
+       * 2、columns：map类型 key为所有列名，value为该列的包装类
+       * 3、dimensionHandlers：map类型，key为各维度列名，value为该列数据类型对应的handler对象
+       * 4、fileMapper：包含了同文件夹下所有smoosh文件的File对象，以及meta.smoosh内的所有数据信
+       */
       adapter = segmentLoader.getSegment(segment, lazy);
     }
     catch (SegmentLoadingException e) {
