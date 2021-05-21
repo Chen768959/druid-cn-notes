@@ -181,7 +181,10 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
            * {@link org.apache.druid.server.SegmentManager#getAdapter(DataSegment, boolean)}
            * {@link org.apache.druid.segment.loading.SegmentLoaderLocalCacheManager#getSegment(DataSegment, boolean)}
            *
-           *
+           * 获取本地所有segment缓存信息文件对象，
+           * 遍历cachedSegments中的每一个缓存信息文件对象，
+           * 将缓存信息文件对象加载成Segment对象，然后放入{@link SegmentManager#dataSources}中与对应的数据源进行绑定，
+           * 后续可由该属性找到各数据源的已加载segment对象
            */
           loadLocalCache();
           serverAnnouncer.announce();
@@ -225,6 +228,12 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
     return started;
   }
 
+  /**
+   * 获取本地所有segment缓存信息文件对象，
+   * 遍历cachedSegments中的每一个缓存信息文件对象，
+   * 将缓存信息文件对象加载成Segment对象，然后放入{@link SegmentManager#dataSources}中与对应的数据源进行绑定，
+   * 后续可由该属性找到各数据源的已加载segment对象
+   */
   private void loadLocalCache()
   {
     // 获取系统当前时间
@@ -282,8 +291,12 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
          .emit();
     }
 
-    // 将segment缓存加载进内存
-    // cachedSegments中包含了所有segment缓存信息文件对象
+    /**
+     * cachedSegments中包含了所有segment缓存信息文件对象，
+     * 遍历cachedSegments中的每一个缓存信息文件对象，
+     * 将缓存信息文件对象加载成Segment对象，然后放入{@link SegmentManager#dataSources}中与对应的数据源进行绑定，
+     * 后续可由该属性找到各数据源的已加载segment对象
+     */
     addSegments(
         cachedSegments,
         () -> log.info("Cache load took %,d ms", System.currentTimeMillis() - start)
@@ -295,16 +308,25 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
    * throw a SegmentLoadingException
    *
    * @throws SegmentLoadingException if it fails to load the given segment
+   *
+   * 将DataSegment加载成Segment对象，然后放入{@link SegmentManager#dataSources}中与对应的数据源进行绑定，
+   * 后续可由该属性找到各数据源的已加载segment对象
    */
   private void loadSegment(DataSegment segment, DataSegmentChangeCallback callback, boolean lazy) throws SegmentLoadingException
   {
     // segment为缓存信息文件的对象实体
     final boolean loaded;
     try {
-      // 根据信息文件加载具体segment文件，
-      // 此处指的加载，实际上是将此segment加载成ReferenceCountingSegment对象，该对象可直接执行查询引擎，
-      // true为新加载，且成功生成为此时间区间上的数据生成ReferenceCountingSegment对象
-      // false表示该数据源，该时间区间上已经生成过ReferenceCountingSegment对象
+      /**
+       * 该方法功能就一句话“将DataSegment加载成Segment对象，然后放入dataSources与对应的数据源进行绑定”
+       * 对应该功能，整个方法分为两部分
+       * 1、调用{@link this#getAdapter(DataSegment, boolean)}方法将DataSegment加载成Segment对象并返回。
+       * 2、{@link dataSources}是个map，表示“各数据源已加载的segment信息”。
+       * 所以该方法第二部分就是把刚刚加载出的segment与数据源的“总加载信息对象”绑定，具体是和时间轴绑定的。
+       * 这样后面查询时，通过某数据源的时间轴信息就直接能从{@link dataSources}中找到其上面的segment对象，用于查询
+       *
+       * 返回segment是否加载成功
+       */
       loaded = segmentManager.loadSegment(segment, lazy);
     }
     catch (Exception e) {
@@ -399,6 +421,7 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
       final CountDownLatch latch = new CountDownLatch(numSegments);
       final AtomicInteger counter = new AtomicInteger(0);
       final CopyOnWriteArrayList<DataSegment> failedSegments = new CopyOnWriteArrayList<>();
+      //加载每一个segment
       for (final DataSegment segment : segments) {
         loadingExecutor.submit(
             () -> {
@@ -409,7 +432,11 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
                     numSegments,
                     segment.getId()
                 );
-                // 加载segment
+                /**
+                 * 加载segment
+                 * 将DataSegment加载成Segment对象，然后放入{@link SegmentManager#dataSources}中与对应的数据源进行绑定，
+                 * 后续可由该属性找到各数据源的已加载segment对象
+                 */
                 loadSegment(segment, callback, config.isLazyLoadOnStart());
                 try {
                   // 将segment传入backgroundSegmentAnnouncer对象内部队列中，等待被广播
