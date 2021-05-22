@@ -158,6 +158,11 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
    * 该方法会检查内部handler对象中是否有@LifecycleStart注解
    * 如果存在，则调用被此注解注解的方法，也就是调用此start()。
    *
+   * {@link this#loadLocalCache()}
+   * 获取本地所有segment缓存信息文件对象，
+   * 遍历cachedSegments中的每一个缓存信息文件对象，
+   * 将缓存信息文件对象加载成Segment对象，然后放入{@link SegmentManager#dataSources}中与对应的数据源进行绑定，
+   * 后续可由该属性找到各数据源的已加载segment对象
    */
   @LifecycleStart
   public void start() throws IOException
