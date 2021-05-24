@@ -52,6 +52,8 @@ import java.util.stream.Collectors;
  *
  * DataSegment's equality ({@link #equals}/{@link #hashCode}) and {@link #compareTo} methods consider only the
  * {@link SegmentId} of the segment.
+ *
+ * 缓存信息对象（每个文件中包含了缓存数据的真正文件路径。其内部是json格式数据）
  */
 @PublicApi
 public class DataSegment implements Comparable<DataSegment>, Overshadowable<DataSegment>

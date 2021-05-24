@@ -411,6 +411,7 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
     }
   }
 
+  // segments：缓存文件对象集合
   private void addSegments(Collection<DataSegment> segments, final DataSegmentChangeCallback callback)
   {
     ExecutorService loadingExecutor = null;

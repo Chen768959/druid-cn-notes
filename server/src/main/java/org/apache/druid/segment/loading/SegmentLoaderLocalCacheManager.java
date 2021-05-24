@@ -145,6 +145,7 @@ public class SegmentLoaderLocalCacheManager implements SegmentLoader
          * 该segment缓存信息对象原文件所属于/home/operation/software/apache-druid-0.20.1/var/druid/segment-cache/info_dir目录
          * 根据“缓存信息文件对象”，获取该时间区间上的真正segment缓存数据所在的文件夹对象
          *
+         * 此处获得的segmentFiles是缓存segment文件所在文件夹
          * 如（apache-druid-0.20.1/var/druid/segment-cache/test-file/2020-03-01T00:00:00.000Z_2020-04-01T00:00:00.000Z/2021-03-11T12:41:03.686Z/0）
          */
         segmentFiles = getSegmentFiles(segment);
