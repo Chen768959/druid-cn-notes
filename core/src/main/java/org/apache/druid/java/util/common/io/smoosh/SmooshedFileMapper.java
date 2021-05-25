@@ -136,11 +136,12 @@ public class SmooshedFileMapper implements Closeable
    * Returns a mapped buffer of the smooshed file with the given name. Buffer's contents from 0 to capacity() are the
    * whole mapped file contents, limit() is equal to capacity().
    *
-   * 返回meta.smoosh中name信息所在xxxx.smoosh的文件中的始末位置内容的内存映射，
-   * 如name为index.drd，
-   * 那么此处就是先获取index.drd所属于哪一个xxxx.smoosh，转化成该文件bytebuffer，
-   * 再讲读取位置限定到index.drd信息的始末位置，
-   * 这样该方法返回的ByteBuffer就是name信息真正内容的bytebuffer
+   * 该方法作用：
+   * 从某个smoosh文件中，找name名所指的信息，并以ByteBuffer的形式返回
+   *
+   * name是某个smoosh文件中的一个“字段名”，如某个列名、index.drd、metadata.drd等，其目的就是找到smoosh文件中这部分数据的具体内容
+   * 该name所在的smoosh文件在该方法中都会利用内存映射技术被映射成bytebuffer对象，然后存放于{@link this#buffersList}
+   * （已经映射过的smoosh文件不会重复映射）
    */
   public ByteBuffer mapFile(String name) throws IOException
   {
@@ -160,15 +161,23 @@ public class SmooshedFileMapper implements Closeable
     // 根据name信息所属文件编号，找到buffersList中对应对象，新加载name信息，自然对应为null
     MappedByteBuffer mappedBuffer = buffersList.get(fileNum);
     if (mappedBuffer == null) {
-      // 获取name信息所属文件的内存映射，实际调用的是jdk中的MappedByteBuffer，会受到文件大小不能超过2G的限制
+      /**
+       * 此处通过内存映射技术，
+       * 将第fileNum位xxxx.smoosh文件“完全”映射到内存上，
+       * （实际调用的是jdk中的MappedByteBuffer，会受到文件大小不能超过2G的限制，所以smoosh文件不能超过2G）
+       */
       mappedBuffer = Files.map(outFiles.get(fileNum));
-      // 填充回buffersList，下次无需重复获取
+      // 填充回buffersList，下次无需重复映射该smoosh文件
       buffersList.set(fileNum, mappedBuffer);
     }
 
-    // 创建共享此缓冲区内容的新byte缓冲区，retVal中的内容就是name信息所属文件的内存映射
+    // 创建个和mappedBuffer一样的内存缓冲区，对新缓冲区的任何操作，都会同样反映在原缓冲区上
     ByteBuffer retVal = mappedBuffer.duplicate();
-    // 将读取位置固定到name信息的始末位置
+
+    /**
+     * 将整个smoosh文件的读取始末位置定位成“name名”所指数据的始末位置，
+     * 接下来slice就直接单把这部分数据“切”下来，并返回
+     */
     retVal.position(metadata.getStartOffset()).limit(metadata.getEndOffset());
     return retVal.slice();
   }
