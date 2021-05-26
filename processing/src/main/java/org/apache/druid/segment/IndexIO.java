@@ -566,12 +566,14 @@ public class IndexIO
       SmooshedFileMapper smooshedFiles = Smoosh.map(inDir);
 
       // 解析出index.drd的真正内容，即返回的indexBuffer就是index.drd在所属xxxx.smoosh文件中的真正数据
+      // （index.drd包含了所属的segment中有哪些维度、时间区间、以及使用哪种bitmap）
       ByteBuffer indexBuffer = smooshedFiles.mapFile("index.drd");
       /**
        * Index.drd should consist of the segment version, the columns and dimensions of the segment as generic
        * indexes, the interval start and end millis as longs (in 16 bytes), and a bitmap index type.
        */
-      // 读取indexBuffer也就是index.drd中的内容，每次读取一部分，其读取长度由首int决定，
+      // 读取indexBuffer也就是index.drd中的内容（index.drd包含了所属的segment中有哪些维度、时间区间、以及使用哪种bitmap。）
+      // 每次读取一部分，其读取长度由首int决定，
       // 每次开始读的第一位都是int型，指定了后续一段内容的结束长度，
       // 下次再调用read方法后，就接着上次的位置再读取接下来的首位int所指定的长度内容。
       // 所以此处连续两次read能读出cols和dims
@@ -581,13 +583,13 @@ public class IndexIO
       // 在需要解析值时，再从buffer中依次读取，
       // read方法返回的GenericIndexed对象也提供迭代器方法用于获得buffer中的各个值内容。
 
-      // cols为该数据源的所有列名
+      // 从indexBuffer中解析出该segment的所有列名
       final GenericIndexed<String> cols = GenericIndexed.read(
           indexBuffer,
           GenericIndexed.STRING_STRATEGY,
           smooshedFiles
       );
-      // dims为所有的“维度”列名，即其中不包含count列和value列，dims中的所有列在上面cols中也都能找到
+      // 从indexBuffer中解析出该segment的所有“维度”列名，（其中不包含count列和value列，dims中的所有列在上面cols中也都能找到）
       final GenericIndexed<String> dims = GenericIndexed.read(
           indexBuffer,
           GenericIndexed.STRING_STRATEGY,
@@ -609,6 +611,7 @@ public class IndexIO
 
       Metadata metadata = null;
       // 解析出metadata.drd的真正内容，即返回的byteBuffer就是metadata.drd在所属xxxx.smoosh文件中的真正数据的buffer
+      //（metadata.drd存储了指标聚合函数、查询粒度、时间戳配置等）
       ByteBuffer metadataBB = smooshedFiles.mapFile("metadata.drd");
       if (metadataBB != null) {
         try {
