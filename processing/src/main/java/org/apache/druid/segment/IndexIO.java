@@ -528,8 +528,14 @@ public class IndexIO
     }
 
     /**
-     * 历史节点启动时会调用此方法，解析inDir目录
+     * 解析inDir目录中的所有segment文件
      * inDir目录为此次需要被加载的时间区间的缓存目录，目录里包含了segment缓存数据文件，以及版本号等文件
+     *
+     * 此方法中不断调用{@link SmooshedFileMapper#mapFile(String)}来加载该目录下的smoosh文件中的各种数据的具体值，
+     * 如mapFile("index.drd")就是加载smoosh文件中index.drd信息的bytebuffer
+     * mapFile("xxx列名")就是加载smoosh文件中xxx列的所有值的bytebuffer。
+     *
+     * 然后将所有的bytebuffer结果都装进{@link SimpleQueryableIndex}对象中并返回
      *
      * 最终返回的{@link SimpleQueryableIndex}本身没有逻辑，只是个包装类，将所有的inDir目录下的segment信息存储其中。
      * 此index对象中较为重要的解析结果为：
@@ -672,6 +678,7 @@ public class IndexIO
 
       }
 
+      // 从segment中解析出__time列
       ByteBuffer timeBuffer = smooshedFiles.mapFile("__time");
 
       if (lazy) {
