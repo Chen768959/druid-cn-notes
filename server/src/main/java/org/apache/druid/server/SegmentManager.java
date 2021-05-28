@@ -259,6 +259,9 @@ public class SegmentManager
      * 2、columns：map类型 key为所有列名，value为该列的包装类
      * 3、dimensionHandlers：map类型，key为各维度列名，value为该列数据类型对应的handler对象
      * 4、fileMapper：包含了同文件夹下所有smoosh文件的File对象，以及meta.smoosh内的所有数据信
+     *
+     * 也可以说该adapter是：“某数据源的某时间片段的segment的所有信息”
+     * adapter中的数据来自文件夹如“apache-druid-0.20.1/var/druid/segment-cache/test-file/2020-03-01T00:00:00.000Z_2020-04-01T00:00:00.000Z/2021-03-11T12:41:03.686Z/0”
      */
     final Segment adapter = getAdapter(segment, lazy);
 
@@ -314,7 +317,14 @@ public class SegmentManager
             } else if (dataSourceState.tablesLookup.size() > 0) { log.error("Cannot load segment[%s] without IndexedTable, all existing segments are joinable", segment.getId()); }
 
             /**
-             * loadedIntervals是DataSourceState中的Timeline属性，
+             * 当前this中有一个{@link this#dataSources}
+             * dataSources是个map，表示“各数据源已加载的segment信息”
+             * key：各数据源名称，
+             * value：即该数据源上的“总加载信息”，其中包含2个重要属性
+             * （1）该数据源已加载的所有segment数量和大小
+             * （2）Timeline:“用来储存该数据源的各时间轴以及其上的各个ReferenceCountingSegment对象(segement真正的本体)”
+             *
+             * 此处的loadedIntervals就是{@link this#dataSources}的value——{@link DataSourceState}中的Timeline属性，
              * 用来储存数据源的各时间轴以及其上的各个ReferenceCountingSegment对象
              * ReferenceCountingSegment相当于adapter对象（segement真正的本体）
              *
@@ -373,6 +383,8 @@ public class SegmentManager
        * 2、columns：map类型 key为所有列名，value为该列的包装类
        * 3、dimensionHandlers：map类型，key为各维度列名，value为该列数据类型对应的handler对象
        * 4、fileMapper：包含了同文件夹下所有smoosh文件的File对象，以及meta.smoosh内的所有数据信
+       *
+       * 也可以说该adapter是：“某数据源的某时间片段的segment的所有信息”
        */
       adapter = segmentLoader.getSegment(segment, lazy);
     }

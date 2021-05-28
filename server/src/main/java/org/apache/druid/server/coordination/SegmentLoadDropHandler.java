@@ -163,6 +163,44 @@ public class SegmentLoadDropHandler implements DataSegmentChangeHandler
    * 遍历cachedSegments中的每一个缓存信息文件对象，
    * 将缓存信息文件对象加载成Segment对象，然后放入{@link SegmentManager#dataSources}中与对应的数据源进行绑定，
    * 后续可由该属性找到各数据源的已加载segment对象
+   *
+   * =====================================================================================================================
+   * 加载总逻辑：
+   * 1、首先获取获取info_dir路径，如：apache-druid-0.20.1/var/druid/segment-cache/info_dir。
+   * 该路径包含了“缓存信息文件”（并不是缓存数据），每个文件中包含了缓存数据的真正文件路径。其内部是json格式数据
+   *
+   * 2、遍历并加载所有“缓存信息文件”为List<DataSegment>对象
+   *
+   * 3、遍历每一个缓存文件对象，找到对应真正的segment缓存文件夹路径，
+   * （如：apache-druid-0.20.1/var/druid/segment-cache/test-file/2020-03-01T00:00:00.000Z_2020-04-01T00:00:00.000Z/2021-03-11T12:41:03.686Z/0）
+   * 该文件夹下包含：
+   * （1）factory.json：文件中只有一个信息，指定了SegmentizerFactory，即用哪一种工厂类，可以加载这些segment文件
+   * （2）meta.smoosh：其中记录了各种数据在当前文件夹下xxxx.smoosh中的始末位置。
+   * （3）0000.smoosh：包含3部分，各列数据、index.drd数据、metadata.drd数据。
+   * index.drd数据：包含了所属的segment中有哪些维度、时间区间、以及使用哪种bitmap。
+   * metadata.drd数据：存储了指标聚合函数、查询粒度、时间戳配置等
+   *
+   * 4、使用从factory.json中加载出来的工厂类来加载文件夹中xxxx.smoosh文件的segment缓存信息。
+   * 所谓“加载”，就是将整个xxxx.smoosh文件以“内存映射”的方式映射到内存，并以bytebuffer的格式存在历史节点中。
+   * 每次加载数据，都是从这个bytebuffer中截取对应数据的bytebuffer片段。
+   * 首先加载index.drd信息，得到所有列名。
+   * 再加载metadata.drd信息。
+   * 再根据刚刚得到的列名，加载每列的具体值。
+   * 再加载__time列的值。
+   * 最后加载完毕，相当于得到了缓存文件对象所指的segment缓存文件夹内的segment的所有数据，数据以bytebuffer的形式储存，再将这些数据装进包装类并返回。
+   *
+   * 5、第4步中得到一个“缓存文件对象”的segment详情包装对象“adapter”，
+   * 也可以说该adapter是：“某数据源的某时间片段的segment的所有信息”。
+   * adapter中的数据来自文件夹如“apache-druid-0.20.1/var/druid/segment-cache/test-file/2020-03-01T00:00:00.000Z_2020-04-01T00:00:00.000Z/2021-03-11T12:41:03.686Z/0”
+   * （以上adapter对象的获取发生在SegmentManager中）
+   * SegmentManager中还有一个“dataSources”Map属性，
+   * key：各数据源名称，
+   * value：即该数据源上的“总加载信息”，其中包含了数据源的各时间轴上的segment信息（也就是上面所说的adapter对象）。
+   *
+   * 接下来就是将adapter放入SegmentManager的dataSources属性中，
+   * 找到对应数据源，然后放入其value的对应时间轴中。
+   *
+   * 至此所有缓存信息都以“时间轴为单位”，加载成segment对象，并放入SegmentManager的dataSources属性中。
    */
   @LifecycleStart
   public void start() throws IOException
