@@ -217,6 +217,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
 
   /**
    * Constructor for version one.
+   * buffer：包含long类型的每行结果
    */
   GenericIndexed(
       ByteBuffer buffer,
@@ -610,6 +611,13 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
 
   private BufferIndexed singleThreadedVersionOne()
   {
+    /**
+     * 此时每行long结果就已在firstValueBuffer中了
+     *
+     * 而firstValueBuffer在当前对象的构造方法中
+     * {@link GenericIndexed#GenericIndexed(ByteBuffer, ObjectStrategy, boolean)}
+     * 就作为参数被传进来了
+     */
     final ByteBuffer copyBuffer = firstValueBuffer.asReadOnlyBuffer();
     return new BufferIndexed()
     {
@@ -619,8 +627,6 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
         /**
          * 进入此方法时，需要get的数据已被写在copyBuffer中
          */
-
-        log.info("!!!：singleThreadedLongBuffers.get（1）");
 
         log.info("!!!：创建新BufferIndexed，获取GenericIndexed中copyBuffer");
         if (firstValueBuffer!=null){

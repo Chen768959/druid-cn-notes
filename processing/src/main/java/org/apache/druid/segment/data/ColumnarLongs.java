@@ -194,13 +194,7 @@ public interface ColumnarLongs extends Closeable
       public long[] getLongVector()
       {
         log.info("!!!：进入getLongVector，当前类"+this.getClass());
-        for (long a:longVector){
-          if (a!=0){
-            log.info("!!!：selector.getLongVector，计算之前:"+a);
-          }
-        }
-
-        // 该方法进行longVector数组的计算
+        // 该方法进行longVector数组的计算，执行该方法之前longVector中没有值
         computeVectorsIfNeeded();
         for (long a:longVector){
           if (a!=0){

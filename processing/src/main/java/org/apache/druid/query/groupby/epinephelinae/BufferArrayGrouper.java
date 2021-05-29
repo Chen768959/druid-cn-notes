@@ -232,7 +232,8 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
         initializeSlotIfNeeded(dimIndex);
       }
       /**
-       * 查询聚合结果
+       * 查询聚合结果，并填充valBuffer
+       * {@link AggregatorAdapters#aggregateVector(ByteBuffer, int, int[], int[])}
        */
       aggregators.aggregateVector(
           valBuffer,

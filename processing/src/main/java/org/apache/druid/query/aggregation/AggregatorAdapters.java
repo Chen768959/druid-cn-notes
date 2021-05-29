@@ -312,6 +312,16 @@ public class AggregatorAdapters implements Closeable
        * 而这查询结果其底层是StupidPool队列返回的holder中的数据
        */
       log.info("!!!：aggregateVector，adapter类型："+adapter.getClass()+"...VectorAggregator类型："+adapter.asVectorAggregator().getClass());
+
+      /**
+       * adapter.asVectorAggregator()获取“聚合器”
+       * 聚合器本身不储存数据，只是提供各种聚合方法，我们以long类型的sum聚合器为例
+       * {@link LongSumVectorAggregator}
+       *
+       * 其aggregate()方法就是具体聚合计算方法
+       * {@link LongSumVectorAggregator#aggregate(ByteBuffer, int, int[], int[], int)}
+       *
+       */
       adapter.asVectorAggregator().aggregate(buf, numRows, positions, rows, aggregatorPositions[i]);
     }
   }

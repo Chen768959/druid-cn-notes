@@ -41,6 +41,16 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
   private final CompressionFactory.LongEncodingReader baseReader;
 
   // 历史节点启动时调用此逻辑传入buffer
+  /**
+   * 该构造方法最主要的是创建了“GenericIndexed对象”，baseLongBuffers属性
+   *
+   * @param totalSize 头部第一个int
+   * @param sizePer 头部第二个int
+   * @param fromBuffer 其中包含了指定列的所有值，目前头部的size和压缩id等已读完
+   * @param order 排序规则
+   * @param reader 编码读取器
+   * @param strategy 压缩策略
+   */
   public BlockLayoutColumnarLongsSupplier(
       int totalSize,
       int sizePer,
@@ -179,6 +189,7 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
   private class BlockLayoutColumnarLongs implements ColumnarLongs
   {
     final CompressionFactory.LongEncodingReader reader = baseReader.duplicate();
+    /** {@link GenericIndexed#singleThreadedVersionOne()} */
     final Indexed<ResourceHolder<ByteBuffer>> singleThreadedLongBuffers = baseLongBuffers.singleThreaded();
 
     int currBufferNum = -1;
@@ -212,14 +223,14 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
 
     /**
      * 当前批次为连续时间范围
+     *
+     * out为long类型数组，也是我们一个adapter要查询的结果，
+     * 此get方法的目的就是要将long类型的每行记录放入此out数组中
+     * （long类型的每行记录可能是行记录的时间戳，也可能是long类型列中的每行记录）
      */
     @Override
     public void get(final long[] out, final int start, final int length)
     {
-      /**
-       * out为long类型数组，也是我们一个adapter要查询的结果，
-       * 可能是行记录的时间戳，也可能是long类型列中的每行记录
-       */
       log.info("!!!：进入BlockLayoutColumnarLongsSupplier.get(final long[] out, final int start, final int length)");
       // division + remainder is optimized by the compiler so keep those together
       int bufferNum = start / sizePer;
@@ -236,6 +247,10 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
            * 此处的buffer由以下逻辑获得：
            * holder = singleThreadedLongBuffers.get(bufferNum);
            * buffer = holder.get();
+           *
+           * holder = singleThreadedLongBuffers.get(bufferNum);为以下匿名对象中的get方法
+           * {@link GenericIndexed#singleThreadedVersionOne()}
+           *
            */
           loadBuffer(bufferNum);
         }
@@ -276,6 +291,15 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
     protected void loadBuffer(int bufferNum)
     {
       CloseQuietly.close(holder);
+      /**
+       * singleThreadedLongBuffers.get实为：
+       * {@link GenericIndexed.BufferIndexed#singleThreadedVersionOne()}.get(final int index)
+       * 此次查询所需的long类型行数据就在此holder中，
+       *
+       * 但其实在创建singleThreadedLongBuffers时
+       *
+       *
+       */
       holder = singleThreadedLongBuffers.get(bufferNum);
       buffer = holder.get();
       currBufferNum = bufferNum;

@@ -58,7 +58,13 @@ public class LongSumVectorAggregator implements VectorAggregator
   }
 
   /**
-   * 该方法被循环调用
+   * ！！！“调用selector获取启动时加载的行数据，然后再累加到buf中”
+   *
+   * @param buf 存放聚合结果
+   * @param numRows
+   * @param positions
+   * @param rows
+   * @param positionOffset
    */
   @Override
   public void aggregate(
@@ -72,18 +78,21 @@ public class LongSumVectorAggregator implements VectorAggregator
     log.info("!!!：LongSumVectorAggregator，selector类型："+selector.getClass());
     /**
      * selector：ColumnarLongsVectorValueSelector
-     * 由{@link org.apache.druid.segment.data.ColumnarLongs#makeVectorValueSelector}创建
+     * 由{@link org.apache.druid.segment.data.ColumnarLongs#makeVectorValueSelector}创建，
+     * getLongVector()也在其中定义
      *
-     * 其getLongVector()
+     * vector中包含了“待聚合的数据”
      */
     final long[] vector = selector.getLongVector();
 
     // 按一定算法将vector中数据填充进buffer中
     for (int i = 0; i < numRows; i++) {
       final int position = positions[i] + positionOffset;
+      // value为累加结果，每次将position位置的值加上vector中的值形成新的累加结果
       long value = buf.getLong(position) + vector[rows != null ? rows[i] : i];
-      log.info("!!!：LongSumVectorAggregator.aggregate聚合结果"+i+"："+value);
       buf.putLong(position, value);
+
+      log.info("!!!：LongSumVectorAggregator.aggregate聚合结果"+i+"："+value);
     }
   }
 

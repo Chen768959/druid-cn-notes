@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Suppliers;
 import org.apache.datasketches.memory.Memory;
 import org.apache.datasketches.memory.WritableMemory;
+import org.apache.druid.collections.StupidPool;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.guava.BaseSequence;
 import org.apache.druid.java.util.common.guava.Sequence;
@@ -123,6 +124,16 @@ public class VectorGroupByEngine
             });
   }
 
+  /**
+   *
+   * @param query
+   * @param storageAdapter
+   * @param processingBuffer 从{@link StupidPool#take()}获取的bufferHolder中，调用get获取的bytebuffer
+   * @param fudgeTimestamp
+   * @param filter
+   * @param interval
+   * @param config
+   */
   public static Sequence<ResultRow> process(
       final GroupByQuery query,
       final StorageAdapter storageAdapter,
@@ -140,6 +151,7 @@ public class VectorGroupByEngine
     return new BaseSequence<>(
         new BaseSequence.IteratorMaker<ResultRow, CloseableIterator<ResultRow>>()
         {
+
           /**
            * 以下make方法为后续Sequence转Yielder时，或者toList等被调用时，才会被调用，
            * 也是真正的查询结果的执行方法
@@ -437,6 +449,7 @@ public class VectorGroupByEngine
       return grouper;
     }
 
+    // 初始化，且填充buffer
     private CloseableGrouperIterator<Memory, ResultRow> initNewDelegate()
     {
       // Method must not be called unless there's a current bucketInterval.
@@ -466,6 +479,7 @@ public class VectorGroupByEngine
 
           // Aggregate this vector.
           // 查询聚合结果
+          /**{@link BufferArrayGrouper#aggregateVector(Memory, int, int)}*/
           final AggregateResult result = vectorGrouper.aggregateVector(
               keySpace,
               startOffset,

@@ -641,11 +641,8 @@ public class IndexIO
       // key为列名，value为该列的包装类
       Map<String, Supplier<ColumnHolder>> columns = new HashMap<>();
 
-      /**   {@link GenericIndexed#get(int)}
-       * -> {@link GenericIndexed#getVersionOne(int)}
-       * -> {@link GenericIndexed#copyBufferAndGet(ByteBuffer, int, int)}
-       *
-       * 即从GenericIndexed<String> cols中的bytebuffer中，依次解析出具体值并返回
+      /**
+       * cols是上面解析出来的segment的所有列名，此处迭代每一个列名。
        */
       for (String columnName : cols) {
         if (Strings.isNullOrEmpty(columnName)) {
@@ -669,9 +666,10 @@ public class IndexIO
               }
           ));
         } else {
-          // mapper：json解析工具
-          // colBuffer：bytebuffer，其中包含了指定列的所有值
-          // smooshedFiles：包含了meta.smoosh同文件夹下的所有smoosh文件的File对象，以及meta.smoosh内的所有数据信息
+          /**
+           * colBuffer是指定列的所有值信息buffer
+           * 此处deserializeColumn()目的是将该列的colBuffer转化成包装类columnHolder对象，便于后面的使用
+           */
           ColumnHolder columnHolder = deserializeColumn(mapper, colBuffer, smooshedFiles);
           columns.put(columnName, () -> columnHolder);
         }
@@ -694,12 +692,7 @@ public class IndexIO
         ));
       } else {
         /**
-         * 最终目的是解析出指定列的包装类，通过此包装类可直接返回列中各个信息
-         * 返回的是{@link SimpleColumnHolder}对象，
-         * 该对象中包含了两个比较重要的参数，
-         * 1、capabilitiesBuilder:capabilitiesBuilder包含了列的数据类型等列描述信息。
-         * 2、其中包含了一个{@link BlockLayoutColumnarLongsSupplier}简单工厂，该工厂在创建时拥有了“包含该列所有值信息的bytebuffer”
-         * 该工厂get方法可根据以上信息构建{@link org.apache.druid.segment.data.ColumnarLongs}对象.
+         * 此处deserializeColumn()目的是解析出"__time"列的各个信息，最终返回这些信息的包装类columnHolder
          */
         ColumnHolder columnHolder = deserializeColumn(mapper, timeBuffer, smooshedFiles);
 

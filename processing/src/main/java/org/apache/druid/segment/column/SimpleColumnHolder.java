@@ -38,7 +38,7 @@ import javax.annotation.Nullable;
  * 2、其中包含了一个{@link BlockLayoutColumnarLongsSupplier}简单工厂，该工厂在创建时拥有了“包含该列所有值信息的bytebuffer”
  * 该工厂get方法可根据以上信息构建{@link org.apache.druid.segment.data.ColumnarLongs}对象.
  */
-class SimpleColumnHolder implements ColumnHolder
+public class SimpleColumnHolder implements ColumnHolder
 {
   // 包含了列的数据类型等列描述信息
   private final ColumnCapabilities capabilities;
