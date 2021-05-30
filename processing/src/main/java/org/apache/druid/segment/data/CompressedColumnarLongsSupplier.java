@@ -109,11 +109,14 @@ public class CompressedColumnarLongsSupplier implements Supplier<ColumnarLongs>,
   }
 
   /**
-   * 解析出压缩策略等信息，然后把这些信息以及buffer全部传给{@link BlockLayoutColumnarLongsSupplier}简单工厂，
-   * 该工厂get方法可根据以上信息构建{@link ColumnarLongs}对象，
-   *
    * @param buffer bytebuffer，其中包含了指定列的所有值
-   * @param order 该列排序格式
+   * @param order 该列排序格式。
+   *
+   * 该fromByteBuffer()方法中创建一个匿名函数包装类{@link BlockLayoutColumnarLongsSupplier#BlockLayoutColumnarLongsSupplier(int, int, ByteBuffer, ByteOrder, CompressionFactory.LongEncodingReader, CompressionStrategy)}
+   * 该对象中包含了{@link GenericIndexed}，其是该列信息的包装类，后续聚合查询也是通过此对象查询指定列的各行信息。
+   * 该匿名函数包装类对象的get()方法提供ColumnarLongs类型数据，也就是其对应的“列”的信息对象
+   *
+   * 最后将{@link BlockLayoutColumnarLongsSupplier}装入{@link CompressedColumnarLongsSupplier}并返回
    */
   public static CompressedColumnarLongsSupplier fromByteBuffer(ByteBuffer buffer, ByteOrder order)
   {
@@ -138,9 +141,10 @@ public class CompressedColumnarLongsSupplier implements Supplier<ColumnarLongs>,
         compression = CompressionStrategy.forId(compressionId);
       }
 
-      /** 返回{@link BlockLayoutColumnarLongsSupplier}工厂
-       * （Supplier类型对象为简单工厂模式，其作用是通过get方法创造所需类型对象）
-       * 此处只是将这些参数都传入工厂，并返回工厂对象
+      /**
+       * 返回：匿名函数包装类{@link BlockLayoutColumnarLongsSupplier}
+       * 该对象中包含了{@link GenericIndexed}，其是该列信息的包装类，后续聚合查询也是通过此对象查询指定列的各行信息。
+       * 该匿名函数包装类对象的get()方法提供ColumnarLongs类型数据，也就是其对应的“列”的信息对象
        */
       Supplier<ColumnarLongs> supplier = CompressionFactory.getLongSupplier(
           totalSize,

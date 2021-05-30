@@ -29,6 +29,10 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.LongBuffer;
 
+/**
+ * 一个BlockLayoutColumnarLongsSupplier对象，对应一个GenericIndexed对象，
+ * 对应一个“fromBuffer”，也对应“一个列的所有值内容
+ */
 public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
 {
   private final GenericIndexed<ResourceHolder<ByteBuffer>> baseLongBuffers;
@@ -42,7 +46,9 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
 
   // 历史节点启动时调用此逻辑传入buffer
   /**
-   * 该构造方法最主要的是创建了“GenericIndexed对象”，baseLongBuffers属性
+   * 该构造方法最主要的是创建了“GenericIndexed对象”，baseLongBuffers属性。
+   * 所以一个BlockLayoutColumnarLongsSupplier对象，对应一个GenericIndexed对象，
+   * 对应一个“fromBuffer”，也对应“一个列的所有值内容”
    *
    * @param totalSize 头部第一个int
    * @param sizePer 头部第二个int
@@ -61,6 +67,7 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
   )
   {
     new Logger(GenericIndexed.class).info("GenericIndexed.read 777777777777777");
+    // 将fromBuffer解析成GenericIndexed对象
     baseLongBuffers = GenericIndexed.read(fromBuffer, new DecompressingByteBufferObjectStrategy(order, strategy));
     this.totalSize = totalSize;
     this.sizePer = sizePer;

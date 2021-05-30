@@ -317,7 +317,9 @@ public class CompressionFactory
    * @param encodingFormat 编码
    * @param strategy 压缩策略
    *
-   * @return com.google.common.base.Supplier<org.apache.druid.segment.data.ColumnarLongs>
+   * 返回：匿名函数包装类{@link BlockLayoutColumnarLongsSupplier}
+   * 该对象中包含了{@link GenericIndexed}，其是该列信息的包装类，后续聚合查询也是通过此对象查询指定列的各行信息。
+   * 该匿名函数包装类对象的get()方法提供ColumnarLongs类型数据，也就是其对应的“列”的信息对象
    */
   public static Supplier<ColumnarLongs> getLongSupplier(
       int totalSize,
@@ -330,7 +332,12 @@ public class CompressionFactory
   {
     if (strategy == CompressionStrategy.NONE) {
       return new EntireLayoutColumnarLongsSupplier(totalSize, encodingFormat.getReader(fromBuffer, order));
-    } else {// 进入此条件
+    } else {
+      /**
+       * 进入此条件
+       * 根据某列的buffer信息“fromBuffer”，创建BlockLayoutColumnarLongsSupplier对象
+       * 该对象中包含了{@link GenericIndexed}，其是该列信息的包装类，后续聚合查询也是通过此对象查询指定列的各行信息
+       */
       return new BlockLayoutColumnarLongsSupplier(
           totalSize,
           sizePer,

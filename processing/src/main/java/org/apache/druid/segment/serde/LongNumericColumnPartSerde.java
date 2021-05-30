@@ -27,10 +27,13 @@ import org.apache.druid.segment.column.ValueType;
 import org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier;
 import org.apache.druid.segment.data.ColumnarLongs;
 import org.apache.druid.segment.data.CompressedColumnarLongsSupplier;
+import org.apache.druid.segment.data.CompressionFactory;
+import org.apache.druid.segment.data.CompressionStrategy;
 import org.apache.druid.segment.data.GenericIndexed;
 
 import javax.annotation.Nullable;
 
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
@@ -109,8 +112,14 @@ public class LongNumericColumnPartSerde implements ColumnPartSerde
      */
     return (buffer, builder, columnConfig) -> {
       /**
-       * 解析出压缩策略等信息，然后把这些信息以及buffer全部传给{@link BlockLayoutColumnarLongsSupplier}简单工厂，
-       * 该工厂get方法可根据以上信息构建{@link ColumnarLongs}对象.
+       * 该fromByteBuffer()方法中创建一个匿名函数包装类{@link BlockLayoutColumnarLongsSupplier#BlockLayoutColumnarLongsSupplier(int, int, ByteBuffer, ByteOrder, CompressionFactory.LongEncodingReader, CompressionStrategy)}
+       * 该对象中包含了{@link GenericIndexed}，其是该列信息的包装类，后续聚合查询也是通过此对象查询指定列的各行信息。
+       * 该匿名函数包装类对象的get()方法提供ColumnarLongs类型数据，也就是其对应的“列”的信息对象
+       *
+       * 最后将{@link BlockLayoutColumnarLongsSupplier}装入{@link CompressedColumnarLongsSupplier}并返回
+       *
+       * CompressedColumnarLongsSupplier的get方法实际上就是调用其内部{@link BlockLayoutColumnarLongsSupplier#get()}方法，
+       * 然后获取指定列的{@link ColumnarLongs}对象，后续查询时也是通过此对象对列信息进行访问
        */
       final CompressedColumnarLongsSupplier column = CompressedColumnarLongsSupplier.fromByteBuffer(
           buffer,

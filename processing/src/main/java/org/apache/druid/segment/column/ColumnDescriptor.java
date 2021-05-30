@@ -28,6 +28,8 @@ import org.apache.druid.java.util.common.io.smoosh.FileSmoosher;
 import org.apache.druid.java.util.common.io.smoosh.SmooshedFileMapper;
 import org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier;
 import org.apache.druid.segment.data.ColumnarLongs;
+import org.apache.druid.segment.data.CompressionFactory;
+import org.apache.druid.segment.data.CompressionStrategy;
 import org.apache.druid.segment.serde.ColumnPartSerde;
 import org.apache.druid.segment.serde.LongNumericColumnPartSerde;
 import org.apache.druid.segment.serde.Serializer;
@@ -36,6 +38,7 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
@@ -133,15 +136,16 @@ public class ColumnDescriptor implements Serializer
      */
     for (ColumnPartSerde part : parts) {
       /**
-       * {@link LongNumericColumnPartSerde#getDeserializer()}：
-       * 该方法返回了一个匿名函数，也就是这个read方法，
+       * part.getDeserializer().read(buffer, builder, columnConfig)目的只是将buffer的列信息解析成对象后放入builder中。
+       * 其实际调用{@link LongNumericColumnPartSerde#getDeserializer()}返回的匿名函数：
+       * 具体逻辑如下：
        *
-       * 其调用.read(buffer, builder, columnConfig)，
-       * 就是调用{@link LongNumericColumnPartSerde#getDeserializer()}返回的匿名函数：
-       * read()方法解析出了当前列的类型、压缩策略、排序、编码等信息，
-       * 然后又创建了个{@link BlockLayoutColumnarLongsSupplier}简单工厂，
-       * 该工厂get方法可根据以上信息构建{@link ColumnarLongs}对象.
-       * 最后把这些信息全部传给builder对象。
+       * 首先会创建一个匿名函数包装类{@link BlockLayoutColumnarLongsSupplier#BlockLayoutColumnarLongsSupplier(int, int, ByteBuffer, ByteOrder, CompressionFactory.LongEncodingReader, CompressionStrategy)}
+       * 该对象作用是提供get方法，返回{@link ColumnarLongs}对象，后续聚合查询时也是通过此对象对列信息进行访问。
+       *
+       * 然后又加了一个包装类{@link CompressedColumnarLongsSupplier}，其get方法就是调用的上述get方法获取ColumnarLongs对象，
+       *
+       * 最后将{@link CompressedColumnarLongsSupplier}装入builder
        */
       part.getDeserializer().read(buffer, builder, columnConfig);
     }
