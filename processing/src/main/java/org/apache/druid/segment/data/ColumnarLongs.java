@@ -235,10 +235,25 @@ public interface ColumnarLongs extends Closeable
           offsetMark = offset.getStartOffset() + offset.getCurrentVectorSize();
 
           /**
-           * 将数据填充进longVector
+           * 此方法的最终目的是将指定列的数据填充进longVector
            *
-           * 此处调用
-           * {@link org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier.BlockLayoutColumnarLongs#get(long[], int, int)}
+           * ColumnarLongs.this.get()
+           * 这种写法是调用“匿名函数对象的外部对象的get方法”，
+           * 当前匿名对象是通过某个ColumnarLongs的子类的makeVectorValueSelector()创建返回的，
+           * 所以此处的ColumnarLongs.this指的就是这个ColumnarLongs的子类对象。
+           *
+           * 而这个外部类：ColumnarLongs.this对象中“含有指定列的所有值信息”
+           * todo 为了找到这个外部类ColumnarLongs.this对象，就得知道是“谁调用了makeVectorValueSelector()”方法获取内部类
+           * todo 当前内部类存在于聚合器{@link LongSumVectorAggregator#selector}属性上，
+           * todo 找到其外部类就是要找到{@link LongSumVectorAggregator#selector}selector属性是在哪里被赋值的，
+           * todo 在哪里由那个外部类通过调用此makeVectorValueSelector()所创建的selector
+           *
+           * 该外部类为
+           * {@link org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier.BlockLayoutColumnarLongs}
+           * 其从属于{@link BlockLayoutColumnarLongsSupplier}
+           * 一个BlockLayoutColumnarLongsSupplier对象，对应一个GenericIndexed对象，
+           * 对应一个“fromBuffer”，也对应“一个列的所有值内容，
+           * 所以该外部类也对应且包含一个列的所有值信息。
            */
           ColumnarLongs.this.get(longVector, offset.getStartOffset(), offset.getCurrentVectorSize());
 

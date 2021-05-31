@@ -196,7 +196,9 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
   private class BlockLayoutColumnarLongs implements ColumnarLongs
   {
     final CompressionFactory.LongEncodingReader reader = baseReader.duplicate();
-    /** {@link GenericIndexed#singleThreadedVersionOne()} */
+    /**
+     * 此处是想从外部BlockLayoutColumnarLongsSupplier对象中取指定列的{@link GenericIndexed}对象出来
+     */
     final Indexed<ResourceHolder<ByteBuffer>> singleThreadedLongBuffers = baseLongBuffers.singleThreaded();
 
     int currBufferNum = -1;
@@ -299,13 +301,14 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
     {
       CloseQuietly.close(holder);
       /**
-       * singleThreadedLongBuffers.get实为：
-       * {@link GenericIndexed.BufferIndexed#singleThreadedVersionOne()}.get(final int index)
-       * 此次查询所需的long类型行数据就在此holder中，
+       * 当前loadBuffer方法属于内部类{@link BlockLayoutColumnarLongs}的，
+       * 而这个singleThreadedLongBuffers属于外部类{@link BlockLayoutColumnarLongsSupplier#baseLongBuffers}的
        *
-       * 但其实在创建singleThreadedLongBuffers时
+       * 一个BlockLayoutColumnarLongsSupplier对象，对应一个GenericIndexed对象，
+       * 对应一个“fromBuffer”，也对应“一个列的所有值内容
        *
-       *
+       * 所以此处的singleThreadedLongBuffers.get本质上就是将外部类锁对应的列的“信息对象”取出
+       * （这些包含列信息的外部类{@link BlockLayoutColumnarLongsSupplier#baseLongBuffers}都是在启动时加载segment得到的）
        */
       holder = singleThreadedLongBuffers.get(bufferNum);
       buffer = holder.get();

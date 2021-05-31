@@ -58,7 +58,11 @@ public class LongSumVectorAggregator implements VectorAggregator
   }
 
   /**
-   * ！！！“调用selector获取启动时加载的行数据，然后再累加到buf中”
+   * 逻辑;
+   * 调用该聚合器内部{@link this#selector}对象的方法，获取启动时加载的某列的所有数据，然后再累加到buf中。
+   *
+   * {@link this#selector}的实现类由{@link org.apache.druid.segment.data.ColumnarLongs#makeVectorValueSelector}创建。
+   * 其getLongVector()方法，
    *
    * @param buf 存放聚合结果
    * @param numRows
@@ -82,6 +86,9 @@ public class LongSumVectorAggregator implements VectorAggregator
      * getLongVector()也在其中定义
      *
      * vector中包含了“待聚合的数据”
+     * ====================================================================
+     *
+     *
      */
     final long[] vector = selector.getLongVector();
 
