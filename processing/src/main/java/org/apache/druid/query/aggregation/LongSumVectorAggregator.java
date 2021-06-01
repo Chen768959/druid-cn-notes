@@ -81,14 +81,14 @@ public class LongSumVectorAggregator implements VectorAggregator
   {
     log.info("!!!：LongSumVectorAggregator，selector类型："+selector.getClass());
     /**
-     * selector：ColumnarLongsVectorValueSelector
-     * 由{@link org.apache.druid.segment.data.ColumnarLongs#makeVectorValueSelector}创建，
-     * getLongVector()也在其中定义
+     * selector：是ColumnarLongs的内部类，其可提供外部对象ColumnarLongs所对应一个列的所有数据
      *
-     * vector中包含了“待聚合的数据”
-     * ====================================================================
+     * selector由{@link org.apache.druid.segment.data.ColumnarLongs#makeVectorValueSelector}创建，
+     * 该匿名对象属于{@link org.apache.druid.segment.data.ColumnarLongs}中，
+     * 也就是说是通过ColumnarLongs接口对象调用的makeVectorValueSelector()方法创建的此selector，
+     * （一个ColumnarLongs对应一个列的所有数据）
      *
-     *
+     * 而selector是在创建此聚合器时被传入的
      */
     final long[] vector = selector.getLongVector();
 

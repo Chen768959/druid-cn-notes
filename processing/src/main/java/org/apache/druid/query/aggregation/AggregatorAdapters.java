@@ -321,6 +321,17 @@ public class AggregatorAdapters implements Closeable
        * 其aggregate()方法就是具体聚合计算方法
        * {@link LongSumVectorAggregator#aggregate(ByteBuffer, int, int[], int[], int)}
        *
+       * 聚合器中有一个selector对象：是ColumnarLongs的内部类，其可提供外部对象ColumnarLongs所对应一个列的所有数据
+       *
+       * selector由{@link org.apache.druid.segment.data.ColumnarLongs#makeVectorValueSelector}创建，
+       * 该匿名对象属于{@link org.apache.druid.segment.data.ColumnarLongs}中，
+       * 也就是说是通过ColumnarLongs接口对象调用的makeVectorValueSelector()方法创建的此selector，
+       * （一个ColumnarLongs对应一个列的所有数据）
+       *
+       * 而selector是在创建此聚合器时被传入的。
+       * 由此可见selector与某个聚合器对象是一一绑定关系，
+       * 而此处逻辑可看出：
+       * “adapter对应一个聚合器，也对应一个selector，也对应一个{@link org.apache.druid.segment.data.ColumnarLongs}及其内部的某列的所有值”
        */
       adapter.asVectorAggregator().aggregate(buf, numRows, positions, rows, aggregatorPositions[i]);
     }
