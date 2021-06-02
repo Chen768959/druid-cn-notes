@@ -213,6 +213,22 @@ public class AggregatorAdapters implements Closeable
   {
     /**
      * 循环调用多个adapter
+     *
+     * 通过{@link org.apache.druid.segment.data.ColumnarLongs}中返回的匿名对象selector，可以拿到此列想信息。
+     * 而一个selector属于一个聚合器{@link LongSumVectorAggregator}聚合器，
+     * 且是在每个聚合器创建时放入对应selector的
+     *
+     * 每个聚合器又属于各adapter
+     * 一次聚合查询所用的adapter都来自adapters，
+     * adapters是在{@link AggregatorAdapters}创建时传入的
+     *
+     * adapters:{@link AggregatorAdapters}是vectorGrouper:{@link org.apache.druid.query.groupby.epinephelinae.BufferArrayGrouper}中属性
+     * adapters是在BufferArrayGrouper对象创建时传入的
+     *
+     * vectorGrouper是{@link org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine}中的属性
+     * 
+     *
+     *
      */
     for (int i = 0; i < adapters.size(); i++) {
       final Adapter adapter = adapters.get(i);
