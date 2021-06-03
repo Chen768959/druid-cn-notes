@@ -24,8 +24,13 @@ import com.google.common.primitives.Ints;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.io.smoosh.SmooshedFileMapper;
 import org.apache.druid.java.util.common.logger.Logger;
+import org.apache.druid.query.filter.Filter;
+import org.apache.druid.query.groupby.GroupByQuery;
+import org.apache.druid.query.groupby.GroupByQueryConfig;
+import org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine;
 import org.apache.druid.segment.ColumnSelectorFactory;
 import org.apache.druid.segment.CompressedPools;
+import org.apache.druid.segment.StorageAdapter;
 import org.apache.druid.segment.column.ColumnBuilder;
 import org.apache.druid.segment.column.ColumnConfig;
 import org.apache.druid.segment.data.BlockLayoutColumnarLongsSupplier;
@@ -38,6 +43,8 @@ import org.apache.druid.segment.serde.DictionaryEncodedColumnPartSerde;
 import org.apache.druid.segment.serde.LongNumericColumnPartSerde;
 import org.apache.druid.segment.vector.VectorColumnSelectorFactory;
 import org.apache.druid.timeline.DataSegment;
+import org.joda.time.DateTime;
+import org.joda.time.Interval;
 
 import javax.annotation.Nullable;
 import java.io.Closeable;
@@ -212,23 +219,26 @@ public class AggregatorAdapters implements Closeable
   )
   {
     /**
+     *
      * 循环调用多个adapter
      *
-     * 通过{@link org.apache.druid.segment.data.ColumnarLongs}中返回的匿名对象selector，可以拿到此列想信息。
-     * 而一个selector属于一个聚合器{@link LongSumVectorAggregator}聚合器，
-     * 且是在每个聚合器创建时放入对应selector的
+     * 一次查询首先通过了{@link org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine#process(GroupByQuery, StorageAdapter, ByteBuffer, DateTime, Filter, Interval, GroupByQueryConfig)}
+     * 得到了{@link org.apache.druid.java.util.common.guava.Sequence}，
+     * 其中内部匿名函数make()方法可创建{@link VectorGroupByEngine.VectorGroupByEngineIterator}，
+     * 也是在此时，根据各种传参，VectorGroupByEngineIterator创建了此次查询所对应的AggregatorAdapters，
+     * 也就是此处的{@link this#adapters}
      *
-     * 每个聚合器又属于各adapter
      * 一次聚合查询所用的adapter都来自adapters，
-     * adapters是在{@link AggregatorAdapters}创建时传入的
+     * 每个聚合器又属于各adapter，
+     * 每个聚合器创建时会放入对应selector
+     * selector属于{@link org.apache.druid.segment.data.ColumnarLongs}，
+     * 相当于selector构建了ColumnarLongs和聚合器的一一对应关系。
+     * ColumnarLongs就是节点启动时加载segment文件时的产物
      *
-     * adapters:{@link AggregatorAdapters}是vectorGrouper:{@link org.apache.druid.query.groupby.epinephelinae.BufferArrayGrouper}中属性
-     * adapters是在BufferArrayGrouper对象创建时传入的
-     *
-     * vectorGrouper是{@link org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine}中的属性
-     * 
-     *
-     *
+     * todo 再捋一遍查询逻辑，理清
+     * todo {@link org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine#process(GroupByQuery, StorageAdapter, ByteBuffer, DateTime, Filter, Interval, GroupByQueryConfig)}
+     * todo 之前的调用逻辑，因为其创建VectorGroupByEngineIterator以及查询所对应的AggregatorAdapters所用的信息都是此次调用的传参，
+     * todo 可以说是此次调用决定了此次查询使用那些启动时已成功加载的{@link org.apache.druid.segment.data.ColumnarLongs}
      */
     for (int i = 0; i < adapters.size(); i++) {
       final Adapter adapter = adapters.get(i);

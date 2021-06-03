@@ -166,6 +166,7 @@ public class ServerManager implements QuerySegmentWalker
   @Override
   public <T> QueryRunner<T> getQueryRunnerForSegments(Query<T> query, Iterable<SegmentDescriptor> specs)
   {
+    // 根据query的class类型来获取QueryRunnerFactory对象
     final QueryRunnerFactory<T, Query<T>> factory = conglomerate.findFactory(query);
     if (factory == null) {
       final QueryUnsupportedException e = new QueryUnsupportedException(

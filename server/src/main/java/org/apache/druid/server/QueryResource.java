@@ -184,7 +184,16 @@ public class QueryResource implements QueryCountStatsProvider
       @Context final HttpServletRequest req
   ) throws IOException
   {
-    // new一个queryLifecycle对象，其中很多属性都是从上下文中注入进来的
+    /**
+     * new一个queryLifecycle对象，其中很多属性都是从上下文中注入queryLifecycleFactory中的,
+     * queryLifecycle对象控制着此次查询的各个阶段的生命周期，有四个生命周期
+     * 1、初始化
+     * 2、鉴权
+     * 3、执行查询
+     * 4、输出日志
+     *
+     * 接下来整个doPost方法实际上就是在执行queryLifecycle的四个生命周期方法。
+     */
     final QueryLifecycle queryLifecycle = queryLifecycleFactory.factorize();
     Query<?> query = null;
 
@@ -208,19 +217,21 @@ public class QueryResource implements QueryCountStatsProvider
     final String currThreadName = Thread.currentThread().getName();
     try {
       /**
+       * queryLifecycle生命周期1：初始化
+       * 主要是将此次请求对象Query和queryLifecycle进行绑定。
+       *
        * readQuery(req, in, ioReaderWriter)：
-       * 利用自定义的ObjectMapper对象（注入进来的），
-       * 根据请求，解析成对应的Query对象，并返回
+       * 主要就是将此次请求的json请求报文转化成{@link Query}对象，
+       * 可以理解query对象就是请求的json对象。
        *
        * queryLifecycle.initialize(Query);
-       * 主要是根据请求，获得对应的Query对象，
        * 然后将特定Query对象，以及context上下文都放入queryLifecycle中
        */
       queryLifecycle.initialize(readQuery(req, in, ioReaderWriter));
-      //拿出的是刚刚解析出来的特定query对象
+
       query = queryLifecycle.getQuery();
       log.info("!!!select：此次请求query对象："+query.getClass());
-      final String queryId = query.getId();
+      final String queryId = query.getId();// 此次查询id
 
       // 重命名当前线程名，将相关信息都放进去
       final String queryThreadName = StringUtils.format(
@@ -230,30 +241,32 @@ public class QueryResource implements QueryCountStatsProvider
           query.getDataSource().getTableNames(),
           queryId
       );
-
       Thread.currentThread().setName(queryThreadName);
 
       if (log.isDebugEnabled()) {
         log.debug("Got query [%s]", query);
       }
 
-      // 根据请求对象，判断此次请求是否被授权
+      /**
+       * queryLifecycle生命周期2：鉴权
+       */
       final Access authResult = queryLifecycle.authorize(req);
       if (!authResult.isAllowed()) {
         throw new ForbiddenException(authResult.toString());
       }
 
       /**
-       * ！！！执行查询请求
+       * queryLifecycle生命周期3：执行查询
        *
        * Query对象：
        * 客户端的请求会被包装成query对象，每种请求不一样，
        * 以timeseries数据源为例，查询请求会被包装成{@link org.apache.druid.query.timeseries.TimeseriesQuery}
-       * 然后在上面被传入queryLifecycle。
+       * 其中内容就是此次查询的json内容。
+       * （在queryLifecycle生命周期1初始化中与{@link QueryLifecycle#baseQuery}属性进行绑定）
        *
        * walker对象：
        * walker对象作用是根据query请求，合理的创建queryrunner对象，
-       * 在程序启动时就会创建好，并注入到queryLifecycle中，
+       * walker对象在程序启动时就会创建好，并注入到queryLifecycle中，
        * 此处是{@link ClientQuerySegmentWalker},
        * walker接口有两个方法，
        * 一个是根据时间限制条件，创建queryrunner，

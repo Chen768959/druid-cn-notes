@@ -152,10 +152,18 @@ public final class QueryPlus<T>
   public Sequence<T> run(QuerySegmentWalker walker, ResponseContext context)
   {
     /**
-     * walker实现类为{@link ClientQuerySegmentWalker}
-     * query.getRunner调用的是{@link BaseQuery#getRunner(QuerySegmentWalker)}
+     * {@link BaseQuery#getRunner(QuerySegmentWalker)}
      *
-     * 请求到达broker和到达historical后获取的queryRunner是不同的
+     * 参数walker为启动时注入而来，
+     * broker和historical启动时注入的对象不同
+     * broker启动时walker为{@link org.apache.druid.server.ClientQuerySegmentWalker}
+     * historical启动时walker为{@link org.apache.druid.server.coordination.ServerManager}
+     *
+     * 此处实际上是调用walker的getQueryRunnerForSegments()方法获取QueryRunner
+     * 所以此处queryRunner的创建只和query和walker对象有关
+     * （历史节点创建queryrunner逻辑;{@link org.apache.druid.server.coordination.ServerManager#getQueryRunnerForSegments(Query, Iterable)}）
+     *
+     * 另：请求到达broker和到达historical后此处获取的queryRunner是不同的
      * 到达broker获取的queryRunner类型为
      * {@link org.apache.druid.server.ClientQuerySegmentWalker $QuerySwappingQueryRunner}
      *
@@ -184,6 +192,7 @@ public final class QueryPlus<T>
      * ====================================================================================================
      * 请求到达historical时为以下逻辑：
      * queryRunner为{@link org.apache.druid.query.CPUTimeMetricQueryRunner}
+     * |->{@link CPUTimeMetricQueryRunner#run(QueryPlus, ResponseContext)}
      * |->{@link FinalizeResultsQueryRunner#run(QueryPlus, ResponseContext)}
      * |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeResults(QueryRunner)}（！！！此处开始与broker不同）
      * |->{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}

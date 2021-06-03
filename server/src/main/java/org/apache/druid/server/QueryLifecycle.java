@@ -52,6 +52,7 @@ import org.apache.druid.server.security.AuthorizerMapper;
 
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletRequest;
+import java.io.InputStream;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -60,12 +61,13 @@ import java.util.concurrent.TimeUnit;
 /**
  * Class that helps a Druid server (broker, historical, etc) manage the lifecycle of a query that it is handling. It
  * ensures that a query goes through the following stages, in the proper order:
+ * 管理整个查询周期，确保此次查询经历以下阶段
  *
  * <ol>
- * <li>Initialization ({@link #initialize(Query)})</li>
- * <li>Authorization ({@link #authorize(HttpServletRequest)}</li>
- * <li>Execution ({@link #execute()}</li>
- * <li>Logging ({@link #emitLogsAndMetrics(Throwable, String, long)}</li>
+ * <li>Initialization 初始化 ({@link #initialize(Query)})</li>
+ * <li>Authorization  鉴权({@link #authorize(HttpServletRequest)}</li>
+ * <li>Execution 执行({@link #execute()}</li>
+ * <li>Logging 日志({@link #emitLogsAndMetrics(Throwable, String, long)}</li>
  * </ol>
  *
  * This object is not thread-safe.
@@ -89,6 +91,10 @@ public class QueryLifecycle
   private QueryToolChest toolChest;
   private Query baseQuery;
 
+  /**
+   * QueryLifecycle对象多由工厂类创建
+   * {@link QueryLifecycleFactory#factorize()}
+   */
   public QueryLifecycle(
       final QueryToolChestWarehouse warehouse,
       final QuerySegmentWalker texasRanger,
@@ -260,6 +266,13 @@ public class QueryLifecycle
    * not be emitted automatically when the Sequence is fully iterated. It is the caller's responsibility to call
    * {@link #emitLogsAndMetrics(Throwable, String, long)} to emit logs and metrics.
    *
+   * querylifecycle的执行阶段，每次查询请求都会通过此方法获取查询结果。
+   *
+   * 1、获取根据query查询对象获取{@link QueryPlus}
+   * 2、再通过queryPlus获取此次的查询结果res{@link Sequence}
+   * （但此处不会执行具体查询逻辑，而是将所需对象和匿名函数的查询逻辑准备好，
+   * 在{@link QueryResource#doPost(InputStream, String, HttpServletRequest)}中后续调用Sequence的toYielder时才会加载查询逻辑）
+   *
    * @return result sequence and response context
    */
   public QueryResponse execute()
@@ -269,32 +282,27 @@ public class QueryLifecycle
     final ResponseContext responseContext = DirectDruidClient.makeResponseContextForQuery();
 
     /**
-     * QueryPlus.wrap(baseQuery)：
-     * 创建一个QueryPlus对象
-     * （该对象看注释介绍应该就是个包装类，作用只是负责存放{@link Query}对象和对应的{@link QueryRunner}对象）。
-     * 此wrap方法也只是创建一个QueryPlus对象，然后把Query参数存进去。
-     * 该参数和身份验证有关
-     *
-     * .withIdentity(authenticationResult.getIdentity())：
-     * 还是返回一个QueryPlus对象，
-     * 只不过这回把参数“authenticationResult.getIdentity()”也存进去了
-     *
-     * .run(texasRanger, responseContext)：
-     * texasRanger是注入进来的，实现类是这个{@link ClientQuerySegmentWalker}
-     * 该方法就做了两件事
-     * 1、{@link BaseQuery#getRunner(QuerySegmentWalker)} 获取Query对象(BaseQuery)对应的QueryRunner对象。
-     *
-     * 最终获取了{@link org.apache.druid.server.ClientQuerySegmentWalker.QuerySwappingQueryRunner}
-     * 这个QueryRunner
-     *
-     * 2、调用{@link QueryRunner#run(QueryPlus, ResponseContext)}方法。
-     *
-     * {@link org.apache.druid.server.ClientQuerySegmentWalker.QuerySwappingQueryRunner#run(QueryPlus, ResponseContext)}
+     * QueryPlus查询的关键，其可根据请求对象baseQuery，返回“懒加载查询结果”Sequence，
+     * 此处是将baseQuery绑定进QueryPlus中
      */
-
     QueryPlus tmpQueryPlus = QueryPlus.wrap(baseQuery)
             .withIdentity(authenticationResult.getIdentity());
     log.info("!!!：获取tmpQueryPlus，准备调用run");
+
+    /**
+     * .run(texasRanger, responseContext)：
+     * texasRanger是注入进来的，实现类是这个{@link ClientQuerySegmentWalker}
+     * 该方法就做了两件事
+     * 1、从baseQuery中获取queryRunner
+     * 2、调用queryRunner的run()方法获取此次查询结果。
+     * （所以queryRunner的run方法才是查询“懒加载查询结果”的关键）
+     *
+     * texasRanger是一个walker，为启动时注入而来，
+     * broker和historical启动时注入的对象不同
+     * broker启动时walker为{@link org.apache.druid.server.ClientQuerySegmentWalker}
+     * historical启动时walker为{@link org.apache.druid.server.coordination.ServerManager}
+     * 这两个walker不同，也决定了broker和historical在面对查询请求时，其二者的处理逻辑不同
+     */
     final Sequence res = tmpQueryPlus.run(texasRanger, responseContext);
 
     return new QueryResponse(res == null ? Sequences.empty() : res, responseContext);
