@@ -266,7 +266,8 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
                                         // Return true if OK, false if resources were exhausted.
                                         log.info("!!!：V2异步执行查询任务，查询input类型："+input.getClass());
                                         /**
-                                         * 此处input：{@link org.apache.druid.server.SetAndVerifyContextQueryRunner#run(QueryPlus, ResponseContext)}
+                                         * 此处input：
+                                         * {@link org.apache.druid.server.SetAndVerifyContextQueryRunner#run(QueryPlus, ResponseContext)}
                                          * |->{@link org.apache.druid.query.CPUTimeMetricQueryRunner#run(QueryPlus, ResponseContext)}
                                          * |->{@link org.apache.druid.query.PerSegmentOptimizingQueryRunner#run(QueryPlus, ResponseContext)}
                                          * |->{@link org.apache.druid.query.spec.SpecificSegmentQueryRunner#run(QueryPlus, ResponseContext)}
@@ -276,6 +277,7 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
                                          *    |->{@link org.apache.druid.query.MetricsEmittingQueryRunner#run(QueryPlus, ResponseContext)}
                                          *    |->{@link ReferenceCountingSegmentQueryRunner#run(QueryPlus, ResponseContext)}
                                          *    |->{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory.GroupByQueryRunner#run(QueryPlus, ResponseContext)}
+                                         *    |->{@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2#process(GroupByQuery, StorageAdapter)}
                                          *    |->{@link org.apache.druid.query.groupby.epinephelinae.GroupByQueryEngineV2#process(GroupByQuery, StorageAdapter, NonBlockingPool, GroupByQueryConfig)}
                                          *    |->{@link VectorGroupByEngine#process(GroupByQuery, StorageAdapter, ByteBuffer, DateTime, Filter, Interval, GroupByQueryConfig)}
                                          */

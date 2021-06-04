@@ -81,7 +81,6 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
       @Override
       public Sequence<ResultRow> run(QueryPlus<ResultRow> queryPlus, ResponseContext responseContext)
       {
-        log.info("!!!：进入mergeRunners中匿名QueryRunner，run方法");
 
         GroupByStrategy groupByStrategy =strategySelector.strategize((GroupByQuery) queryPlus.getQuery());
         /**

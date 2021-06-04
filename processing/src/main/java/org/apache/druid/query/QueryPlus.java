@@ -25,7 +25,10 @@ import org.apache.druid.guice.annotations.PublicApi;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.context.ResponseContext;
+import org.apache.druid.query.groupby.GroupByQuery;
 import org.apache.druid.query.groupby.epinephelinae.GroupByMergingQueryRunnerV2;
+import org.apache.druid.query.groupby.resource.GroupByQueryResource;
+import org.apache.druid.query.groupby.strategy.GroupByStrategy;
 
 import javax.annotation.Nullable;
 import java.util.concurrent.ExecutorService;
@@ -194,12 +197,18 @@ public final class QueryPlus<T>
      * queryRunner为{@link org.apache.druid.query.CPUTimeMetricQueryRunner}
      * |->{@link CPUTimeMetricQueryRunner#run(QueryPlus, ResponseContext)}
      * |->{@link FinalizeResultsQueryRunner#run(QueryPlus, ResponseContext)}
-     * |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeResults(QueryRunner)}（！！！此处开始与broker不同）
-     * |->{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
+     * |->run方法为该响应匿名函数：{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeResults(QueryRunner)}
+     * |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#initAndMergeGroupByResults(GroupByQuery, QueryRunner, ResponseContext)}
+     * |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeGroupByResults(GroupByStrategy, GroupByQuery, GroupByQueryResource, QueryRunner, ResponseContext)}
+     * |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeGroupByResultsWithoutPushDown(GroupByStrategy, GroupByQuery, GroupByQueryResource, QueryRunner, ResponseContext)}
+     * |->{@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2#mergeResults(QueryRunner, GroupByQuery, ResponseContext)}
+     * |->run方法为该响应匿名函数：{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
      * |->{@link GroupByMergingQueryRunnerV2#run(QueryPlus, ResponseContext)}
-     *
+     * 至此GroupByMergingQueryRunnerV2.run提供真正的BaseSequence结果，且其中包含make方法，为真正的查询结果方法，
+     * 在后续Sequence.toYielder时会被调用，执行真正的查询逻辑
      */
-    return queryRunner.run(this, context);
+    Sequence<T> res = queryRunner.run(this, context);
+    return res;
   }
 
   public QueryPlus<T> optimizeForSegment(PerSegmentQueryOptimizationContext optimizationContext)

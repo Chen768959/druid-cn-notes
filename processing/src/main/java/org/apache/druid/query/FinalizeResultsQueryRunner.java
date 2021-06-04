@@ -113,6 +113,13 @@ public class FinalizeResultsQueryRunner<T> implements QueryRunner<T>
     /**
      * 此处的baseRunner指{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#preMergeQueryDecoration(QueryRunner)}
      * 此方法返回的runner
+     *
+     * his中baseRunner.run为
+     * {@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeResults(QueryRunner)}
+     * 响应的匿名函数方法
+     *
+     * 此处的第一个参数“baseRunner.run(queryPlus.withQuery(queryToRun), responseContext)”
+     * 才是真正的Sequences响应结果
      */
     return (Sequence<T>) Sequences.map(
         baseRunner.run(queryPlus.withQuery(queryToRun), responseContext),

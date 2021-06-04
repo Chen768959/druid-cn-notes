@@ -117,6 +117,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
   @Override
   public QueryRunner<ResultRow> mergeResults(final QueryRunner<ResultRow> runner)
   {
+    // 匿名对象QueryRunner中的run方法
     return (queryPlus, responseContext) -> {
       log.info("!!!：进入GroupByQueryQueryToolChest中mergeResults匿名函数");
       if (QueryContexts.isBySegment(queryPlus.getQuery())) {
@@ -124,7 +125,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
         return runner.run(queryPlus, responseContext);
       }
 
-      //请求到达historical后进入此逻辑
+      // his请求到达historical后进入此逻辑
       final GroupByQuery groupByQuery = (GroupByQuery) queryPlus.getQuery();
       if (strategySelector.strategize(groupByQuery).doMergeResults(groupByQuery)) {
         log.info("!!!：进入strategySelector if,runner类型："+runner.getClass());
@@ -161,6 +162,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
     final GroupByStrategy groupByStrategy = strategySelector.strategize(query);
     final GroupByQueryResource resource = groupByStrategy.prepareResource(query);
     try {
+      // 此处为his查询真正响应的Sequence结果
       final Sequence<ResultRow> mergedSequence = mergeGroupByResults(
           groupByStrategy,
           query,
@@ -191,6 +193,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
       log.info("!!!：进入isNestedQueryPushDown if");
       return mergeResultsWithNestedQueryPushDown(groupByStrategy, query, resource, runner, context);
     }
+
     return mergeGroupByResultsWithoutPushDown(groupByStrategy, query, resource, runner, context);
   }
 
@@ -206,6 +209,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
 
     final DataSource dataSource = query.getDataSource();
 
+    // 只有QueryDataSource才会进入此逻辑，应该是sql类型的查询进入此逻辑
     if (dataSource instanceof QueryDataSource) {
       final GroupByQuery subquery;
       try {
@@ -269,8 +273,11 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
             resource,
             groupByStrategy.mergeResults(runner, query.withSubtotalsSpec(null), context)
         );
+      // 正常查询进入此逻辑条件
       } else {
-        return groupByStrategy.applyPostProcessing(groupByStrategy.mergeResults(runner, query, context), query);
+        /**{@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2#mergeResults(QueryRunner, GroupByQuery, ResponseContext)}*/
+        Sequence<ResultRow> resultRowSequence = groupByStrategy.mergeResults(runner, query, context);
+        return groupByStrategy.applyPostProcessing(resultRowSequence, query);
       }
     }
   }
