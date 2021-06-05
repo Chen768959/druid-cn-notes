@@ -29,6 +29,7 @@ import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.aggregation.MetricManipulationFn;
 import org.apache.druid.query.aggregation.MetricManipulatorFns;
 import org.apache.druid.query.context.ResponseContext;
+import org.apache.druid.query.groupby.GroupByQuery;
 
 /**
  * Query runner that applies {@link QueryToolChest#makePostComputeManipulatorFn(Query, MetricManipulationFn)} to the
@@ -58,6 +59,7 @@ public class FinalizeResultsQueryRunner<T> implements QueryRunner<T>
   @Override
   public Sequence<T> run(final QueryPlus<T> queryPlus, ResponseContext responseContext)
   {
+    /**{@link GroupByQuery}*/
     final Query<T> query = queryPlus.getQuery();
     final boolean isBySegment = QueryContexts.isBySegment(query);
     final boolean shouldFinalize = QueryContexts.isFinalize(query, true);

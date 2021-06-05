@@ -117,6 +117,7 @@ public class GroupByStrategyV2 implements GroupByStrategy
   @Override
   public GroupByQueryResource prepareResource(GroupByQuery query)
   {
+    // 计算需要合并的buffer的数量，（简单查询此num为0）
     final int requiredMergeBufferNum = countRequiredMergeBufferNum(query, 1) +
                                        numMergeBuffersNeededForSubtotalsSpec(query);
 
@@ -129,6 +130,8 @@ public class GroupByStrategyV2 implements GroupByStrategy
       return new GroupByQueryResource();
     } else {
       final List<ReferenceCountingResourceHolder<ByteBuffer>> mergeBufferHolders;
+
+      // 是否设置超时时间，总之都是从mergeBufferPool中取出num个Buffer
       if (QueryContexts.hasTimeout(query)) {
         mergeBufferHolders = mergeBufferPool.takeBatch(requiredMergeBufferNum, QueryContexts.getTimeout(query));
       } else {

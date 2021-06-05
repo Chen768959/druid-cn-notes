@@ -180,6 +180,7 @@ public class QueryLifecycle
      * 从context上下文参数中获取queryId，
      * （context上下文是客户端请求时定义在json中的）
      */
+    log.info("QueryLifecycle初始化baseQuery："+baseQuery.getClass());
     String queryId = baseQuery.getId();
     if (Strings.isNullOrEmpty(queryId)) {
       queryId = UUID.randomUUID().toString();

@@ -81,22 +81,13 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
       @Override
       public Sequence<ResultRow> run(QueryPlus<ResultRow> queryPlus, ResponseContext responseContext)
       {
-
+        /**默认使用V2引擎 {@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2}*/
         GroupByStrategy groupByStrategy =strategySelector.strategize((GroupByQuery) queryPlus.getQuery());
-        /**
-         * groupByStrategy类型为{@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2}
-         */
-        log.info("!!!：进入mergeRunners中匿名QueryRunner，groupByStrategy类型为："+groupByStrategy.getClass());
+
         /**
          * executor类型{@link org.apache.druid.query.MetricsEmittingExecutorService}
          */
         log.info("!!!：进入mergeRunners中匿名QueryRunner，queryExecutor类型为："+queryExecutor.getClass());
-        for (QueryRunner<ResultRow> runner:queryRunners){
-          /**
-           * 包含{@link org.apache.druid.server.SetAndVerifyContextQueryRunner}
-           */
-          log.info("!!!：进入mergeRunners中匿名QueryRunner，queryRunners中包含："+runner.getClass());
-        }
         QueryRunner<ResultRow> rowQueryRunner = groupByStrategy.mergeRunners(queryExecutor, queryRunners);
 
         /**

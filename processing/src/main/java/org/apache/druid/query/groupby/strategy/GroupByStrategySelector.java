@@ -49,6 +49,11 @@ public class GroupByStrategySelector
 
   public GroupByStrategy strategize(GroupByQuery query)
   {
+    /**
+     * config.withOverrides(query)：根据本次查询请求获取config配置类，
+     * getDefaultStrategy()：判断查询json请求里是否有“groupByStrategy”字段来指定groupby的查询引擎
+     * 未指定则使用v2引擎
+     */
     final String strategyString = config.withOverrides(query).getDefaultStrategy();
 
     switch (strategyString) {

@@ -159,7 +159,17 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
       ResponseContext context
   )
   {
+    /**
+     * config.withOverrides(query)：根据本次查询请求获取config配置类，
+     * getDefaultStrategy()：判断查询json请求里是否有“groupByStrategy”字段来指定groupby的查询引擎
+     * 未指定则使用v2引擎
+     */
     final GroupByStrategy groupByStrategy = strategySelector.strategize(query);
+    /**
+     * {@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2#prepareResource(GroupByQuery)}
+     * 获取此次查询所需“合并”的资源
+     * 简单查询时无需合并，所以创建并返回全新的GroupByQueryResource
+     */
     final GroupByQueryResource resource = groupByStrategy.prepareResource(query);
     try {
       // 此处为his查询真正响应的Sequence结果
@@ -180,6 +190,14 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
     }
   }
 
+  /**
+   *
+   * @param groupByStrategy 默认使用v2引擎，{@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2}
+   * @param query 此次查询请求的query对象
+   * @param resource 全新new的{@link GroupByQueryResource}对象
+   * @param runner
+   * @param context 响应上下文
+   */
   private Sequence<ResultRow> mergeGroupByResults(
       GroupByStrategy groupByStrategy,
       final GroupByQuery query,
@@ -197,6 +215,14 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
     return mergeGroupByResultsWithoutPushDown(groupByStrategy, query, resource, runner, context);
   }
 
+  /**
+   *
+   * @param groupByStrategy 默认使用v2引擎，{@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2}
+   * @param query 此次查询请求的query对象
+   * @param resource 全新new的{@link GroupByQueryResource}对象
+   * @param runner
+   * @param context 响应上下文
+   */
   private Sequence<ResultRow> mergeGroupByResultsWithoutPushDown(
       GroupByStrategy groupByStrategy,
       GroupByQuery query,

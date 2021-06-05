@@ -154,6 +154,8 @@ public final class QueryPlus<T>
 
   public Sequence<T> run(QuerySegmentWalker walker, ResponseContext context)
   {
+    /**{@link GroupByQuery}*/
+    log.info("QueryPlus初始baseQuery："+query.getClass());
     /**
      * {@link BaseQuery#getRunner(QuerySegmentWalker)}
      *
