@@ -74,6 +74,10 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
   )
   {
     // mergeRunners should take ListeningExecutorService at some point
+    /**
+     * 创建异步线程池
+     * executor类型{@link org.apache.druid.query.MetricsEmittingExecutorService}
+     */
     final ListeningExecutorService queryExecutor = MoreExecutors.listeningDecorator(exec);
 
     return new QueryRunner<ResultRow>()
@@ -85,9 +89,10 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
         GroupByStrategy groupByStrategy =strategySelector.strategize((GroupByQuery) queryPlus.getQuery());
 
         /**
-         * executor类型{@link org.apache.druid.query.MetricsEmittingExecutorService}
+         * {@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2#mergeRunners(ListeningExecutorService, Iterable)}
+         *
+         * 创建一个综合runner
          */
-        log.info("!!!：进入mergeRunners中匿名QueryRunner，queryExecutor类型为："+queryExecutor.getClass());
         QueryRunner<ResultRow> rowQueryRunner = groupByStrategy.mergeRunners(queryExecutor, queryRunners);
 
         /**

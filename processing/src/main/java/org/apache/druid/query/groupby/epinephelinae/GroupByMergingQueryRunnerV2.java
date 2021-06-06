@@ -103,6 +103,18 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
   private final String processingTmpDir;
   private final int mergeBufferSize;
 
+  /**
+   *
+   * @param config
+   * @param exec 异步线程池 {@link org.apache.druid.query.MetricsEmittingExecutorService}
+   * @param queryWatcher 负责当前查询的“可见性”
+   * @param queryables 多个需要被合并的queryrunner
+   * @param concurrencyHint：processingConfig.getNumThreads() 可用线程数，默认为“jvm可用cpu核心数-1”
+   * @param mergeBufferPool
+   * @param mergeBufferSize
+   * @param spillMapper
+   * @param processingTmpDir
+   */
   public GroupByMergingQueryRunnerV2(
       GroupByQueryConfig config,
       ExecutorService exec,
