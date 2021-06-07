@@ -146,6 +146,7 @@ public final class QueryPlus<T>
 
   /**
    * Returns a QueryPlus object with {@link QueryMetrics} from this QueryPlus object, and the provided {@link Query}.
+   * 创建一个新的QueryPlus对象，且内部包裹传参replacementQuery对象
    */
   public <U> QueryPlus<U> withQuery(Query<U> replacementQuery)
   {

@@ -90,13 +90,13 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
 
         /**
          * {@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2#mergeRunners(ListeningExecutorService, Iterable)}
-         *
-         * 创建一个综合runner
+         * 创建一个综合queryRunner
          */
         QueryRunner<ResultRow> rowQueryRunner = groupByStrategy.mergeRunners(queryExecutor, queryRunners);
 
         /**
-         * 此处调用的是{@link GroupByMergingQueryRunnerV2#run(QueryPlus, ResponseContext)}
+         * {@link GroupByMergingQueryRunnerV2#run(QueryPlus, ResponseContext)}
+         * 调用刚刚创建的综合queryrunner.run方法
          */
         return rowQueryRunner.run(queryPlus, responseContext);
       }

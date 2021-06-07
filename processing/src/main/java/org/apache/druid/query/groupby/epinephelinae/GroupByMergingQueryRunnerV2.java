@@ -141,6 +141,7 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
   @Override
   public Sequence<ResultRow> run(final QueryPlus<ResultRow> queryPlus, final ResponseContext responseContext)
   {
+    // 一次groupBy查询的json请求所对应的查询对象
     final GroupByQuery query = (GroupByQuery) queryPlus.getQuery();
     final GroupByQueryConfig querySpecificConfig = config.withOverrides(query);
 
@@ -192,7 +193,6 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
         {
           /**
            * 真正的查询逻辑，在后续Sequence转Yielder时会被调用。
-           *
            */
           @Override
           public CloseableGrouperIterator<RowBasedKey, ResultRow> make()
@@ -261,6 +261,7 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
 
                               /**
                                * 使用guava提交异步任务，返回结果
+                               * exec是在创建当前综合queryRunner对象时传参进来的，是一个异步线程池 {@link org.apache.druid.query.MetricsEmittingExecutorService}
                                */
                               ListenableFuture<AggregateResult> future = exec.submit(
                                   new AbstractPrioritizedCallable<AggregateResult>(priority)
