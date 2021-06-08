@@ -150,21 +150,20 @@ public class RowBasedGrouperHelper
    * and dim filters) are respected, and its aggregators are used in standard (not combining) form. The input
    * ResultRows are assumed to be results originating from the provided "subquery".
    *
-   * @param query               query that we are grouping for
-   * @param subquery            optional subquery that we are receiving results from (see combining vs. subquery
-   *                            mode above)
-   * @param config              groupBy query config
-   * @param bufferSupplier      supplier of merge buffers
-   * @param combineBufferHolder holder of combine buffers. Unused if concurrencyHint = -1, and may be null in that case
-   * @param concurrencyHint     -1 for single-threaded Grouper, >=1 for concurrent Grouper
-   * @param temporaryStorage    temporary storage used for spilling from the Grouper
-   * @param spillMapper         object mapper used for spilling from the Grouper
-   * @param grouperSorter       executor service used for parallel combining. Unused if concurrencyHint = -1, and may
-   *                            be null in that case
-   * @param priority            query priority
-   * @param hasQueryTimeout     whether or not this query has a timeout
-   * @param queryTimeoutAt      when this query times out, in milliseconds since the epoch
-   * @param mergeBufferSize     size of the merge buffers from "bufferSupplier"
+   * @param query               此次groupby查询的json请求对象                                           query that we are grouping for
+   * @param subquery            NULL                                                             optional subquery that we are receiving results from (see combining vs. subquery mode above)
+   * @param config              配置对象                                                                 groupBy query config
+   * @param bufferSupplier      从mergebuffer池中取出的空byteBuffer                                   supplier of merge buffers
+   * @param combineBufferHolder 无                                                               holder of combine buffers. Unused if concurrencyHint = -1, and may be null in that case
+   * @param concurrencyHint     Grouper查询的可用线程数，默认为“jvm可用cpu核心数-1”            -1 for single-threaded Grouper, >=1 for concurrent Grouper
+   * @param temporaryStorage    磁盘上的临时存储空间，目录地址为配置文件“tmpDir”参数配置        temporary storage used for spilling from the Grouper
+   * @param spillMapper         JSON映射工具                                                       object mapper used for spilling from the Grouper
+   * @param grouperSorter       异步线程池 {@link org.apache.druid.query.MetricsEmittingExecutorService}     executor service used for parallel combining. Unused if concurrencyHint = -1, and may be null in that case
+   *                            用于并发的执行结果合并（concurrencyHint为-1时不使用，因为concurrencyHint为-1时为但线程）
+   * @param priority           请求的“priority”参数，查询优先级                                   query priority
+   * @param hasQueryTimeout    是否设置查询超时限制，默认不限制（来自请求参数“timeout”）         whether or not this query has a timeout
+   * @param queryTimeoutAt     时间戳long类型，当到达此时间还未查出结果时，则算此次查询超时          when this query times out, in milliseconds since the epoch
+   * @param mergeBufferSize                                                                        size of the merge buffers from "bufferSupplier"
    */
   public static Pair<Grouper<RowBasedKey>, Accumulator<AggregateResult, ResultRow>> createGrouperAccumulatorPair(
       final GroupByQuery query,

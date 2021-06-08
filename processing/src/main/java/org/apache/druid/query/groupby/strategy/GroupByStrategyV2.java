@@ -570,7 +570,7 @@ public class GroupByStrategyV2 implements GroupByStrategy
      * @param mergeBufferPool
      * @param mergeBufferSize
      * @param spillMapper
-     * @param processingTmpDir
+     * @param processingTmpDir 配置文件“tmpDir”参数配置
      */
     return new GroupByMergingQueryRunnerV2(
         configSupplier.get(),

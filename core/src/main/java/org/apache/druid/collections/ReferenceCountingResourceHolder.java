@@ -29,6 +29,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * 引用计数包装类，该对象在创建时会包裹一个Closeable类型对象，
+ * 当该对象被引用时内部计数+1，
+ * 然后调用close时，内部计数-1，只有在确定没有被引用时，才会保险的将内部包裹对象close掉
+ */
 public class ReferenceCountingResourceHolder<T> implements ResourceHolder<T>
 {
   private static final Logger log = new Logger(ReferenceCountingResourceHolder.class);

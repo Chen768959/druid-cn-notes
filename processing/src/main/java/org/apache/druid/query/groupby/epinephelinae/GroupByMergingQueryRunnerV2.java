@@ -113,7 +113,7 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
    * @param mergeBufferPool
    * @param mergeBufferSize
    * @param spillMapper
-   * @param processingTmpDir
+   * @param processingTmpDir 配置文件“tmpDir”参数配置
    */
   public GroupByMergingQueryRunnerV2(
       GroupByQueryConfig config,
@@ -197,34 +197,61 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
           @Override
           public CloseableGrouperIterator<RowBasedKey, ResultRow> make()
           {
+            // Closer的目的是收集所有“可关闭”的对象（如流）然后可以统一关闭，
+            // 将这些Closeable对象注册进resources后，可以统一关闭
             final Closer resources = Closer.create();
 
             try {
+              // 磁盘上的临时存储空间，目录地址为配置文件“tmpDir”参数配置
               final LimitedTemporaryStorage temporaryStorage = new LimitedTemporaryStorage(
                   temporaryStorageDirectory,
                   querySpecificConfig.getMaxOnDiskStorage()
               );
+
+              // 将上面的临时存储空间对象放入“引用计数包装类”中，这样会记录后续有多少处引用，只有当所有引用都将其close后，才会真正把该资源close
               final ReferenceCountingResourceHolder<LimitedTemporaryStorage> temporaryStorageHolder =
                   ReferenceCountingResourceHolder.fromCloseable(temporaryStorage);
+
+              // 临时存储空间对象注册进resources统一维护关闭
               resources.register(temporaryStorageHolder);
 
               // If parallelCombine is enabled, we need two merge buffers for parallel aggregating and parallel combining
               final int numMergeBuffers = querySpecificConfig.getNumParallelCombineThreads() > 1 ? 2 : 1;
 
+              // 从mergeBufferPool池中拿出“numMergeBuffers（1）”个buffer对象
               final List<ReferenceCountingResourceHolder<ByteBuffer>> mergeBufferHolders = getMergeBuffersHolder(
                   numMergeBuffers,
                   hasTimeout,
                   timeoutAt
               );
+              // 把刚刚拿到的buffer也注册进resources统一维护关闭
               resources.registerAll(mergeBufferHolders);
 
+              // 第一位buffer
               final ReferenceCountingResourceHolder<ByteBuffer> mergeBufferHolder = mergeBufferHolders.get(0);
+
+              // 无
               final ReferenceCountingResourceHolder<ByteBuffer> combineBufferHolder = numMergeBuffers == 2 ?
                                                                                       mergeBufferHolders.get(1) :
                                                                                       null;
 
-              Pair<Grouper<RowBasedKey>, Accumulator<AggregateResult, ResultRow>> pair =
-                  RowBasedGrouperHelper.createGrouperAccumulatorPair(
+              /**
+               * @param query               此次groupby查询的json请求对象
+               * @param subquery            NULL
+               * @param config              配置对象
+               * @param bufferSupplier      从mergebuffer池中取出的空byteBuffer
+               * @param combineBufferHolder 无
+               * @param concurrencyHint     Grouper查询的可用线程数，默认为“jvm可用cpu核心数-1”
+               * @param temporaryStorage    磁盘上的临时存储空间，目录地址为配置文件“tmpDir”参数配置
+               * @param spillMapper         JSON映射工具
+               * @param grouperSorter       异步线程池 {@link org.apache.druid.query.MetricsEmittingExecutorService}
+               *                            用于并发的执行结果合并（concurrencyHint为-1时不使用，因为concurrencyHint为-1时为但线程）
+               * @param priority           请求的“priority”参数，查询优先级
+               * @param hasQueryTimeout    是否设置查询超时限制，默认不限制（来自请求参数“timeout”）
+               * @param queryTimeoutAt     时间戳long类型，当到达此时间还未查出结果时，则算此次查询超时
+               * @param mergeBufferSize
+               */
+              Pair<Grouper<RowBasedKey>, Accumulator<AggregateResult, ResultRow>> pair = RowBasedGrouperHelper.createGrouperAccumulatorPair(
                       query,
                       null,
                       config,
