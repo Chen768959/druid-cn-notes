@@ -126,7 +126,7 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
       ObjectMapper spillMapper,
       String processingTmpDir
   )
-  { 
+  {  
     this.config = config;
     this.exec = MoreExecutors.listeningDecorator(exec);
     this.queryWatcher = queryWatcher;
