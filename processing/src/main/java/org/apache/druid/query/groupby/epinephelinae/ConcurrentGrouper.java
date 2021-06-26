@@ -94,6 +94,26 @@ public class ConcurrentGrouper<KeyType> implements Grouper<KeyType>
 
   private volatile boolean initialized = false;
 
+  /**
+   *
+   * @param groupByQueryConfig     groupby查询的配置，由“query”对象中得来
+   * @param bufferSupplier          从mergebuffer池中取出的空byteBuffer
+   * @param combineBufferHolder     无
+   * @param keySerdeFactory
+   * @param combineKeySerdeFactory
+   * @param columnSelectorFactory
+   * @param aggregatorFactories     由“query”查询对象中得来，该工厂所创建的是此次查询的“聚合策略对象”，通过该对象可知此次查询应该如何聚合
+   * @param temporaryStorage        磁盘上的临时存储空间，目录地址为配置文件“tmpDir”参数配置
+   * @param spillMapper             JSON映射工具
+   * @param concurrencyHint         Grouper查询的可用线程数，默认为“jvm可用cpu核心数-1”
+   * @param limitSpec
+   * @param sortHasNonGroupingFields 非groupby字段是否排序，默认false
+   * @param executor           异步线程池 {@link org.apache.druid.query.MetricsEmittingExecutorService}
+   *                                 用于并发的执行结果合并（concurrencyHint为-1时不使用，因为concurrencyHint为-1时为单线程）
+   * @param priority                请求的“priority”参数，查询优先级
+   * @param hasQueryTimeout         是否设置查询超时限制，默认不限制（来自请求参数“timeout”）
+   * @param queryTimeoutAt          时间戳long类型，当到达此时间还未查出结果时，则算此次查询超时
+   */
   public ConcurrentGrouper(
       final GroupByQueryConfig groupByQueryConfig,
       final Supplier<ByteBuffer> bufferSupplier,

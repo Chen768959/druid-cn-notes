@@ -153,6 +153,18 @@ public final class QueryPlus<T>
     return new QueryPlus<>(replacementQuery, queryMetrics, identity);
   }
 
+  /**
+   * 参数walker为启动时注入而来，
+   * broker和historical启动时注入的对象不同
+   * broker启动时walker为{@link org.apache.druid.server.ClientQuerySegmentWalker}
+   * historical启动时walker为{@link org.apache.druid.server.coordination.ServerManager}
+   *
+   * 先根据请求对象“query”由walker找到对应的queryrunner对象，
+   * 不同的请求类型，其处理对象queryRunner也不同，
+   * 如group by查询，最终对应的就是{@link GroupByMergingQueryRunnerV2}来处理。
+   *
+   * queryRunner更像是一个“处理链”，
+   */
   public Sequence<T> run(QuerySegmentWalker walker, ResponseContext context)
   {
     /**{@link GroupByQuery}*/
@@ -198,13 +210,13 @@ public final class QueryPlus<T>
      * ====================================================================================================
      * 请求到达historical时为以下逻辑：
      * queryRunner为{@link org.apache.druid.query.CPUTimeMetricQueryRunner}
-     * |->{@link CPUTimeMetricQueryRunner#run(QueryPlus, ResponseContext)}
-     * |->{@link FinalizeResultsQueryRunner#run(QueryPlus, ResponseContext)}
-     * |->run方法为该响应匿名函数：{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeResults(QueryRunner)}
-     * |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#initAndMergeGroupByResults(GroupByQuery, QueryRunner, ResponseContext)}
-     * |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeGroupByResults(GroupByStrategy, GroupByQuery, GroupByQueryResource, QueryRunner, ResponseContext)}
-     * |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeGroupByResultsWithoutPushDown(GroupByStrategy, GroupByQuery, GroupByQueryResource, QueryRunner, ResponseContext)}
-     * |->{@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2#mergeResults(QueryRunner, GroupByQuery, ResponseContext)}
+     * |->（进入CPUTimeMetricQueryRunner）{@link CPUTimeMetricQueryRunner#run(QueryPlus, ResponseContext)}
+     * |->（进入FinalizeResultsQueryRunner）{@link FinalizeResultsQueryRunner#run(QueryPlus, ResponseContext)}
+     * |->（进入匿名函数queryRunner）run方法为该响应匿名函数：{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeResults(QueryRunner)}
+     *      |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#initAndMergeGroupByResults(GroupByQuery, QueryRunner, ResponseContext)}
+     *      |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeGroupByResults(GroupByStrategy, GroupByQuery, GroupByQueryResource, QueryRunner, ResponseContext)}
+     *      |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeGroupByResultsWithoutPushDown(GroupByStrategy, GroupByQuery, GroupByQueryResource, QueryRunner, ResponseContext)}
+     *      |->{@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2#mergeResults(QueryRunner, GroupByQuery, ResponseContext)}
      * |->run方法为该响应匿名函数：{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
      * |->{@link GroupByMergingQueryRunnerV2#run(QueryPlus, ResponseContext)}
      * 至此GroupByMergingQueryRunnerV2.run提供真正的BaseSequence结果，且其中包含make方法，为真正的查询结果方法，

@@ -193,6 +193,7 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
         {
           /**
            * 真正的查询逻辑，在后续Sequence转Yielder时会被调用。
+           * 然后获取迭代器，用于迭代查询结果。
            */
           @Override
           public CloseableGrouperIterator<RowBasedKey, ResultRow> make()
@@ -246,7 +247,7 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
                * @param spillMapper         JSON映射工具
                * @param grouperSorter       异步线程池 {@link org.apache.druid.query.MetricsEmittingExecutorService}
                *                            用于并发的执行结果合并（concurrencyHint为-1时不使用，因为concurrencyHint为-1时为但线程）
-               * @param priority           请求的“priority”参数，查询优先级
+               * @param priority           请求的“pri ority”参数，查询优先级
                * @param hasQueryTimeout    是否设置查询超时限制，默认不限制（来自请求参数“timeout”）
                * @param queryTimeoutAt     时间戳long类型，当到达此时间还未查出结果时，则算此次查询超时
                * @param mergeBufferSize
@@ -266,6 +267,14 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
                       timeoutAt,
                       mergeBufferSize
                   );
+
+              /**
+               * grouper，
+               * 聚焦于group by查询
+               * 根据concurrencyHint（group by查询可用线程数）的不同，其创建对象也不同
+               * 多线程时创建的是{@link ConcurrentGrouper}
+               * 会被放于迭代器中
+               */
               final Grouper<RowBasedKey> grouper = pair.lhs;
               final Accumulator<AggregateResult, ResultRow> accumulator = pair.rhs;
               grouper.init();
@@ -354,6 +363,12 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
                 waitForFutureCompletion(query, futures, hasTimeout, timeoutAt - System.currentTimeMillis());
               }
 
+              /**
+               * 创建迭代器
+               * grouper：聚焦于group by查询，多线程时创建的是{@link ConcurrentGrouper}
+               * query：此次请求对象
+               * resources：收集了所有“可关闭”的对象，用于统一关闭
+               */
               return RowBasedGrouperHelper.makeGrouperIterator(
                   grouper,
                   query,

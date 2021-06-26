@@ -122,6 +122,10 @@ public class FinalizeResultsQueryRunner<T> implements QueryRunner<T>
      *
      * 此处的第一个参数“baseRunner.run(queryPlus.withQuery(queryToRun), responseContext)”
      * 才是真正的Sequences响应结果
+     *
+     * Sequences.map：
+     * 将baseRunner.run的Sequence结果，和finalizerFn函数进行“合并”，然后返回一个新的Sequence。
+     * finalizerFn函数会如map函数一样，处理每一个结果行，然后返回结果
      */
     return (Sequence<T>) Sequences.map(
         baseRunner.run(queryPlus.withQuery(queryToRun), responseContext),
