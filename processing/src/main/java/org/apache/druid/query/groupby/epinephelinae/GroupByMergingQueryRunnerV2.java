@@ -368,6 +368,8 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
                * grouper：聚焦于group by查询，多线程时创建的是{@link ConcurrentGrouper}
                * query：此次请求对象
                * resources：收集了所有“可关闭”的对象，用于统一关闭
+               *
+               * 此迭代器可迭代出group by 查询结果
                */
               return RowBasedGrouperHelper.makeGrouperIterator(
                   grouper,

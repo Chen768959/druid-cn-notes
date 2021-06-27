@@ -27,10 +27,13 @@ import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.context.ResponseContext;
 import org.apache.druid.query.groupby.GroupByQuery;
 import org.apache.druid.query.groupby.epinephelinae.GroupByMergingQueryRunnerV2;
+import org.apache.druid.query.groupby.epinephelinae.Grouper;
 import org.apache.druid.query.groupby.resource.GroupByQueryResource;
 import org.apache.druid.query.groupby.strategy.GroupByStrategy;
 
 import javax.annotation.Nullable;
+import java.io.Closeable;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.function.UnaryOperator;
 
@@ -163,7 +166,10 @@ public final class QueryPlus<T>
    * 不同的请求类型，其处理对象queryRunner也不同，
    * 如group by查询，最终对应的就是{@link GroupByMergingQueryRunnerV2}来处理。
    *
-   * queryRunner更像是一个“处理链”，
+   * queryRunner更像是一个“处理链”，每个queryRunner的run都会返回一个Sequence迭代器结果，
+   * 且内部可能还有一个queryrunner被貂绒run方法，并将其返回的Sequence和当前queryRunner的Sequence合并后返回。
+   *
+   * 此处的QueryPlus#run方法就是通过walker找到此次查询的对应顶部queryrunner，调用run方法执行整个queryRunner链的run方法。
    */
   public Sequence<T> run(QuerySegmentWalker walker, ResponseContext context)
   {
@@ -217,10 +223,13 @@ public final class QueryPlus<T>
      *      |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeGroupByResults(GroupByStrategy, GroupByQuery, GroupByQueryResource, QueryRunner, ResponseContext)}
      *      |->{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#mergeGroupByResultsWithoutPushDown(GroupByStrategy, GroupByQuery, GroupByQueryResource, QueryRunner, ResponseContext)}
      *      |->{@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2#mergeResults(QueryRunner, GroupByQuery, ResponseContext)}
-     * |->run方法为该响应匿名函数：{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
-     * |->{@link GroupByMergingQueryRunnerV2#run(QueryPlus, ResponseContext)}
+     * |->（进入匿名函数mergingQueryRunner）run方法为该响应匿名函数：{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
+     * |->（进入GroupByMergingQueryRunnerV2）{@link GroupByMergingQueryRunnerV2#run(QueryPlus, ResponseContext)}
      * 至此GroupByMergingQueryRunnerV2.run提供真正的BaseSequence结果，且其中包含make方法，为真正的查询结果方法，
      * 在后续Sequence.toYielder时会被调用，执行真正的查询逻辑
+     *
+     * 返回的Sequence中的make方法会返回迭代器，该迭代器可迭代查询结果，迭代器创建逻辑：
+     * {@link org.apache.druid.query.groupby.epinephelinae.RowBasedGrouperHelper#makeGrouperIterator(Grouper, GroupByQuery, List, Closeable)}
      */
     Sequence<T> res = queryRunner.run(this, context);
     return res;

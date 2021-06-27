@@ -39,6 +39,12 @@ public class CloseableGrouperIterator<KeyType, T> implements CloseableIterator<T
   private final CloseableIterator<Entry<KeyType>> iterator;
   private final Closer closer;
 
+  /**
+   *
+   * @param iterator
+   * @param transformer
+   * @param closeable
+   */
   public CloseableGrouperIterator(
       final CloseableIterator<Entry<KeyType>> iterator,
       final Function<Grouper.Entry<KeyType>, T> transformer,

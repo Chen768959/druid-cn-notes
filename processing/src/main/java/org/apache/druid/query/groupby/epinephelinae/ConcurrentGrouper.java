@@ -62,6 +62,10 @@ import java.util.stream.Collectors;
  * partitioned between buffers based on their hash, and multiple threads can write into the same buffer. When
  * it becomes clear that the result set does not fit in memory, the table switches to a mode where each thread
  * gets its own buffer and its own spill files on disk.
+ *
+ * 传递buffer被切分为concurrrencyHint的片段，每一个切片分配给不同的grouper。
+ * 每一个切片都分别是synchronized的，只要结果集长度适合放入这片内存，就将关键字hash到不同的buffer中，多个线程可以写入相同的buffer。
+ * 如果结果集并不能使用这一片内存，那么这个表将给每一个进程分配一片独立的buffer和独立的磁盘
  */
 public class ConcurrentGrouper<KeyType> implements Grouper<KeyType>
 {
@@ -203,6 +207,9 @@ public class ConcurrentGrouper<KeyType> implements Grouper<KeyType>
     this.keySerdeFactory = keySerdeFactory;
     this.limitSpec = limitSpec;
     this.sortHasNonGroupingFields = sortHasNonGroupingFields;
+    /**
+     * sortHasNonGroupingFields：非groupby字段是否排序，默认false
+     */
     this.keyObjComparator = keySerdeFactory.objectComparator(sortHasNonGroupingFields);
     this.executor = Preconditions.checkNotNull(executor);
     this.priority = priority;

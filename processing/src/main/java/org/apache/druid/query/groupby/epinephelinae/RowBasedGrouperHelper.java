@@ -34,6 +34,7 @@ import org.apache.druid.collections.ReferenceCountingResourceHolder;
 import org.apache.druid.common.config.NullHandling;
 import org.apache.druid.common.guava.SettableSupplier;
 import org.apache.druid.common.utils.IntArrayUtils;
+import org.apache.druid.java.util.common.CloseableIterators;
 import org.apache.druid.java.util.common.DateTimes;
 import org.apache.druid.java.util.common.IAE;
 import org.apache.druid.java.util.common.ISE;
@@ -569,7 +570,7 @@ public class RowBasedGrouperHelper
 
   /**
    *
-   * @param grouper
+   * @param grouper 聚焦于group by查询，多线程时创建的是{@link ConcurrentGrouper}
    * @param query 此次查询的请求对象
    * @param dimsToInclude null
    * @param closeable 收集了所有“可关闭”的对象（如流）然后可以统一关闭，
@@ -581,8 +582,11 @@ public class RowBasedGrouperHelper
       final Closeable closeable
   )
   {
+    // 此次查询的内容中是否包含时间戳列
     final boolean includeTimestamp = query.getResultRowHasTimestamp();
+    // 新建一个BitSet集合，且容量为此次查询的结果维度容量，由此可见此BitSet用来装各维度信息
     final BitSet dimsToIncludeBitSet = new BitSet(query.getDimensions().size());
+    // 获取第一个“非时间维度”的位置，如果无时间维度，则此初始位置为0，否则为1（因为第0位一定是时间维度）
     final int resultRowDimensionStart = query.getResultRowDimensionStart();
 
     if (dimsToInclude != null) {
@@ -594,6 +598,20 @@ public class RowBasedGrouperHelper
       }
     }
 
+    /**
+     * 此处创建CloseableGrouperIterator类型的迭代器，
+     * 传入三个参数，其中第一个为一个迭代器，第二个参数为一个匿名函数。
+     *
+     * CloseableGrouperIterator内部的next方法主要分为两步，
+     * 1、调用入参迭代器的next获取entry对象。
+     * 2、将entry对象传入入参匿名函数，最后返回ResultRow
+     *
+     * @param iterator 所有数据都是从该迭代器中迭代出来的。
+     *                 由{@link ConcurrentGrouper#iterator(boolean)}
+     *                    ->{@link CloseableIterators#mergeSorted(List, Comparator)}创建
+     *
+     * @param transformer 匿名函数，用于在迭代时，将每一个entry迭代对象处理成ResultRow
+     */
     return new CloseableGrouperIterator<>(
         grouper.iterator(true),
         entry -> {
