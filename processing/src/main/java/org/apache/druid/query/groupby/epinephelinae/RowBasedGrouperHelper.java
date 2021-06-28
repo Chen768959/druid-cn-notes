@@ -614,16 +614,26 @@ public class RowBasedGrouperHelper
      */
     return new CloseableGrouperIterator<>(
         grouper.iterator(true),
+
+        /**
+         * 匿名函数，用于在迭代时，将每一个entry迭代对象处理成ResultRow。
+         *
+         * ResultRow的本质是一个数组，一行信息都被存于数组中。
+         * 由以下逻辑可以看出，
+         * 该方法将entry中的“时间戳”、“各维度结果”、“聚合结果”都按序装入ResultRow内数组中。最后返回
+         */
         entry -> {
           final ResultRow resultRow = ResultRow.create(query.getResultRowSizeWithoutPostAggregators());
 
           // Add timestamp, maybe.
+          // 将时间戳字段加入此行头部，即第0位数组
           if (includeTimestamp) {
             final DateTime timestamp = query.getGranularity().toDateTime(((long) (entry.getKey().getKey()[0])));
             resultRow.set(0, timestamp.getMillis());
           }
 
           // Add dimensions.
+          // 顺着刚刚的时间戳，将“各维度结果”存入其后（如果时间列存在，则从第1位开始存维度，否则从第0位存）
           for (int i = resultRowDimensionStart; i < entry.getKey().getKey().length; i++) {
             if (dimsToInclude == null || dimsToIncludeBitSet.get(i - resultRowDimensionStart)) {
               final Object dimVal = entry.getKey().getKey()[i];
@@ -635,7 +645,8 @@ public class RowBasedGrouperHelper
           }
 
           // Add aggregations.
-          final int resultRowAggregatorStart = query.getResultRowAggregatorStart();
+          // 接着各维度结果后存聚合结果
+          final int resultRowAggregatorStart = query.getResultRowAggregatorStart();// 获取维度后面的一位
           for (int i = 0; i < entry.getValues().length; i++) {
             resultRow.set(resultRowAggregatorStart + i, entry.getValues()[i]);
           }
