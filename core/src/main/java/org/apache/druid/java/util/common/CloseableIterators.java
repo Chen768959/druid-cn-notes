@@ -42,6 +42,11 @@ public class CloseableIterators
     return wrap(innerIterator, closer);
   }
 
+  /**
+   *
+   * @param iterators
+   * @param comparator 该对象用于排序
+   */
   public static <T> CloseableIterator<T> mergeSorted(
       List<? extends CloseableIterator<? extends T>> iterators,
       Comparator<T> comparator

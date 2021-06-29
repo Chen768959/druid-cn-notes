@@ -607,12 +607,13 @@ public class RowBasedGrouperHelper
      * 2、将entry对象传入入参匿名函数，最后返回ResultRow
      *
      * @param iterator 所有数据都是从该迭代器中迭代出来的。
-     *                 由{@link ConcurrentGrouper#iterator(boolean)}
-     *                    ->{@link CloseableIterators#mergeSorted(List, Comparator)}创建
-     *
      * @param transformer 匿名函数，用于在迭代时，将每一个entry迭代对象处理成ResultRow
      */
     return new CloseableGrouperIterator<>(
+        /**
+         * {@link ConcurrentGrouper#iterator(boolean)}
+         * ->{@link CloseableIterators#mergeSorted(List, Comparator)}
+         */
         grouper.iterator(true),
 
         /**
