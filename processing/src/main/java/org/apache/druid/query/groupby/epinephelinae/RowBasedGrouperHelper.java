@@ -612,7 +612,15 @@ public class RowBasedGrouperHelper
     return new CloseableGrouperIterator<>(
         /**
          * {@link ConcurrentGrouper#iterator(boolean)}
-         * ->{@link CloseableIterators#mergeSorted(List, Comparator)}
+         * ->（创建迭代器列表）{@link ConcurrentGrouper#getGroupersIterator(boolean)}，后续会合并所有迭代器然后返回。
+         *
+         * 所以此处的迭代器，实际上是由getGroupersIterator(boolean)创建的迭代器列表的总和。
+         *
+         * 事实上{@link ConcurrentGrouper}对象在创建之初，其中有一个“groups”属性，其是List<SpillingGrouper<KeyType>>类型，
+         * 即{@link SpillingGrouper}集合，每一个SpillingGrouper对象都有一个对应的迭代器。
+         *
+         * SpillingGrouper：
+         *
          */
         grouper.iterator(true),
 

@@ -338,6 +338,7 @@ public class ConcurrentGrouper<KeyType> implements Grouper<KeyType>
       throw new ISE("Grouper is closed");
     }
 
+    // 获取每个grouper的迭代器
     final List<CloseableIterator<Entry<KeyType>>> sortedIterators = sorted && isParallelizable() ?
                                                                     parallelSortAndGetGroupersIterator() :
                                                                     getGroupersIterator(sorted);
@@ -354,6 +355,7 @@ public class ConcurrentGrouper<KeyType> implements Grouper<KeyType>
       }
     }
 
+    // 合并迭代器，按顺序排序
     return sorted ?
            CloseableIterators.mergeSorted(sortedIterators, keyObjComparator) :
            CloseableIterators.concat(sortedIterators);
