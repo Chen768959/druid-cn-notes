@@ -89,6 +89,7 @@ public class ServerManager implements QuerySegmentWalker
   private final Cache cache;
   private final ObjectMapper objectMapper;
   private final CacheConfig cacheConfig;
+  // 管理这当前his节点负责加载的segment信息
   private final SegmentManager segmentManager;
   private final JoinableFactory joinableFactory;
   private final ServerConfig serverConfig;

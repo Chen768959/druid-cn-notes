@@ -277,6 +277,10 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
                */
               final Grouper<RowBasedKey> grouper = pair.lhs;
               final Accumulator<AggregateResult, ResultRow> accumulator = pair.rhs;
+
+              /**
+               * {@link ConcurrentGrouper#init()}
+               */
               grouper.init();
 
               final ReferenceCountingResourceHolder<Grouper<RowBasedKey>> grouperHolder =

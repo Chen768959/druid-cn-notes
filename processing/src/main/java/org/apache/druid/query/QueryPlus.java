@@ -190,9 +190,11 @@ public final class QueryPlus<T>
      * 另：请求到达broker和到达historical后此处获取的queryRunner是不同的
      * 到达broker获取的queryRunner类型为
      * {@link org.apache.druid.server.ClientQuerySegmentWalker $QuerySwappingQueryRunner}
-     *
      * 请求到达historical获取的queryRunner类型为
      * {@link org.apache.druid.query.CPUTimeMetricQueryRunner}
+     *
+     * ServerManager：其中包含了segmentManager。
+     *
      */
     QueryRunner<T> queryRunner = query.getRunner(walker);
 

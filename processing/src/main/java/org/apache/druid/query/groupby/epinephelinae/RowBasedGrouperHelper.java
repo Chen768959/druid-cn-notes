@@ -619,7 +619,7 @@ public class RowBasedGrouperHelper
          * 事实上{@link ConcurrentGrouper}对象在创建之初，其中有一个“groups”属性，其是List<SpillingGrouper<KeyType>>类型，
          * 即{@link SpillingGrouper}集合，每一个SpillingGrouper对象都有一个对应的迭代器。
          *
-         * SpillingGrouper：
+         * SpillingGrouper：每个SpillingGrouper都负责一部分数据的聚合操作
          *
          */
         grouper.iterator(true),
