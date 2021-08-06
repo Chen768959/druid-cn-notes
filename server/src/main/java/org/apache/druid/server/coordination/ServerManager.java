@@ -52,6 +52,7 @@ import org.apache.druid.query.QueryUnsupportedException;
 import org.apache.druid.query.ReferenceCountingSegmentQueryRunner;
 import org.apache.druid.query.ReportTimelineMissingSegmentQueryRunner;
 import org.apache.druid.query.SegmentDescriptor;
+import org.apache.druid.query.context.ResponseContext;
 import org.apache.druid.query.planning.DataSourceAnalysis;
 import org.apache.druid.query.spec.SpecificSegmentQueryRunner;
 import org.apache.druid.query.spec.SpecificSegmentSpec;
@@ -164,6 +165,14 @@ public class ServerManager implements QuerySegmentWalker
     return getQueryRunnerForSegments(query, segmentDescriptors);
   }
 
+  /**
+   * 为每一次查询请求创建queryrunner
+   * 主要是由{@link org.apache.druid.query.QueryPlus#run(QuerySegmentWalker, ResponseContext)}调用
+   *
+   * @param query 此次查询请求对象
+   * @param specs
+   * @return org.apache.druid.query.QueryRunner<T>
+   */
   @Override
   public <T> QueryRunner<T> getQueryRunnerForSegments(Query<T> query, Iterable<SegmentDescriptor> specs)
   {

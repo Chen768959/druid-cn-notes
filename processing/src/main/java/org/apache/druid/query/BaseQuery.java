@@ -142,6 +142,12 @@ public abstract class BaseQuery<T> implements Query<T>
     return getQuerySegmentSpecForLookUp(this).lookup(this, walker);
   }
 
+  /**
+   * 通过查询对象query的目标数据源（DataSource），
+   * 获取对应的“QuerySegmentSpec”
+   * @param query 此次查询的请求对象
+   * @return org.apache.druid.query.spec.QuerySegmentSpec
+   */
   @VisibleForTesting
   public static QuerySegmentSpec getQuerySegmentSpecForLookUp(BaseQuery<?> query)
   {

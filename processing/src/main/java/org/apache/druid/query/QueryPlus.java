@@ -167,7 +167,7 @@ public final class QueryPlus<T>
    * 如group by查询，最终对应的就是{@link GroupByMergingQueryRunnerV2}来处理。
    *
    * queryRunner更像是一个“处理链”，每个queryRunner的run都会返回一个Sequence迭代器结果，
-   * 且内部可能还有一个queryrunner被貂绒run方法，并将其返回的Sequence和当前queryRunner的Sequence合并后返回。
+   * 且内部可能还有一个queryrunner被调用run方法，并将其返回的Sequence和当前queryRunner的Sequence合并后返回。
    *
    * 此处的QueryPlus#run方法就是通过walker找到此次查询的对应顶部queryrunner，调用run方法执行整个queryRunner链的run方法。
    */
@@ -177,6 +177,10 @@ public final class QueryPlus<T>
     log.info("QueryPlus初始baseQuery："+query.getClass());
     /**
      * {@link BaseQuery#getRunner(QuerySegmentWalker)}
+     * |->{@link org.apache.druid.query.spec.MultipleSpecificSegmentSpec#lookup(Query, QuerySegmentWalker)}
+     * |->walker.getQueryRunnerForSegments()，其中broker和historical节点的walker是不同的
+     * broker节点：{@link org.apache.druid.server.ClientQuerySegmentWalker#getQueryRunnerForSegments(Query, Iterable)}
+     * historical节点：{@link org.apache.druid.server.coordination.ServerManager#getQueryRunnerForSegments(Query, Iterable)}
      *
      * 参数walker为启动时注入而来，
      * broker和historical启动时注入的对象不同

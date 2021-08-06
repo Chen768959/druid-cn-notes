@@ -303,6 +303,8 @@ public class QueryLifecycle
      * broker启动时walker为{@link org.apache.druid.server.ClientQuerySegmentWalker}
      * historical启动时walker为{@link org.apache.druid.server.coordination.ServerManager}
      * 这两个walker不同，也决定了broker和historical在面对查询请求时，其二者的处理逻辑不同
+     *
+     * {@link QueryPlus#run(QuerySegmentWalker, ResponseContext)}
      */
     final Sequence res = tmpQueryPlus.run(texasRanger, responseContext);
 
