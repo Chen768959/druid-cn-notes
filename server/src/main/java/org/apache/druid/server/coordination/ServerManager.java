@@ -170,7 +170,7 @@ public class ServerManager implements QuerySegmentWalker
    * 主要是由{@link org.apache.druid.query.QueryPlus#run(QuerySegmentWalker, ResponseContext)}调用
    *
    * @param query 此次查询请求对象
-   * @param specs
+   * @param specs 也是由请求对象中得来，其中包含了此次请求涉及的segment信息列表
    * @return org.apache.druid.query.QueryRunner<T>
    */
   @Override

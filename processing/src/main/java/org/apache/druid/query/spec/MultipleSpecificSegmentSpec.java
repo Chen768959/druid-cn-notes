@@ -81,6 +81,11 @@ public class MultipleSpecificSegmentSpec implements QuerySegmentSpec
   @Override
   public <T> QueryRunner<T> lookup(Query<T> query, QuerySegmentWalker walker)
   {
+    /**
+     * walker是his节点启动时注入进来的
+     * query是此次查询对象
+     * descriptors为此次查询涉及到那些segment信息列表
+     */
     return walker.getQueryRunnerForSegments(query, descriptors);
   }
 
