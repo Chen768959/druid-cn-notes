@@ -185,6 +185,7 @@ public class SegmentManager
    */
   public Optional<VersionedIntervalTimeline<String, ReferenceCountingSegment>> getTimeline(DataSourceAnalysis analysis)
   {
+    // analysis本来就是请求对象中datasource数据源的封装，此处将其拿出
     final TableDataSource tableDataSource = getTableDataSource(analysis);
     return Optional.ofNullable(dataSources.get(tableDataSource.getName())).map(DataSourceState::getTimeline);
   }

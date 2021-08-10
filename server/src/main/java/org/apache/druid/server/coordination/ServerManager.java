@@ -189,10 +189,16 @@ public class ServerManager implements QuerySegmentWalker
     }
 
     final QueryToolChest<T, Query<T>> toolChest = factory.getToolchest();
+    // 可以简单的把DataSourceAnalysis理解为dataSource数据源的封装
     final DataSourceAnalysis analysis = DataSourceAnalysis.forDataSource(query.getDataSource());
     final AtomicLong cpuTimeAccumulator = new AtomicLong(0L);
 
     final VersionedIntervalTimeline<String, ReferenceCountingSegment> timeline;
+    /**
+     * ！！！
+     * 该segmentManager在启动时用于存放“以时间轴为单位，被成功加载的segment对象”。
+     * 此处返回数据源的“时间轴上的所有segment对象”
+     */
     final Optional<VersionedIntervalTimeline<String, ReferenceCountingSegment>> maybeTimeline =
         segmentManager.getTimeline(analysis);
 
@@ -201,9 +207,10 @@ public class ServerManager implements QuerySegmentWalker
       throw new ISE("Cannot handle subquery: %s", analysis.getDataSource());
     }
 
+    // 验证此数据源是否存在时间轴及其上的segment
     if (maybeTimeline.isPresent()) {
       timeline = maybeTimeline.get();
-    } else {
+    } else {// 如果数据源没有对应时间轴信息，则直接认为数据源是空
       return new ReportTimelineMissingSegmentQueryRunner<>(Lists.newArrayList(specs));
     }
 
