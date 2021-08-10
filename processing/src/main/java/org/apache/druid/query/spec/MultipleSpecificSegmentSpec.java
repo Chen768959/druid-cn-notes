@@ -33,6 +33,9 @@ import java.util.List;
 import java.util.Objects;
 
 /**
+ * 在his节点查询初始会被调用，
+ * 本质上是封装此次查询涉及到那些segment，
+ * List<SegmentDescriptor>中就包含了这些被涉及的segment的信息。
  */
 public class MultipleSpecificSegmentSpec implements QuerySegmentSpec
 {
@@ -71,6 +74,10 @@ public class MultipleSpecificSegmentSpec implements QuerySegmentSpec
     return intervals;
   }
 
+  /**
+   * lookup本意为“查询”
+   * getQueryRunnerForIntervals：字面含义“通过walker，找到descriptors(segment信息列表)对应的QueryRunner”
+   */
   @Override
   public <T> QueryRunner<T> lookup(Query<T> query, QuerySegmentWalker walker)
   {

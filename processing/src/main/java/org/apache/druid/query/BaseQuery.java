@@ -29,6 +29,7 @@ import org.apache.druid.java.util.common.granularity.Granularities;
 import org.apache.druid.java.util.common.granularity.Granularity;
 import org.apache.druid.java.util.common.granularity.PeriodGranularity;
 import org.apache.druid.java.util.common.logger.Logger;
+import org.apache.druid.query.groupby.GroupByQuery;
 import org.apache.druid.query.planning.DataSourceAnalysis;
 import org.apache.druid.query.spec.QuerySegmentSpec;
 import org.joda.time.DateTimeZone;
@@ -108,12 +109,19 @@ public abstract class BaseQuery<T> implements Query<T>
     return descending;
   }
 
-  @JsonProperty("intervals")//指定java对象转化成json时，该属性对应的key名
+  @JsonProperty("intervals")
   public QuerySegmentSpec getQuerySegmentSpec()
   {
     return querySegmentSpec;
   }
 
+  /**
+   * groupby请求到达之初，
+   * 请求对象被封装成{@link GroupByQuery}，
+   * 然后调用该query对象的getRunner方法，但是所有子对象中都没有此方法，所以实际调用的是以下方法。
+   *
+   *
+   */
   @Override
   public QueryRunner<T> getRunner(QuerySegmentWalker walker)
   {
@@ -128,48 +136,55 @@ public abstract class BaseQuery<T> implements Query<T>
     log.info("!!!select：BaseQuery内getRunner时，walker类型："+walker.getClass());
 
     /**
+     * 此处的this就是当前query对象，也是此次的请求对象，
+     * 在groupby请求中，为{@link GroupByQuery}，是请求参数的封装。
+     *
      * 无论是broker还是historical都是调用以下逻辑
-     * getQuerySegmentSpecForLookUp(this).lookup：{@link org.apache.druid.query.spec.MultipleSpecificSegmentSpec#lookup(Query, QuerySegmentWalker)}
+     * 1、获取QuerySegmentSpec：
+     * {@link this#getQuerySegmentSpecForLookUp(BaseQuery)}
+     * 首先是从“请求对象”中获取，其次获取的QuerySegmentSpec是“此次请求涉及segment的信息列表（的封装）”
      *
-     * 其lookup中唯一的逻辑就是调用传参walker的getQueryRunnerForSegments()方法获取QueryRunner
-     * （所以此方法的queryrunner由walker得来）
+     * 2、QuerySegmentSpec调用lookup方法
+     * {@link org.apache.druid.query.spec.MultipleSpecificSegmentSpec#lookup(Query, QuerySegmentWalker)}
+     * 这是“intervals封装对象”提供的方法，该方法只有一行代码：
+     * “walker.getQueryRunnerForSegments(query, descriptors)”
      *
+     *
+     * 3、通过传入的walker，获取queryrunner
      * broker节点：{@link org.apache.druid.server.ClientQuerySegmentWalker#getQueryRunnerForSegments(Query, Iterable)}
      * historical节点：{@link org.apache.druid.server.coordination.ServerManager#getQueryRunnerForSegments(Query, Iterable)}
-     *
-     * todo QueryRunner创建逻辑
      */
     return getQuerySegmentSpecForLookUp(this).lookup(this, walker);
   }
 
   /**
-   * 通过查询对象query的目标数据源（DataSource），
-   * 获取对应的“QuerySegmentSpec”
+   * 从请求对象中获取此次查询“涉及哪些segment”（至于请求对象中为何会有该内容，怀疑是broker节点通过intervals属性查出后，在请求his节点时传入）
+   * 然后返回{@link org.apache.druid.query.spec.MultipleSpecificSegmentSpec}
+   * 该对象是对“List<SegmentDescriptor>”的封装，单个SegmentDescriptor代表某个segment的信息
+   *
    * @param query 此次查询的请求对象
-   * @return org.apache.druid.query.spec.QuerySegmentSpec
+   * @return 此次查询涉及到的segments的描述信息的封装：{@link org.apache.druid.query.spec.MultipleSpecificSegmentSpec}。
    */
   @VisibleForTesting
   public static QuerySegmentSpec getQuerySegmentSpecForLookUp(BaseQuery<?> query)
   {
     /**
-     * DataSourceAnalysis直译是数据源分析。
-     * druid的查询方式因数据源的类型而异。
-     *
      * 1、DataSourceAnalysis.forDataSource：
      * 获取数据源，（暂按照table数据源来分析）。
      * 入参的datasource来自于此处查询请求的参数中，暂定table datasource
      *
      * 如果是table datasource，
      * 则此处只是创建一个新的DataSourceAnalysis对象，
-     * 然后将datasource、Query对象，这些参数存进去。
+     * 然后将datasource、“Query对象”，这些参数存进去。
      *
-     * 2、.getBaseQuerySegmentSpec()：
-     * 调用数据源内方法获取QuerySegmentSpec对象
+     * 2、getBaseQuerySegmentSpec()：
      * {@link DataSourceAnalysis#getBaseQuerySegmentSpec()}
+     * |->{@link BaseQuery#getQuerySegmentSpec()}
+     * 此处的BaseQuery就是此次请求对象（本质是{@link GroupByQuery}），
+     * getQuerySegmentSpec就是从请求对象中获取QuerySegmentSpec，即此次请求涉及哪些segment的信息列表
      *
-     *
-     * 3、.orElseGet(query::getQuerySegmentSpec)：
-     * 如果上一步获取不到，则使用getQuerySegmentSpec()获取（暂不考虑）
+     * （暂不考虑）.orElseGet(query::getQuerySegmentSpec)：
+     * 如果上一步获取不到，则使用getQuerySegmentSpec()获取
      *
      */
     return DataSourceAnalysis.forDataSource(query.getDataSource())

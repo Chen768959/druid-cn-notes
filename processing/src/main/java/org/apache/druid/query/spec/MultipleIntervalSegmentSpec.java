@@ -31,6 +31,10 @@ import java.util.Collections;
 import java.util.List;
 
 /**
+ * 该对象类似于Interval时间段属性的封装。
+ *
+ * 在一次查询请求中，一般要定义json中的intervals属性，
+ * 而这个MultipleIntervalSegmentSpec就是该属性的封装
  */
 public class MultipleIntervalSegmentSpec implements QuerySegmentSpec
 {
@@ -51,6 +55,10 @@ public class MultipleIntervalSegmentSpec implements QuerySegmentSpec
     return intervals;
   }
 
+  /**
+   * lookup本意为“查询”
+   * getQueryRunnerForIntervals：字面含义“通过walker，找到intervals时间段对应的QueryRunner”
+   */
   @Override
   public <T> QueryRunner<T> lookup(Query<T> query, QuerySegmentWalker walker)
   {

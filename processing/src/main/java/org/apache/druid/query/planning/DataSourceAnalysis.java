@@ -258,7 +258,7 @@ public class DataSourceAnalysis
     /**
      * getBaseQuery().map(query -> ((BaseQuery<?>) query) 防空指针用的
      * getQuerySegmentSpec返回的对象，其实是json中intervals键值对，
-     * 也就是查询时指定的时间范围
+     * “也就是查询时指定的时间范围”
      */
     return getBaseQuery().map(query -> ((BaseQuery<?>) query).getQuerySegmentSpec());
   }
