@@ -26,9 +26,11 @@ import com.google.common.collect.Iterables;
 import org.apache.druid.java.util.common.guava.nary.TrinaryFn;
 import org.apache.druid.java.util.common.guava.nary.TrinaryTransformIterable;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 
 /**
+ * 用于操作“Iterable<T> delegate”列表的，函数式工具类
  */
 public class FunctionalIterable<T> implements Iterable<T>
 {
@@ -39,6 +41,7 @@ public class FunctionalIterable<T> implements Iterable<T>
     return new FunctionalIterable<>(delegate);
   }
 
+  // 待处理列表，每个该函数式工具类必须传入这个待处理列表
   public FunctionalIterable(
       Iterable<T> delegate
   )
@@ -57,8 +60,22 @@ public class FunctionalIterable<T> implements Iterable<T>
     return new FunctionalIterable<>(Iterables.transform(delegate, fn));
   }
 
+  /**
+   * 使用fn方法处理当前待处理列表中的每一个对象，
+   * 并将各个返回结果合并为一个列表并返回
+   */
   public <RetType> FunctionalIterable<RetType> transformCat(Function<T, Iterable<RetType>> fn)
   {
+    /**
+     * delegate就是Iterable<SegmentDescriptor>
+     * 即segment信息列表
+     *
+     * Iterables.transform(delegate, fn)：
+     * 即map操作，fn处理每一个segment信息，然后每一个segment信息处理后都返回一个“Iterable<RetType>列表”
+     *
+     * Iterables.concat：
+     * 将这些Iterable<RetType>列表合并为一个Iterable<RetType>列表
+     */
     return new FunctionalIterable<>(Iterables.concat(Iterables.transform(delegate, fn)));
   }
 

@@ -150,7 +150,6 @@ public abstract class BaseQuery<T> implements Query<T>
      * “walker.getQueryRunnerForSegments(query, descriptors)”
      * 该方法字面含义：“通过walker，找到descriptors(segment信息列表)对应的QueryRunner”
      *
-     *
      * 3、通过walker，找到descriptors(segment信息列表)对应的QueryRunner
      * broker节点：{@link org.apache.druid.server.ClientQuerySegmentWalker#getQueryRunnerForSegments(Query, Iterable)}
      * historical节点：{@link org.apache.druid.server.coordination.ServerManager#getQueryRunnerForSegments(Query, Iterable)}

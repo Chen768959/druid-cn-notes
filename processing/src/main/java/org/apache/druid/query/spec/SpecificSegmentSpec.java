@@ -32,6 +32,7 @@ import java.util.List;
 */
 public class SpecificSegmentSpec implements QuerySegmentSpec
 {
+  // segment描述信息对象
   private final SegmentDescriptor descriptor;
 
   public SpecificSegmentSpec(SegmentDescriptor descriptor)

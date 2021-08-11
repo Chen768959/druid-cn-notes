@@ -78,7 +78,7 @@ public class SegmentManager
    * Represent the state of a data source including the timeline, total segment size, and number of segments.
    * 即该数据源上的“总加载信息”，其中包含2个重要属性
    * （1）该数据源已加载的所有segment数量和大小
-   * （2）timeline:“用来储存该数据源的各时间轴以及其上的各个ReferenceCountingSegment对象(segement真正的本体)”
+   * （2）timeline <String, ReferenceCountingSegment>:“用来储存该数据源的各时间轴以及其上的各个ReferenceCountingSegment对象(segement真正的本体)”
    */
   public static class DataSourceState
   {
@@ -187,6 +187,13 @@ public class SegmentManager
   {
     // analysis本来就是请求对象中datasource数据源的封装，此处将其拿出
     final TableDataSource tableDataSource = getTableDataSource(analysis);
+    /**
+     * dataSources是个map，表示“各数据源已加载的segment信息”
+     * key：各数据源名称，
+     * value：即该数据源上的“总加载信息”，其中包含2个重要属性
+     * （1）该数据源已加载的所有segment数量和大小
+     * （2）Timeline:“用来储存该数据源的各时间轴以及其上的各个ReferenceCountingSegment对象(segement真正的本体)”
+     */
     return Optional.ofNullable(dataSources.get(tableDataSource.getName())).map(DataSourceState::getTimeline);
   }
 

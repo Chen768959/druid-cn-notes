@@ -192,12 +192,14 @@ public class ServerManager implements QuerySegmentWalker
     // 可以简单的把DataSourceAnalysis理解为dataSource数据源的封装
     final DataSourceAnalysis analysis = DataSourceAnalysis.forDataSource(query.getDataSource());
     final AtomicLong cpuTimeAccumulator = new AtomicLong(0L);
-
+    // 此次查询的数据源“时间轴上的所有segment对象”
     final VersionedIntervalTimeline<String, ReferenceCountingSegment> timeline;
     /**
      * ！！！
      * 该segmentManager在启动时用于存放“以时间轴为单位，被成功加载的segment对象”。
      * 此处返回数据源的“时间轴上的所有segment对象”
+     *
+     * maybeTimeline：用来储存该数据源的各时间轴以及其上的各个ReferenceCountingSegment对象(segement真正的本体)
      */
     final Optional<VersionedIntervalTimeline<String, ReferenceCountingSegment>> maybeTimeline =
         segmentManager.getTimeline(analysis);
@@ -215,6 +217,8 @@ public class ServerManager implements QuerySegmentWalker
     }
 
     // segmentMapFn maps each base Segment into a joined Segment if necessary.
+    // 该函数会处理每一个入参segment，然后返回一个处理后的segment对象。
+    // 但是只有涉及到有子查询时才会执行处理逻辑，否则直接返回入参segment，不做任何处理
     final Function<SegmentReference, SegmentReference> segmentMapFn = Joinables.createSegmentMapFn(
         analysis.getPreJoinableClauses(),
         joinableFactory,
@@ -223,7 +227,21 @@ public class ServerManager implements QuerySegmentWalker
     );
 
     final FunctionalIterable<QueryRunner<T>> queryRunners = FunctionalIterable
+        /**
+         * 创建函数式工具类{@link FunctionalIterable}
+         * 并传入“待处理列表”
+         * （specs：segment信息列表）
+         */
         .create(specs)
+        /**
+         * transformCat函数：使用入参方法处理当前待处理列表中的每一个对象，
+         * 并将各个返回结果合并为一个列表返回。
+         *
+         * 此处为使用
+         * {@link this#buildQueryRunnerForSegment(Query, SegmentDescriptor, QueryRunnerFactory, QueryToolChest, VersionedIntervalTimeline, Function, AtomicLong)}
+         * 方法处理每一个segment信息，每一个处理完后都会返回一个queryrunner，
+         * 最后再将所有queryrunner装进一个list并返回
+         */
         .transformCat(
             descriptor -> Collections.singletonList(
                 buildQueryRunnerForSegment(
@@ -250,6 +268,16 @@ public class ServerManager implements QuerySegmentWalker
     );
   }
 
+  /**
+   *
+   * @param query 此次查询对象
+   * @param descriptor 此次查询涉及到的segment信息“之一”
+   * @param factory 根据query的class类型来获取QueryRunnerFactory对象
+   * @param toolChest
+   * @param timeline 此次查询的数据源“时间轴上的所有segment对象”
+   * @param segmentMapFn
+   * @param cpuTimeAccumulator
+   */
   <T> QueryRunner<T> buildQueryRunnerForSegment(
       final Query<T> query,
       final SegmentDescriptor descriptor,
@@ -260,6 +288,7 @@ public class ServerManager implements QuerySegmentWalker
       final AtomicLong cpuTimeAccumulator
   )
   {
+    // 找到segment信息对应的真正“segment数据”对象
     final PartitionHolder<ReferenceCountingSegment> entry = timeline.findEntry(
         descriptor.getInterval(),
         descriptor.getVersion()
@@ -269,11 +298,14 @@ public class ServerManager implements QuerySegmentWalker
       return new ReportTimelineMissingSegmentQueryRunner<>(descriptor);
     }
 
+    // 获取此segment的实际分区数据
+    // （如apache-druid-0.20.1/var/druid/segment-cache/test-file/2020-03-01T00:00:00.000Z_2020-04-01T00:00:00.000Z/2021-03-11T12:41:03.686Z/0）结尾的0号分区
     final PartitionChunk<ReferenceCountingSegment> chunk = entry.getChunk(descriptor.getPartitionNumber());
     if (chunk == null) {
       return new ReportTimelineMissingSegmentQueryRunner<>(descriptor);
     }
 
+    // 返回分区上的segment数据对象
     final ReferenceCountingSegment segment = chunk.getObject();
     return buildAndDecorateQueryRunner(
         factory,
@@ -284,6 +316,14 @@ public class ServerManager implements QuerySegmentWalker
     );
   }
 
+  /**
+   *
+   * @param factory 根据query的class类型来获取QueryRunnerFactory对象
+   * @param toolChest
+   * @param segment  如果此次查询不涉及子查询，则此segment数据就是“请求对象对应分区上的segment数据对象”
+   * @param segmentDescriptor segment描述信息
+   * @param cpuTimeAccumulator
+   */
   private <T> QueryRunner<T> buildAndDecorateQueryRunner(
       final QueryRunnerFactory<T, Query<T>> factory,
       final QueryToolChest<T, Query<T>> toolChest,
@@ -292,8 +332,11 @@ public class ServerManager implements QuerySegmentWalker
       final AtomicLong cpuTimeAccumulator
   )
   {
+    // segment描述信息的包装对象，主要是要利用其lookup（查找）方法
     final SpecificSegmentSpec segmentSpec = new SpecificSegmentSpec(segmentDescriptor);
+    // {@link DataSegment}已加载信息的标识
     final SegmentId segmentId = segment.getId();
+    // segment时间区间
     final Interval segmentInterval = segment.getDataInterval();
     // ReferenceCountingSegment can return null for ID or interval if it's already closed.
     // Here, we check one more time if the segment is closed.
