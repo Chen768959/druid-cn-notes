@@ -346,14 +346,17 @@ public class ServerManager implements QuerySegmentWalker
     }
     String segmentIdString = segmentId.toString();
 
+    // 此runner用于计算“内部runner.run”的耗时
     MetricsEmittingQueryRunner<T> metricsEmittingQueryRunnerInner = new MetricsEmittingQueryRunner<>(
         emitter,
         toolChest,
+        // 此runner内部通过factory创建真正的runner用于查询
         new ReferenceCountingSegmentQueryRunner<>(factory, segment, segmentDescriptor),
         QueryMetrics::reportSegmentTime,
         queryMetrics -> queryMetrics.segment(segmentIdString)
     );
 
+    // 此runner与缓存相关，判断是否使用缓存结果
     CachingQueryRunner<T> cachingQueryRunner = new CachingQueryRunner<>(
         segmentIdString,
         segmentDescriptor,
@@ -365,12 +368,14 @@ public class ServerManager implements QuerySegmentWalker
         cacheConfig
     );
 
+    // 判断请求中是否设置了“bySegment”，设置了的话会对请求结果进行包装
     BySegmentQueryRunner<T> bySegmentQueryRunner = new BySegmentQueryRunner<>(
         segmentId,
         segmentInterval.getStart(),
         cachingQueryRunner
     );
 
+    // 此runner用于计算“内部runner.run”的耗时
     MetricsEmittingQueryRunner<T> metricsEmittingQueryRunnerOuter = new MetricsEmittingQueryRunner<>(
         emitter,
         toolChest,
@@ -391,6 +396,7 @@ public class ServerManager implements QuerySegmentWalker
 
     return new SetAndVerifyContextQueryRunner<>(
         serverConfig,
+        // CPUTimeMetricQueryRunner 依然是有计时功能的runner
         CPUTimeMetricQueryRunner.safeBuild(
             perSegmentOptimizingQueryRunner,
             toolChest,

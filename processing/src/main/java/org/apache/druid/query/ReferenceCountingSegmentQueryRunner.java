@@ -23,10 +23,15 @@ import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
 import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.context.ResponseContext;
+import org.apache.druid.segment.Segment;
 import org.apache.druid.segment.SegmentReference;
 
 import java.util.concurrent.ExecutorService;
 
+/**
+ * 查询请求在构建queryrunner链时，该runner处于最尾端（即最后一个被调用run）
+ *
+ */
 public class ReferenceCountingSegmentQueryRunner<T> implements QueryRunner<T>
 {
   private static final Logger log = new Logger(ReferenceCountingSegmentQueryRunner.class);
@@ -35,6 +40,12 @@ public class ReferenceCountingSegmentQueryRunner<T> implements QueryRunner<T>
   private final SegmentReference segment;
   private final SegmentDescriptor descriptor;
 
+  /**
+   *
+   * @param factory 根据query的class类型(如groupby查询就是GroupByQuery)来获取QueryRunnerFactory对象
+   * @param segment 查询的segment的实际数据对象
+   * @param descriptor 该segment的描述信息
+   */
   public ReferenceCountingSegmentQueryRunner(
       QueryRunnerFactory<T, Query<T>> factory,
       SegmentReference segment,
@@ -46,17 +57,27 @@ public class ReferenceCountingSegmentQueryRunner<T> implements QueryRunner<T>
     this.descriptor = descriptor;
   }
 
+  /**
+   * 1、使用factory创建queryRunner（并将segment传入其中）
+   * 2、调用刚刚创建的QueryRunner的run方法，获取Sequence结果
+   */
   @Override
   public Sequence<T> run(final QueryPlus<T> queryPlus, ResponseContext responseContext)
   {
     return segment.acquireReferences().map(closeable -> {
       try {
-        QueryRunner<T> queryRunner = factory.createRunner(segment);
         /**
-         * 进入{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
-         * 然后返回{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory.GroupByQueryRunner#run(QueryPlus, ResponseContext)}
+         * 创建queryrunner，并将segment数据对象装进去
+         * 如果是groupby查询，则使用GroupByQueryRunnerFactory创建runner，方法如下：
+         * {@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#createRunner(Segment)}
+         * 创建GroupByQueryRunner
          */
+        QueryRunner<T> queryRunner = factory.createRunner(segment);
+
         log.info("!!!：ReferenceCountingSegmentQueryRunner中factory.createRunner(segment)为："+queryRunner.getClass());
+        /**
+         * {@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory.GroupByQueryRunner#run(QueryPlus, ResponseContext)}
+         */
         final Sequence<T> baseSequence = queryRunner.run(queryPlus, responseContext);
         return Sequences.withBaggage(baseSequence, closeable);
       }

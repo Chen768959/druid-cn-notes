@@ -111,11 +111,13 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
 
   private static class GroupByQueryRunner implements QueryRunner<ResultRow>
   {
+    // segment中的“所有数据”
     private final StorageAdapter adapter;
     private final GroupByStrategySelector strategySelector;
 
     public GroupByQueryRunner(Segment segment, final GroupByStrategySelector strategySelector)
     {
+      // segment中的“所有数据”
       this.adapter = segment.asStorageAdapter();
       this.strategySelector = strategySelector;
     }
