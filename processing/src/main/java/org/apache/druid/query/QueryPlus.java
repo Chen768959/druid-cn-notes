@@ -176,6 +176,7 @@ public final class QueryPlus<T>
     /**{@link GroupByQuery}*/
     log.info("QueryPlus初始baseQuery："+query.getClass());
     /**
+     * 1、此处实际上是调用walker的getQueryRunnerForSegments()方法获取的queryRunner
      * {@link BaseQuery#getRunner(QuerySegmentWalker)}
      * |->{@link org.apache.druid.query.spec.MultipleSpecificSegmentSpec#lookup(Query, QuerySegmentWalker)}
      * |->walker.getQueryRunnerForSegments()，其中broker和historical节点的walker是不同的
@@ -187,18 +188,23 @@ public final class QueryPlus<T>
      * broker启动时walker为{@link org.apache.druid.server.ClientQuerySegmentWalker}
      * historical启动时walker为{@link org.apache.druid.server.coordination.ServerManager}
      *
-     * 此处实际上是调用walker的getQueryRunnerForSegments()方法获取QueryRunner
-     * 所以此处queryRunner的创建只和query和walker对象有关
-     * （历史节点创建queryrunner逻辑;{@link org.apache.druid.server.coordination.ServerManager#getQueryRunnerForSegments(Query, Iterable)}）
-     *
      * 另：请求到达broker和到达historical后此处获取的queryRunner是不同的
      * 到达broker获取的queryRunner类型为
      * {@link org.apache.druid.server.ClientQuerySegmentWalker $QuerySwappingQueryRunner}
      * 请求到达historical获取的queryRunner类型为
      * {@link org.apache.druid.query.CPUTimeMetricQueryRunner}
      *
-     * ServerManager：其中包含了segmentManager。
+     * 2、his节点ServerManager创建queryRunner的具体流程
+     * {@link org.apache.druid.server.coordination.ServerManager#getQueryRunnerForSegments(Query, Iterable)}
+     * ServerManager：其中包含了segmentManager，该对象与启动时加载的segment列表相关。
      *
+     * queryRunner是一个“链式”结构，每一个queryRunner中都会包含一个子queryRunner，且每个runner中的run方法除了执行自身逻辑外，
+     * 还会执行子runner的run方法，最终真正执行查询逻辑的是整个runner链最末尾的runner。
+     *
+     * ServerManager创建queryRunner时，主要创建了两组Runner：
+     * （1）每个时间片段segment都创建了个对应的QueryRunner链用来在该片段上查询数据。
+     * 这些Runner构成了一个Runner列表。
+     * （2）在外层还有一个Runner链，主要用于使用线程池并发的处理每一个QueryRunner。
      */
     QueryRunner<T> queryRunner = query.getRunner(walker);
 
@@ -234,6 +240,12 @@ public final class QueryPlus<T>
      * 至此GroupByMergingQueryRunnerV2.run提供真正的BaseSequence结果，且其中包含make方法，为真正的查询结果方法，
      * 在后续Sequence.toYielder时会被调用，执行真正的查询逻辑
      *
+     * 以上QueryRunner链最后涉及到线程池并发执行一个runner列表，
+     * 这个runner列表就是上一步提到的各个segment查询对应的QueryRunner。
+     * 以groupby查询为例，针对单个segment的Runner.run()为：
+     * {@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory.GroupByQueryRunner#run(QueryPlus, ResponseContext)}
+     *
+     * =======================================================================================
      * 返回的Sequence中的make方法会返回迭代器，该迭代器可迭代查询结果，迭代器创建逻辑：
      * {@link org.apache.druid.query.groupby.epinephelinae.RowBasedGrouperHelper#makeGrouperIterator(Grouper, GroupByQuery, List, Closeable)}
      */

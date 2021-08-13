@@ -131,6 +131,7 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
         throw new ISE("Got a [%s] which isn't a %s", query.getClass(), GroupByQuery.class);
       }
 
+      // 根据查询请求对象，获取查询引擎GroupByQueryEngineV2
       GroupByStrategy groupByStrategy = strategySelector.strategize((GroupByQuery) query);
 
       log.info("!!!：进入GroupByQueryRunner，groupByStrategy为："+groupByStrategy.getClass());

@@ -256,6 +256,13 @@ public class ServerManager implements QuerySegmentWalker
             )
         );
 
+    /**
+     * 上一步已经获得了多个queryRunner：
+     * 每一个时间片段的segment都有一个对应的QueryRunner。
+     *
+     * 此处的exec是线程池，用来并发执行queryRunners中的各个runner，
+     * 即并发的从各segment中查询数据。
+     */
     return CPUTimeMetricQueryRunner.safeBuild(
         new FinalizeResultsQueryRunner<>(
             toolChest.mergeResults(factory.mergeRunners(exec, queryRunners)),
@@ -350,7 +357,10 @@ public class ServerManager implements QuerySegmentWalker
     MetricsEmittingQueryRunner<T> metricsEmittingQueryRunnerInner = new MetricsEmittingQueryRunner<>(
         emitter,
         toolChest,
-        // 此runner内部通过factory创建真正的runner用于查询
+        /**
+         * 此runner内部通过factory创建真正的runner用于查询.
+         * {@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory.GroupByQueryRunner}
+         */
         new ReferenceCountingSegmentQueryRunner<>(factory, segment, segmentDescriptor),
         QueryMetrics::reportSegmentTime,
         queryMetrics -> queryMetrics.segment(segmentIdString)
