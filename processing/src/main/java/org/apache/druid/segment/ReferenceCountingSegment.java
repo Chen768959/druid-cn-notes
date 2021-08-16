@@ -20,6 +20,7 @@
 package org.apache.druid.segment;
 
 import com.google.common.base.Preconditions;
+import org.apache.druid.timeline.DataSegment;
 import org.apache.druid.timeline.Overshadowable;
 import org.apache.druid.timeline.SegmentId;
 import org.apache.druid.timeline.partition.ShardSpec;
@@ -110,6 +111,17 @@ public class ReferenceCountingSegment extends ReferenceCountingCloseableObject<S
     return !isClosed() ? baseObject.asQueryableIndex() : null;
   }
 
+  /**
+   * baseObject生成逻辑：
+   * druid-server:{@link SegmentManager#loadSegment(DataSegment segment, boolean lazy)} （加载segment数据）
+   * |->{@link ReferenceCountingSegment#wrapSegment(Segment, ShardSpec)} （使用segment参数数据，创建新的ReferenceCountingSegment对象）
+   * 其中将Segment对象赋值给父类的baseObject属性，
+   * Segment对象由{@link org.apache.druid.segment.loading.SegmentLoaderLocalCacheManager#getSegment(DataSegment, boolean)}生成
+   *
+   * 所以此处的asStorageAdapter()实际上是调用的该Segment对象的asStorageAdapter()
+   *
+   * （返回{@link QueryableIndexStorageAdapter}）
+   */
   @Override
   @Nullable
   public StorageAdapter asStorageAdapter()

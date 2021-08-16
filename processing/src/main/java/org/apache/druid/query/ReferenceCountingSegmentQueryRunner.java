@@ -72,6 +72,8 @@ public class ReferenceCountingSegmentQueryRunner<T> implements QueryRunner<T>
          * {@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#createRunner(Segment)}
          * 创建GroupByQueryRunner
          */
+        /**{@link org.apache.druid.segment.ReferenceCountingSegment}*/
+        log.info("!!!runner：创建segment对应runner(groupby runner)，segment类型："+segment.getClass());
         QueryRunner<T> queryRunner = factory.createRunner(segment);
 
         log.info("!!!：ReferenceCountingSegmentQueryRunner中factory.createRunner(segment)为："+queryRunner.getClass());

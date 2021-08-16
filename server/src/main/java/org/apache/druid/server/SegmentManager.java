@@ -66,6 +66,7 @@ public class SegmentManager
 
   private final SegmentLoader segmentLoader;
   /**
+   * ！！！segmentManager核心，其主要就是为了存储该对象信息
    * dataSources是个map，表示“各数据源已加载的segment信息”
    * key：各数据源名称，
    * value：即该数据源上的“总加载信息”，其中包含2个重要属性

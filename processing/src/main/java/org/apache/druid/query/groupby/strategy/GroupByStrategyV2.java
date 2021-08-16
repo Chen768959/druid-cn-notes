@@ -585,6 +585,11 @@ public class GroupByStrategyV2 implements GroupByStrategy
     );
   }
 
+  /**
+   *
+   * @param query 查询对象
+   * @param storageAdapter 待查询的segment的所有数据
+   */
   @Override
   public Sequence<ResultRow> process(GroupByQuery query, StorageAdapter storageAdapter)
   {

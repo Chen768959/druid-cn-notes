@@ -339,6 +339,9 @@ public class ServerManager implements QuerySegmentWalker
       final AtomicLong cpuTimeAccumulator
   )
   {
+    /**{@link org.apache.druid.segment.ReferenceCountingSegment}*/
+    log.info("!!!runner：创建segment对应runner，segment类型："+segment.getClass());
+
     // segment描述信息的包装对象，主要是要利用其lookup（查找）方法
     final SpecificSegmentSpec segmentSpec = new SpecificSegmentSpec(segmentDescriptor);
     // {@link DataSegment}已加载信息的标识

@@ -114,6 +114,13 @@ public class GroupByQueryEngineV2
     // No instantiation
   }
 
+  /**
+   *
+   * @param query 这次请求对象
+   * @param storageAdapter 当前runner查询的segment的实际数据
+   * @param intermediateResultsBufferPool 参考{@link StupidPool}，更像是一个用来装对象的空的容器池，可以把对象放入其中保持引用的持久化
+   * @param querySpecificConfig groupBy查询的配置参数
+   */
   public static Sequence<ResultRow> process(
       final GroupByQuery query,
       @Nullable final StorageAdapter storageAdapter,
@@ -121,12 +128,15 @@ public class GroupByQueryEngineV2
       final GroupByQueryConfig querySpecificConfig
   )
   {
+    /**{@link org.apache.druid.segment.QueryableIndexStorageAdapter}*/
+    log.info("!!!runner：执行查询逻辑，storageAdapter类型："+storageAdapter.getClass()+"...path:"+storageAdapter);
     if (storageAdapter == null) {
       throw new ISE(
           "Null storage adapter found. Probably trying to issue a query against a segment being memory unmapped."
       );
     }
-    //获取此次的查询时间
+    //获取此次的查询时间，并验证此次查询是否只针对单一时间片段
+    // 因为当前逻辑只针对单一segment，所以自然也只能针对单一时间片段，复数查询时间片段就会报错
     final List<Interval> intervals = query.getQuerySegmentSpec().getIntervals();
     if (intervals.size() != 1) {
       throw new IAE("Should only have one interval, got[%s]", intervals);
@@ -165,7 +175,10 @@ public class GroupByQueryEngineV2
                                       ? null
                                       : DateTimes.utc(Long.parseLong(fudgeTimestampString));
 
+      // 获取查询对象中的“filter”属性
       final Filter filter = Filters.convertToCNFFromQueryContext(query, Filters.toFilter(query.getFilter()));
+
+      // 获取要查询的时间片段
       final Interval interval = Iterables.getOnlyElement(query.getIntervals());
 
       final boolean doVectorize = QueryContexts.getVectorize(query).shouldVectorize(
@@ -182,6 +195,16 @@ public class GroupByQueryEngineV2
       if (doVectorize) {
         log.info("!!!：GroupByQueryEngineV2，process执行向量化");
         //result是BaseSequence类型对象，其中包含了make函数，在获取结果是通过该函数执行真正的查询逻辑。
+        /**
+         *
+         * @param query 此处查询对象
+         * @param storageAdapter 当前runner所查询的segment数据
+         * @param byteBuffer 从{@link StupidPool#take()}获取的bufferHolder中，调用get获取的bytebuffer
+         * @param fudgeTimestamp
+         * @param filter 获取查询对象中的“filter”属性
+         * @param interval 要查询的时间片段
+         * @param config groupBy查询的配置参数
+         */
         result = VectorGroupByEngine.process(
             query,
             storageAdapter,
@@ -191,6 +214,8 @@ public class GroupByQueryEngineV2
             interval,
             querySpecificConfig
         );
+
+        // tmp debug
         result.toList().forEach(x->{
           int len = x.getArray().length;
           log.info("!!!：tmp!，x.getArray().length："+len);

@@ -46,6 +46,7 @@ import org.apache.druid.query.groupby.epinephelinae.HashVectorGrouper;
 import org.apache.druid.query.groupby.epinephelinae.VectorGrouper;
 import org.apache.druid.query.vector.VectorCursorGranularizer;
 import org.apache.druid.segment.DimensionHandlerUtils;
+import org.apache.druid.segment.ReferenceCountingSegment;
 import org.apache.druid.segment.StorageAdapter;
 import org.apache.druid.segment.VirtualColumns;
 import org.apache.druid.segment.column.ColumnCapabilities;
@@ -126,13 +127,18 @@ public class VectorGroupByEngine
 
   /**
    *
-   * @param query
+   * @param query 此处查询对象
    * @param storageAdapter
+   * 从{@link com.sun.corba.se.spi.activation.ServerManager}中获取出{@link org.apache.druid.segment.ReferenceCountingSegment}
+   * 然后再通过：
+   * {@link ReferenceCountingSegment#asStorageAdapter()}
+   * 将ReferenceCountingSegment转换成适配器{@link StorageAdapter}
+   * 其中包含了当前runner需要查询的segment数据
    * @param processingBuffer 从{@link StupidPool#take()}获取的bufferHolder中，调用get获取的bytebuffer
    * @param fudgeTimestamp
-   * @param filter
-   * @param interval
-   * @param config
+   * @param filter 获取查询对象中的“filter”属性
+   * @param interval 要查询的时间片段
+   * @param config groupBy查询的配置参数
    */
   public static Sequence<ResultRow> process(
       final GroupByQuery query,
@@ -159,9 +165,9 @@ public class VectorGroupByEngine
           @Override
           public CloseableIterator<ResultRow> make()
           {
-            //矢量化游标？
+            // 从segment数据中获取“cursor”
             final VectorCursor cursor = storageAdapter.makeVectorCursor(
-                // 过滤条件
+                // 查询请求中的“filter”过滤条件
                 Filters.toFilter(query.getDimFilter()),
                 // 查询时间条件
                 interval,
@@ -171,6 +177,7 @@ public class VectorGroupByEngine
                 null
             );
 
+            // 无数据则直接返回空结果
             if (cursor == null) {
               // Return empty iterator.
               return new CloseableIterator<ResultRow>()

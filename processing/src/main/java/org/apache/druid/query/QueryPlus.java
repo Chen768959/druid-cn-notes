@@ -206,7 +206,9 @@ public final class QueryPlus<T>
      * 这些Runner构成了一个Runner列表。
      * （2）在外层还有一个Runner链，主要用于使用线程池并发的处理每一个QueryRunner。
      */
+    log.info("!!!runner：开始执行创建runner");
     QueryRunner<T> queryRunner = query.getRunner(walker);
+    log.info("!!!runner：runner创建完毕");
 
     log.info("!!!select：query生成的queryRunner对象："+queryRunner.getClass());
     /**
@@ -249,7 +251,9 @@ public final class QueryPlus<T>
      * 返回的Sequence中的make方法会返回迭代器，该迭代器可迭代查询结果，迭代器创建逻辑：
      * {@link org.apache.druid.query.groupby.epinephelinae.RowBasedGrouperHelper#makeGrouperIterator(Grouper, GroupByQuery, List, Closeable)}
      */
+    log.info("!!!runner：开始执行runner.run");
     Sequence<T> res = queryRunner.run(this, context);
+    log.info("!!!runner：runner.run执行完毕");
     return res;
   }
 

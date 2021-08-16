@@ -120,6 +120,12 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
       // segment中的“所有数据”
       this.adapter = segment.asStorageAdapter();
       this.strategySelector = strategySelector;
+
+      /**
+       * segment:{@link org.apache.druid.segment.ReferenceCountingSegment}
+       * adapter:{@link org.apache.druid.segment.QueryableIndexStorageAdapter}
+       */
+      log.info("!!!runner：初始化GroupByQueryRunner，segment类型："+segment.getClass()+"...adapter："+adapter.getClass()+"...path："+adapter);
     }
 
     @Override
@@ -131,12 +137,12 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
         throw new ISE("Got a [%s] which isn't a %s", query.getClass(), GroupByQuery.class);
       }
 
-      // 根据查询请求对象，获取查询引擎GroupByQueryEngineV2
+      // 获取GroupByStrategyV2
       GroupByStrategy groupByStrategy = strategySelector.strategize((GroupByQuery) query);
 
       log.info("!!!：进入GroupByQueryRunner，groupByStrategy为："+groupByStrategy.getClass());
       /**
-       * {@link org.apache.druid.query.groupby.epinephelinae.GroupByQueryEngineV2#process(GroupByQuery, StorageAdapter, NonBlockingPool, GroupByQueryConfig)}
+       * {@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2#process(GroupByQuery, StorageAdapter)}
        */
       return groupByStrategy.process((GroupByQuery) query, adapter);
     }
