@@ -64,6 +64,8 @@ import org.apache.druid.segment.ColumnValueSelector;
 import org.apache.druid.segment.Cursor;
 import org.apache.druid.segment.DimensionHandlerUtils;
 import org.apache.druid.segment.DimensionSelector;
+import org.apache.druid.segment.QueryableIndexStorageAdapter;
+import org.apache.druid.segment.SimpleQueryableIndex;
 import org.apache.druid.segment.StorageAdapter;
 import org.apache.druid.segment.column.ColumnCapabilities;
 import org.apache.druid.segment.column.ValueType;
@@ -117,7 +119,7 @@ public class GroupByQueryEngineV2
   /**
    *
    * @param query 这次请求对象
-   * @param storageAdapter 当前runner查询的segment的实际数据
+   * @param storageAdapter 其中包含了启动时加载的segment对象数据，具体可查看{@link SimpleQueryableIndex}
    * @param intermediateResultsBufferPool 参考{@link StupidPool}，更像是一个用来装对象的空的容器池，可以把对象放入其中保持引用的持久化
    * @param querySpecificConfig groupBy查询的配置参数
    */
@@ -196,14 +198,18 @@ public class GroupByQueryEngineV2
         log.info("!!!：GroupByQueryEngineV2，process执行向量化");
         //result是BaseSequence类型对象，其中包含了make函数，在获取结果是通过该函数执行真正的查询逻辑。
         /**
-         *
          * @param query 此处查询对象
-         * @param storageAdapter 当前runner所查询的segment数据
+         * @param storageAdapter {@link QueryableIndexStorageAdapter}其中包含了启动时加载的segment对象数据，具体可查看{@link SimpleQueryableIndex}
          * @param byteBuffer 从{@link StupidPool#take()}获取的bufferHolder中，调用get获取的bytebuffer
          * @param fudgeTimestamp
          * @param filter 获取查询对象中的“filter”属性
          * @param interval 要查询的时间片段
          * @param config groupBy查询的配置参数
+         *
+         * 查询出该segment（storageAdapter）上所有的符合条件的结果行，
+         * result中包含了多个list，每个list就是一行数据，list中依次为该行的数据内容。
+         * （list中只包含请求对象涉及到的列，不需要响应的列不会查询出来）
+         *
          */
         result = VectorGroupByEngine.process(
             query,
@@ -215,7 +221,7 @@ public class GroupByQueryEngineV2
             querySpecificConfig
         );
 
-        // tmp debug
+        // tmp 提前执行了result中的懒加载查询逻辑
         result.toList().forEach(x->{
           int len = x.getArray().length;
           log.info("!!!：tmp!，x.getArray().length："+len);

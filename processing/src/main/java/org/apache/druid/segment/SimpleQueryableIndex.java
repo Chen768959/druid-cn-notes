@@ -191,7 +191,7 @@ public class SimpleQueryableIndex extends AbstractIndex implements QueryableInde
   @Override
   public ColumnHolder getColumnHolder(String columnName)
   {
-    // 找到columnName对应包装类ColumnHolder并返回SimpleColumnHolder
+    // 找到"__time"对应包装类ColumnHolder并返回SimpleColumnHolder（该列的包装类）
     Supplier<ColumnHolder> columnHolderSupplier = columns.get(columnName);
     return columnHolderSupplier == null ? null : columnHolderSupplier.get();
   }

@@ -24,6 +24,7 @@ import org.apache.druid.java.util.common.io.Closer;
 import org.apache.druid.query.dimension.DimensionSpec;
 import org.apache.druid.segment.QueryableIndex;
 import org.apache.druid.segment.QueryableIndexStorageAdapter;
+import org.apache.druid.segment.SimpleQueryableIndex;
 import org.apache.druid.segment.VirtualColumns;
 import org.apache.druid.segment.column.BaseColumn;
 import org.apache.druid.segment.column.ColumnCapabilities;
@@ -51,6 +52,14 @@ public class QueryableIndexVectorColumnSelectorFactory implements VectorColumnSe
   private final Map<String, VectorValueSelector> valueSelectorCache;
   private final Map<String, VectorObjectSelector> objectSelectorCache;
 
+  /**
+   *
+   * @param index index对象{@link SimpleQueryableIndex}本身没有逻辑，只是个包装类，将所有的inDir目录下的segment信息存储其中。
+   * @param offset
+   * @param closer
+   * @param columnCache 初始为一个空的map
+   * @param virtualColumns
+   */
   public QueryableIndexVectorColumnSelectorFactory(
       final QueryableIndex index,
       final ReadableVectorOffset offset,

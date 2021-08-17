@@ -31,6 +31,7 @@ import org.apache.druid.java.util.common.io.Closer;
 import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.java.util.common.parsers.CloseableIterator;
 import org.apache.druid.query.QueryContexts;
+import org.apache.druid.query.QueryMetrics;
 import org.apache.druid.query.aggregation.AggregatorAdapters;
 import org.apache.druid.query.dimension.DimensionSpec;
 import org.apache.druid.query.filter.Filter;
@@ -46,7 +47,9 @@ import org.apache.druid.query.groupby.epinephelinae.HashVectorGrouper;
 import org.apache.druid.query.groupby.epinephelinae.VectorGrouper;
 import org.apache.druid.query.vector.VectorCursorGranularizer;
 import org.apache.druid.segment.DimensionHandlerUtils;
+import org.apache.druid.segment.QueryableIndexStorageAdapter;
 import org.apache.druid.segment.ReferenceCountingSegment;
+import org.apache.druid.segment.SimpleQueryableIndex;
 import org.apache.druid.segment.StorageAdapter;
 import org.apache.druid.segment.VirtualColumns;
 import org.apache.druid.segment.column.ColumnCapabilities;
@@ -132,8 +135,8 @@ public class VectorGroupByEngine
    * 从{@link com.sun.corba.se.spi.activation.ServerManager}中获取出{@link org.apache.druid.segment.ReferenceCountingSegment}
    * 然后再通过：
    * {@link ReferenceCountingSegment#asStorageAdapter()}
-   * 将ReferenceCountingSegment转换成适配器{@link StorageAdapter}
-   * 其中包含了当前runner需要查询的segment数据
+   * 将ReferenceCountingSegment转换成适配器{@link QueryableIndexStorageAdapter}
+   * 其中包含了启动时加载的segment对象数据，具体可查看{@link SimpleQueryableIndex}
    * @param processingBuffer 从{@link StupidPool#take()}获取的bufferHolder中，调用get获取的bytebuffer
    * @param fudgeTimestamp
    * @param filter 获取查询对象中的“filter”属性
@@ -154,6 +157,9 @@ public class VectorGroupByEngine
       throw new ISE("Cannot vectorize");
     }
 
+    /**
+     * 此次查询的结果对象
+     */
     return new BaseSequence<>(
         new BaseSequence.IteratorMaker<ResultRow, CloseableIterator<ResultRow>>()
         {
@@ -165,7 +171,11 @@ public class VectorGroupByEngine
           @Override
           public CloseableIterator<ResultRow> make()
           {
-            // 从segment数据中获取“cursor”
+            /**
+             * {@link QueryableIndexStorageAdapter#makeVectorCursor(Filter, Interval, VirtualColumns, boolean, int, QueryMetrics)}
+             *
+             * 获取“cursor游标”，游标可以用来查询每一行数据
+             */
             final VectorCursor cursor = storageAdapter.makeVectorCursor(
                 // 查询请求中的“filter”过滤条件
                 Filters.toFilter(query.getDimFilter()),

@@ -30,6 +30,7 @@ import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
 import org.apache.druid.java.util.common.io.Closer;
 import org.apache.druid.query.BaseQuery;
+import org.apache.druid.query.QueryMetrics;
 import org.apache.druid.query.filter.Filter;
 import org.apache.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import org.apache.druid.segment.column.BaseColumn;
@@ -68,6 +69,18 @@ public class QueryableIndexCursorSequenceBuilder
   @Nullable
   private final ColumnSelectorBitmapIndexSelector bitmapIndexSelector;
 
+  /**
+   *
+   * @param index index对象{@link SimpleQueryableIndex}本身没有逻辑，只是个包装类，将所有的inDir目录下的segment信息存储其中。
+   * @param interval 游标的时间区间，通常以此次查询请求的时间区间为准
+   * @param virtualColumns
+   * @param filterBitmap
+   * @param minDataTimestamp 对应segment中的，时间列中的，最小日期
+   * @param maxDataTimestamp 对应segment中的，时间列中的，最大日期
+   * @param descending false
+   * @param postFilter
+   * @param bitmapIndexSelector
+   */
   public QueryableIndexCursorSequenceBuilder(
       QueryableIndex index,
       Interval interval,
@@ -190,6 +203,12 @@ public class QueryableIndexCursorSequenceBuilder
     );
   }
 
+  /**
+   * 创建游标，
+   * 由{@link QueryableIndexStorageAdapter#makeVectorCursor(Filter, Interval, VirtualColumns, boolean, int, QueryMetrics)}调用
+   *
+   * @param vectorSize 默认512
+   */
   public VectorCursor buildVectorized(final int vectorSize)
   {
     // Sanity check - matches QueryableIndexStorageAdapter.canVectorize
@@ -198,15 +217,18 @@ public class QueryableIndexCursorSequenceBuilder
     final Map<String, BaseColumn> columnCache = new HashMap<>();
     final Closer closer = Closer.create();
 
+    // segment的“__time”时间列的所有值信息
     NumericColumn timestamps = null;
 
     final int startOffset;
     final int endOffset;
 
     if (interval.getStartMillis() > minDataTimestamp) {
+      // 获取segment的“__time”时间列的所有值信息
       timestamps = (NumericColumn) index.getColumnHolder(ColumnHolder.TIME_COLUMN_NAME).getColumn();
       closer.register(timestamps);
 
+      // 从全量时间列中，根据请求的时间区间，找到“全量时间列起始查询位置”
       startOffset = timeSearch(timestamps, interval.getStartMillis(), 0, index.getNumRows());
     } else {
       startOffset = 0;
@@ -218,11 +240,13 @@ public class QueryableIndexCursorSequenceBuilder
         closer.register(timestamps);
       }
 
+      // 从全量时间列中，根据请求的时间区间，找到“全量时间列结束查询位置”
       endOffset = timeSearch(timestamps, interval.getEndMillis(), startOffset, index.getNumRows());
     } else {
       endOffset = index.getNumRows();
     }
 
+    // 初始位置偏移量？
     final VectorOffset baseOffset =
         filterBitmap == null
         ? new NoFilterVectorOffset(vectorSize, startOffset, endOffset)
@@ -267,6 +291,14 @@ public class QueryableIndexCursorSequenceBuilder
       Closer closer
   )
   {
+    /**
+     *
+     * @param index index对象{@link SimpleQueryableIndex}本身没有逻辑，只是个包装类，将所有的inDir目录下的segment信息存储其中。
+     * @param offset
+     * @param closer
+     * @param columnCache 初始为一个空的map
+     * @param virtualColumns
+     */
     return new QueryableIndexVectorColumnSelectorFactory(
         index,
         baseOffset,
@@ -289,8 +321,8 @@ public class QueryableIndexCursorSequenceBuilder
    */
   @VisibleForTesting
   static int timeSearch(
-      final NumericColumn timeColumn,
-      final long timestamp,
+      final NumericColumn timeColumn, // 待搜索的时间列
+      final long timestamp,           // 搜索的目标时间，会返回时间列中等于，或最接近大于该目标时间的时间戳
       final int startIndex,
       final int endIndex
   )

@@ -64,6 +64,8 @@ public class QueryableIndexStorageAdapter implements StorageAdapter
   public static final int DEFAULT_VECTOR_SIZE = 512;
 
   /**
+   * {@link SimpleQueryableIndex}
+   *
    * index对象{@link SimpleQueryableIndex}本身没有逻辑，只是个包装类，将所有的inDir目录下的segment信息存储其中。
    * 此index对象中较为重要的解析结果为：
    * 1、metadata：xxxx.smoosh文件中的metadata.drd信息所转化
@@ -138,6 +140,7 @@ public class QueryableIndexStorageAdapter implements StorageAdapter
     return index.getNumRows();
   }
 
+  // 获取对应segment中的，时间列中的，最小日期
   @Override
   public DateTime getMinTime()
   {
@@ -149,6 +152,7 @@ public class QueryableIndexStorageAdapter implements StorageAdapter
     return minTime;
   }
 
+  // 获取对应segment中的，时间列中的，最大日期
   @Override
   public DateTime getMaxTime()
   {
@@ -244,32 +248,58 @@ public class QueryableIndexStorageAdapter implements StorageAdapter
   @Override
   @Nullable
   public VectorCursor makeVectorCursor(
-      @Nullable final Filter filter,
-      final Interval interval,
-      final VirtualColumns virtualColumns,
-      final boolean descending,
-      final int vectorSize,
-      @Nullable final QueryMetrics<?> queryMetrics
+      @Nullable final Filter filter,        // 请求对象中的“filter”过滤条件
+      final Interval interval,              // 查询的时间条件
+      final VirtualColumns virtualColumns,  //
+      final boolean descending,             // false
+      final int vectorSize,                 // 默认512
+      @Nullable final QueryMetrics<?> queryMetrics // null
   )
   {
     if (!canVectorize(filter, virtualColumns, descending)) {
       throw new ISE("Cannot vectorize. Check 'canVectorize' before calling 'makeVectorCursor'.");
     }
 
-    if (queryMetrics != null) {
+    if (queryMetrics != null) { // false
       queryMetrics.vectorized(true);
     }
 
+    /**
+     * 计算游标的时间区间：
+     * 即计算查询目标区间与当前存储的实际时间区间取重叠，
+     * 基本可看成以查询目标时间区间，作为游标区间。
+     */
     final Interval actualInterval = computeCursorInterval(Granularities.ALL, interval);
 
     if (actualInterval == null) {
       return null;
     }
 
+    /**
+     * 通过以下三参数作为入参：
+     * virtualColumns、
+     * index、
+     * 维度的bitmap工厂
+     *
+     * 创建ColumnSelectorBitmapIndexSelector
+     */
     final ColumnSelectorBitmapIndexSelector bitmapIndexSelector = makeBitmapIndexSelector(virtualColumns);
+
 
     final FilterAnalysis filterAnalysis = analyzeFilter(filter, bitmapIndexSelector, queryMetrics);
 
+    /**
+     *
+     * @param index index对象{@link SimpleQueryableIndex}本身没有逻辑，只是个包装类，将所有的inDir目录下的segment信息存储其中。
+     * @param interval 游标的时间区间，通常以此次查询请求的时间区间为准
+     * @param virtualColumns
+     * @param filterBitmap
+     * @param minDataTimestamp 对应segment中的，时间列中的，最小日期
+     * @param maxDataTimestamp 对应segment中的，时间列中的，最大日期
+     * @param descending false
+     * @param postFilter
+     * @param bitmapIndexSelector
+     */
     return new QueryableIndexCursorSequenceBuilder(
         index,
         actualInterval,
@@ -352,12 +382,17 @@ public class QueryableIndexStorageAdapter implements StorageAdapter
     return index.getMetadata();
   }
 
+  // 计算对应的segment中“__time”时间列的最大最小时间，并赋值
   private void populateMinMaxTime()
   {
     // Compute and cache minTime, maxTime.
+    /** 找到columnName对应包装类ColumnHolder并返回{@link org.apache.druid.segment.column.SimpleColumnHolder}（该列的包装类） */
     final ColumnHolder columnHolder = index.getColumnHolder(ColumnHolder.TIME_COLUMN_NAME);
+    // 获取时间列的所有数据值
     try (final NumericColumn column = (NumericColumn) columnHolder.getColumn()) {
+      // 获取时间列的第一项数值
       this.minTime = DateTimes.utc(column.getLongSingleValueRow(0));
+      // 获取时间列的末尾项数值
       this.maxTime = DateTimes.utc(column.getLongSingleValueRow(column.length() - 1));
     }
   }
@@ -365,14 +400,25 @@ public class QueryableIndexStorageAdapter implements StorageAdapter
   @Nullable
   private Interval computeCursorInterval(final Granularity gran, final Interval interval)
   {
+    // 对应segment中时间列里的，最小、最大 日期
     final DateTime minTime = getMinTime();
     final DateTime maxTime = getMaxTime();
+    // gran：Granularities.ALL
+    // 创建时间区间，最小值为“segment中时间列里的最小日期”。最大值为DateTimes.MAX
     final Interval dataInterval = new Interval(minTime, gran.bucketEnd(maxTime));
 
     if (!interval.overlaps(dataInterval)) {
       return null;
     }
 
+    /**
+     * 获取入参interval和dataInterval之间的重叠区间，并返回该重叠区间
+     *
+     * 入参是指此次查询的目标区间
+     * dataInterval是总量中的最小时间-最大时间
+     *
+     * 一般情况下，重叠结果就是查询的目标区间
+     */
     return interval.overlap(dataInterval);
   }
 
