@@ -117,6 +117,7 @@ public class ReferenceCountingSegment extends ReferenceCountingCloseableObject<S
    * |->{@link ReferenceCountingSegment#wrapSegment(Segment, ShardSpec)} （使用segment参数数据，创建新的ReferenceCountingSegment对象）
    * 其中将Segment对象赋值给父类的baseObject属性，
    * Segment对象由{@link org.apache.druid.segment.loading.SegmentLoaderLocalCacheManager#getSegment(DataSegment, boolean)}生成
+   * 其内部的StorageAdapter对象也是在此时生成
    *
    * 所以此处的asStorageAdapter()实际上是调用的该Segment对象的asStorageAdapter()
    *
