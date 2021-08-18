@@ -35,6 +35,7 @@ import org.apache.druid.query.dimension.ColumnSelectorStrategyFactory;
 import org.apache.druid.query.dimension.DefaultDimensionSpec;
 import org.apache.druid.query.dimension.DimensionSpec;
 import org.apache.druid.query.extraction.ExtractionFn;
+import org.apache.druid.query.groupby.epinephelinae.vector.GroupByVectorColumnProcessorFactory;
 import org.apache.druid.segment.column.ColumnCapabilities;
 import org.apache.druid.segment.column.ColumnCapabilitiesImpl;
 import org.apache.druid.segment.column.ValueType;
@@ -292,9 +293,9 @@ public final class DimensionHandlerUtils
    * @see ColumnProcessors#makeProcessor the non-vectorized version
    */
   public static <T> T makeVectorProcessor(
-      final DimensionSpec dimensionSpec,
-      final VectorColumnProcessorFactory<T> strategyFactory,
-      final VectorColumnSelectorFactory selectorFactory
+      final DimensionSpec dimensionSpec,                        //单个维度的信息
+      final VectorColumnProcessorFactory<T> strategyFactory,  /**{@link GroupByVectorColumnProcessorFactory}*/
+      final VectorColumnSelectorFactory selectorFactory       //该factory中包含index对象，即包含segment的全量数据信息
   )
   {
     final ColumnCapabilities originalCapabilities =

@@ -204,7 +204,7 @@ public class QueryableIndexCursorSequenceBuilder
   }
 
   /**
-   * 创建游标，
+   * 创建游标。
    * 由{@link QueryableIndexStorageAdapter#makeVectorCursor(Filter, Interval, VirtualColumns, boolean, int, QueryMetrics)}调用
    *
    * @param vectorSize 默认512
@@ -276,6 +276,7 @@ public class QueryableIndexCursorSequenceBuilder
       // noticeable if it causes thrashing of decompression buffers due to out-of-order reads. I haven't observed
       // this directly but it seems possible in principle.
       // baseColumnSelectorFactory using baseOffset is the column selector for filtering.
+      // 该factory中包含index对象，即包含segment的全量数据信息
       final VectorColumnSelectorFactory filteredColumnSelectorFactory = makeVectorColumnSelectorFactoryForOffset(
           columnCache,
           filteredOffset,
@@ -367,6 +368,14 @@ public class QueryableIndexCursorSequenceBuilder
     private final VectorOffset offset;
     private final VectorColumnSelectorFactory columnSelectorFactory;
 
+    /**
+     *
+     * @param vectorColumnSelectorFactory 该factory中包含index对象，即包含segment的全量数据信息
+     * @param offset
+     * @param vectorSize 默认512
+     * @param closer
+     * @return
+     */
     public QueryableIndexVectorCursor(
         final VectorColumnSelectorFactory vectorColumnSelectorFactory,
         final VectorOffset offset,

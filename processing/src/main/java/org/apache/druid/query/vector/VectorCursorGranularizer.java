@@ -68,6 +68,19 @@ public class VectorCursorGranularizer
     this.timeSelector = timeSelector;
   }
 
+  /**
+   *
+   * @param storageAdapter {@link org.apache.druid.segment.QueryableIndexStorageAdapter}
+   * 从{@link com.sun.corba.se.spi.activation.ServerManager}中获取出{@link org.apache.druid.segment.ReferenceCountingSegment}
+   * 然后再通过：
+   * {@link org.apache.druid.segment.ReferenceCountingSegment#asStorageAdapter()}
+   * 将ReferenceCountingSegment转换成适配器{@link org.apache.druid.segment.QueryableIndexStorageAdapter}
+   * 其中包含了启动时加载的segment对象数据，具体可查看{@link org.apache.druid.segment.SimpleQueryableIndex}
+   *
+   * @param cursor 游标，可以用来查询每一行数据
+   * @param granularity 请求对象中的“granularity”参数，表示查询时间粒度，如“day”、“week”等
+   * @param queryInterval 要查询的时间区间
+   */
   @Nullable
   public static VectorCursorGranularizer create(
       final StorageAdapter storageAdapter,
@@ -85,7 +98,7 @@ public class VectorCursorGranularizer
     if (clippedQueryInterval == null) {
       return null;
     }
-
+    // 根据查询粒度，创建
     final Iterable<Interval> bucketIterable = granularity.getIterable(clippedQueryInterval);
     final Interval firstBucket = granularity.bucket(clippedQueryInterval.getStart());
 

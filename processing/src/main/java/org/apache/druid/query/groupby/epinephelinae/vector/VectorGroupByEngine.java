@@ -51,6 +51,7 @@ import org.apache.druid.segment.QueryableIndexStorageAdapter;
 import org.apache.druid.segment.ReferenceCountingSegment;
 import org.apache.druid.segment.SimpleQueryableIndex;
 import org.apache.druid.segment.StorageAdapter;
+import org.apache.druid.segment.VectorColumnProcessorFactory;
 import org.apache.druid.segment.VirtualColumns;
 import org.apache.druid.segment.column.ColumnCapabilities;
 import org.apache.druid.segment.column.ValueType;
@@ -130,7 +131,7 @@ public class VectorGroupByEngine
 
   /**
    *
-   * @param query 此处查询对象
+   * @param query 此次查询请求的对象
    * @param storageAdapter
    * 从{@link com.sun.corba.se.spi.activation.ServerManager}中获取出{@link org.apache.druid.segment.ReferenceCountingSegment}
    * 然后再通过：
@@ -213,8 +214,11 @@ public class VectorGroupByEngine
             }
 
             try {
+              // 该factory中包含index对象，即包含segment的全量数据信息
               final VectorColumnSelectorFactory columnSelectorFactory = cursor.getColumnSelectorFactory();
+              // 迭代每一个请求维度信息后，返回的对象
               final List<GroupByVectorColumnSelector> dimensions = query.getDimensions().stream().map(
+                  // 迭代请求对象中的每个查询维度信息
                   dimensionSpec ->
                       DimensionHandlerUtils.makeVectorProcessor(
                           dimensionSpec,
@@ -223,6 +227,27 @@ public class VectorGroupByEngine
                       )
               ).collect(Collectors.toList());
 
+              /**
+               * 创建“查询结果迭代器”，通过此迭代器可迭代每一行查询结果
+               *
+               * @param query 此次查询请求的对象
+               * @param config groupBy查询的配置参数
+               * @param storageAdapter
+               * 从{@link com.sun.corba.se.spi.activation.ServerManager}中获取出{@link org.apache.druid.segment.ReferenceCountingSegment}
+               * 然后再通过：
+               * {@link ReferenceCountingSegment#asStorageAdapter()}
+               * 将ReferenceCountingSegment转换成适配器{@link QueryableIndexStorageAdapter}
+               * 其中包含了启动时加载的segment对象数据，具体可查看{@link SimpleQueryableIndex}
+               *
+               * @param cursor 游标，可以用来查询每一行数据
+               * @param queryInterval 要查询的时间区间
+               * @param dimensions
+               * 迭代请求对象中的每一个维度信息，然后获取对应的GroupByVectorColumnSelector组成列表，
+               * 由{@link DimensionHandlerUtils#makeVectorProcessor(DimensionSpec, VectorColumnProcessorFactory, VectorColumnSelectorFactory)}创建
+               *
+               * @param processingBuffer 从{@link StupidPool#take()}获取的bufferHolder中，调用get获取的bytebuffer
+               * @param fudgeTimestamp
+               */
               return new VectorGroupByEngineIterator(
                   query,
                   config,
@@ -294,6 +319,26 @@ public class VectorGroupByEngine
     @Nullable
     private CloseableGrouperIterator<Memory, ResultRow> delegate = null;
 
+    /**
+     *
+     * @param query 此次查询请求的对象
+     * @param config groupBy查询的配置参数
+     * @param storageAdapter
+     * 从{@link com.sun.corba.se.spi.activation.ServerManager}中获取出{@link org.apache.druid.segment.ReferenceCountingSegment}
+     * 然后再通过：
+     * {@link ReferenceCountingSegment#asStorageAdapter()}
+     * 将ReferenceCountingSegment转换成适配器{@link QueryableIndexStorageAdapter}
+     * 其中包含了启动时加载的segment对象数据，具体可查看{@link SimpleQueryableIndex}
+     *
+     * @param cursor 游标，可以用来查询每一行数据
+     * @param queryInterval 要查询的时间区间
+     * @param selectors
+     * 迭代请求对象中的每一个维度信息，然后获取对应的GroupByVectorColumnSelector组成列表，
+     * 由{@link DimensionHandlerUtils#makeVectorProcessor(DimensionSpec, VectorColumnProcessorFactory, VectorColumnSelectorFactory)}创建
+     *
+     * @param processingBuffer 从{@link StupidPool#take()}获取的bufferHolder中，调用get获取的bytebuffer
+     * @param fudgeTimestamp
+     */
     VectorGroupByEngineIterator(
         final GroupByQuery query,
         final GroupByQueryConfig config,
@@ -315,11 +360,9 @@ public class VectorGroupByEngine
       this.keySize = selectors.stream().mapToInt(GroupByVectorColumnSelector::getGroupingKeySize).sum();
       this.keySpace = WritableMemory.allocate(keySize * cursor.getMaxVectorSize());
       this.vectorGrouper = makeGrouper();
-      /**
-       * 创建真正的迭代器
-       */
-      this.granulizer = VectorCursorGranularizer.create(storageAdapter, cursor, query.getGranularity(), queryInterval);
 
+      // bucketIterator迭代器与查询时间相关，且和查询粒度相关，应该是将总时间区间按粒度来切割，然后再由该迭代器迭代出来。
+      this.granulizer = VectorCursorGranularizer.create(storageAdapter, cursor, query.getGranularity(), queryInterval);
       if (granulizer != null) {
         this.bucketIterator = granulizer.getBucketIterable().iterator();
       } else {
