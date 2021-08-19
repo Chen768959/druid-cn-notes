@@ -64,6 +64,7 @@ public abstract class BaseQuery<T> implements Query<T>
   private final Map<String, Object> context;
   private final QuerySegmentSpec querySegmentSpec;
   private volatile Duration duration;
+  // 查询粒度
   private final Granularity granularity;
 
   public BaseQuery(

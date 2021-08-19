@@ -228,7 +228,9 @@ public class VectorGroupByEngine
               ).collect(Collectors.toList());
 
               /**
-               * 创建“查询结果迭代器”，通过此迭代器可迭代每一行查询结果
+               * 创建“查询结果迭代器”，通过此迭代器可迭代每一行查询结果。
+               *
+               * 其next()：{@link VectorGroupByEngineIterator#next()}
                *
                * @param query 此次查询请求的对象
                * @param config groupBy查询的配置参数
@@ -293,6 +295,7 @@ public class VectorGroupByEngine
     private final VectorCursor cursor;
     private final List<GroupByVectorColumnSelector> selectors;
     private final ByteBuffer processingBuffer;
+    // 来自于查询请求context上下文中的“fudgeTimestamp”属性
     private final DateTime fudgeTimestamp;
     private final int keySize;
     private final WritableMemory keySpace;
@@ -311,11 +314,13 @@ public class VectorGroupByEngine
     // Granularity-bucket iterator and current bucket.
     private final Iterator<Interval> bucketIterator;
 
+    // bucketIterator迭代器与查询时间相关，且和查询粒度相关，应该是将总时间区间按粒度来切割，然后再由该迭代器迭代出来。
     @Nullable
     private Interval bucketInterval;
 
     private int partiallyAggregatedRows = -1;
 
+    // 该迭代器真正负责数据的遍历，next实际上就是调用他的next()方法
     @Nullable
     private CloseableGrouperIterator<Memory, ResultRow> delegate = null;
 
@@ -337,7 +342,7 @@ public class VectorGroupByEngine
      * 由{@link DimensionHandlerUtils#makeVectorProcessor(DimensionSpec, VectorColumnProcessorFactory, VectorColumnSelectorFactory)}创建
      *
      * @param processingBuffer 从{@link StupidPool#take()}获取的bufferHolder中，调用get获取的bytebuffer
-     * @param fudgeTimestamp
+     * @param fudgeTimestamp 来自于查询请求context上下文中的“fudgeTimestamp”属性
      */
     VectorGroupByEngineIterator(
         final GroupByQuery query,
@@ -407,20 +412,22 @@ public class VectorGroupByEngine
      * 此方法是从valBuffer（ByteBuffer类型）中获取聚合结果，而聚合结果在之前就已经写入到了valBuffer中
      *
      * --------------------------------------------------
-     * valBuffer内数据出处：
-     * 在调用此next方法时，会先调用hasNext()方法，
-     * 其相当于初始化，其中就获取了聚合结果并放入了valBuffer内。
-     * |->{@link this#initNewDelegate()}
+     * 每次遍历的ResultRow代表“一行结果”，内部存在一个数组，该数组依次为一行的每一个记录。
+     *
+     * 当前迭代器中存在一个{@link delegate}迭代器，真正负责每行数据的查询，
+     * 其初始化方法为{@link this#initNewDelegate()}
+     * （valBuffer也是在该初始化时被填充的）
+     *
+     * |->{@link this#initNewDelegate()}    todo 从该逻辑开始详细推导
      * |->{@link BufferArrayGrouper#aggregateVector(Memory, int, int)}
      * |->{@link AggregatorAdapters#aggregateVector(ByteBuffer, int, int[], int[])}（buffer在此处被填充）
-     *
      */
     @Override
     public ResultRow next()
     {
       /**
-       * 执行hasNext()，顺便就初始化了delegate
-       * 其中将聚合结果传入了bytebuffer
+       * 执行hasNext()，顺便就初始化了真正的迭代器delegate
+       * （其中将聚合结果传入了bytebuffer）
        */
       if (!hasNext()) {
         throw new NoSuchElementException();
@@ -512,13 +519,16 @@ public class VectorGroupByEngine
     // 初始化，且填充buffer
     private CloseableGrouperIterator<Memory, ResultRow> initNewDelegate()
     {
+      // bucketIterator迭代器与查询时间相关，且和查询粒度相关，应该是将总时间区间按粒度来切割，然后再由该迭代器迭代出来。
       // Method must not be called unless there's a current bucketInterval.
       assert bucketInterval != null;
 
+      // 此次查询的起始时间
       final DateTime timestamp = fudgeTimestamp != null
                                  ? fudgeTimestamp
                                  : query.getGranularity().toDateTime(bucketInterval.getStartMillis());
 
+      // 循环从游标中读取
       while (!cursor.isDone()) {
         final int startOffset;
 

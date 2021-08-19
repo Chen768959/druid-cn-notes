@@ -54,6 +54,7 @@ import java.util.Map;
  * @see GroupByQuery#getResultRowSizeWithPostAggregators()
  * @see GroupByQuery#getResultRowSizeWithoutPostAggregators()
  */
+// 内部存在一个数组，该数组为groupby查询的一行结果
 public final class ResultRow
 {
   private final Object[] row;
