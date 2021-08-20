@@ -34,6 +34,10 @@ import javax.annotation.Nullable;
  * Class that helps vectorized query engines handle "granularity" parameters. Nonvectorized engines have it handled
  * for them by the StorageAdapter. Vectorized engines don't, because they can get efficiency gains by pushing
  * granularity handling into the engine layer.
+ *
+ * 帮助查询引擎处理“granularity”粒度参数的查询，
+ * 内部包含游标（cursor）和包含真个查询时间区间的粒度迭代器（bucketIterable）
+ * 可根据粒度来控制游标走向
  */
 public class VectorCursorGranularizer
 {
@@ -48,10 +52,17 @@ public class VectorCursorGranularizer
   private final VectorValueSelector timeSelector;
 
   // Current time vector.
+  // "__time"列上所有时间的时间戳数组形式
   @Nullable
   private long[] timestamps = null;
 
   // Offset into the vector that we should start reading from.
+  /**
+   * 由于startOffset是用于timestamps数组中的，
+   * 所以startOffset“__time”时间列的位置记录
+   *
+   * 此处的逻辑就是找到“__time”列中距离timeStart最近的时间位置，作为开始查询行的位置
+   */
   private int startOffset = 0;
 
   // Offset into the vector that is one past the last one we should read.
@@ -115,6 +126,11 @@ public class VectorCursorGranularizer
     return new VectorCursorGranularizer(cursor, bucketIterable, timeSelector);
   }
 
+  /**
+   * 所谓的Offsets，指的是内部“__time”时间列数组的，index下标位置。
+   * 此方法根据bucketInterval迭代器当前的粒度时间区间，
+   * 设置了对应“__time”列中的起始时间位置
+   */
   public void setCurrentOffsets(final Interval bucketInterval)
   {
     final long timeStart = bucketInterval.getStartMillis();
@@ -124,11 +140,18 @@ public class VectorCursorGranularizer
     endOffset = 0;
 
     if (timeSelector != null) {
+      // timestamps是"__time"列上所有时间的时间戳数组形式
       if (timestamps == null) {
         timestamps = timeSelector.getLongVector();
       }
 
       // Skip "offset" to start of bucketInterval.
+      /**
+       * 由于startOffset是用于timestamps数组中的，
+       * 所以startOffset“__time”时间列的位置记录
+       *
+       * 此处的逻辑就是找到“__time”列中距离timeStart最近的时间位置，作为开始查询行的位置
+       */
       while (startOffset < vectorSize && timestamps[startOffset] < timeStart) {
         startOffset++;
       }
@@ -151,9 +174,15 @@ public class VectorCursorGranularizer
   /**
    * Return true, and advances the cursor, if it can be advanced within the current time bucket. Otherwise, returns
    * false and does nothing else.
+   *
+   * 判断当前游标是否迭代到此次需要聚合的粒度的endOffset结束位置，
+   * 如果当前游标已到达李伟末尾，则表示此粒度已遍历完毕，返回true
    */
   public boolean advanceCursorWithinBucket()
   {
+    /**
+     * 当前游标的迭代位置，就是此次粒度的endOffset结束位置
+     */
     if (endOffset == cursor.getCurrentVectorSize()) {
       cursor.advance();
 

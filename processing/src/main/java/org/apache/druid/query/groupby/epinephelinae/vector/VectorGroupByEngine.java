@@ -366,9 +366,15 @@ public class VectorGroupByEngine
       this.keySpace = WritableMemory.allocate(keySize * cursor.getMaxVectorSize());
       this.vectorGrouper = makeGrouper();
 
-      // bucketIterator迭代器与查询时间相关，且和查询粒度相关，应该是将总时间区间按粒度来切割，然后再由该迭代器迭代出来。
+      /**
+       * granulizer：
+       * 帮助查询引擎处理“granularity”粒度参数的查询，
+       * 内部包含游标（cursor）和包含真个查询时间区间的粒度迭代器（bucketIterable）
+       * 可根据粒度来控制游标走向
+       */
       this.granulizer = VectorCursorGranularizer.create(storageAdapter, cursor, query.getGranularity(), queryInterval);
       if (granulizer != null) {
+        // bucketIterator迭代器与查询时间相关，且和查询粒度相关，应该是将总时间区间按粒度来切割，然后再由该迭代器迭代出来。
         this.bucketIterator = granulizer.getBucketIterable().iterator();
       } else {
         this.bucketIterator = Collections.emptyIterator();
@@ -528,11 +534,24 @@ public class VectorGroupByEngine
                                  ? fudgeTimestamp
                                  : query.getGranularity().toDateTime(bucketInterval.getStartMillis());
 
-      // 循环从游标中读取
+      /**
+       * 每次循环是在依次遍历整个查询时间区间中的“各个粒度小区间”，
+       * 再拿着这个粒度小时间区间的始末位置，去cursor游标中查询所有对应行，
+       * 然后再将这些行结果聚合。
+       *
+       * 所以每次循环，相当于处理了一个粒度内的聚合结果
+       */
       while (!cursor.isDone()) {
+        // “__time”时间列数组的某个index下标，此处为此次游标查询的起始查询时间下标
         final int startOffset;
 
+        // partiallyAggregatedRows初始为-1
         if (partiallyAggregatedRows < 0) {
+          /**
+           * 所谓的Offsets，指的是内部“__time”时间列数组的，index下标位置。
+           * 此方法根据bucketInterval迭代器当前的粒度时间区间，
+           * 设置了对应“__time”列中的起始时间位置
+           */
           granulizer.setCurrentOffsets(bucketInterval);
           startOffset = granulizer.getStartOffset();
         } else {
@@ -571,8 +590,14 @@ public class VectorGroupByEngine
 
         if (partiallyAggregatedRows >= 0) {
           break;
+          /**
+           * 判断当前游标是否迭代到此次需要聚合的粒度的endOffset结束位置，
+           * 如果当前游标已到达李伟末尾，则表示此粒度已遍历完毕，返回true，
+           * 此处则不进入条件，继续进行下一个粒度区间进行聚合
+           */
         } else if (!granulizer.advanceCursorWithinBucket()) {
           // Advance bucketInterval.
+          // 区间内的粒度迭代器也向后迭代，表示当前粒度区间处理完了，迭代到下一个粒度区间
           bucketInterval = bucketIterator.hasNext() ? bucketIterator.next() : null;
           break;
         }

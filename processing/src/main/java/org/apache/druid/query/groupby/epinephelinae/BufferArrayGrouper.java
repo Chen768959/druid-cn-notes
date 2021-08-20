@@ -187,6 +187,12 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
     return AggregateResult.ok();
   }
 
+  /**
+   *
+   * @param keySpace
+   * @param startRow
+   * @param endRow
+   */
   @Override
   public AggregateResult aggregateVector(Memory keySpace, int startRow, int endRow)
   {
