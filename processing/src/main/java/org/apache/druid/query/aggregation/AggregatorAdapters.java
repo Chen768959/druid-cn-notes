@@ -87,6 +87,14 @@ public class AggregatorAdapters implements Closeable
       nextPosition += aggregatorFactory.getMaxIntermediateSizeWithNulls();
     }
 
+    // 安全的将long类型的nextPosition转化为int类型
+    /**
+     * checkedCast(long value) ：
+     * 如果可能，返回等于value的int值。
+     * 参数：value - int类型范围内的任何值
+     * 返回：int值等于value
+     * throw：IllegalArgumentException - 如果value大于Integer.MAX_VALUE或小于Integer.MIN_VALUE
+     */
     this.spaceNeeded = Ints.checkedCast(nextPosition);
   }
 
@@ -208,8 +216,12 @@ public class AggregatorAdapters implements Closeable
 
   /**
    * Call {@link VectorAggregator#aggregate(ByteBuffer, int, int[], int[], int)} on all of our aggregators.
-   *
    * This method is only valid if the underlying aggregators are {@link VectorAggregator}.
+   *
+   * @param buf
+   * @param numRows 此次聚合要处理的行数
+   * @param positions 数组中存储了“每行所有聚合值的位置”，其i对应的是“第几行”，第i位的值就是“第i个所有聚合值处于内存空间的偏移量位置”
+   * @param rows 从0开始的数组，其中装了一个长度为“numRows”的从0开始的递增数列，比如numRows为3，那数组就是[0,1,2]
    */
   public void aggregateVector(
       final ByteBuffer buf,

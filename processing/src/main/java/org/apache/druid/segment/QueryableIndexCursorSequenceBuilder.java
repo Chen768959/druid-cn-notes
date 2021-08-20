@@ -364,6 +364,7 @@ public class QueryableIndexCursorSequenceBuilder
   private static class QueryableIndexVectorCursor implements VectorCursor
   {
     private final Closer closer;
+    // 默认512
     private final int vectorSize;
     private final VectorOffset offset;
     private final VectorColumnSelectorFactory columnSelectorFactory;

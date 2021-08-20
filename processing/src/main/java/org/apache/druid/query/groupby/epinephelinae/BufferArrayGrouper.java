@@ -60,6 +60,9 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
   private final Supplier<ByteBuffer> bufferSupplier;
   private final AggregatorAdapters aggregators;
   private final int cardinalityWithMissingValue;
+  /**
+   * 所有聚合值的大小
+   */
   private final int recordSize; // size of all aggregated values
 
   private boolean initialized = false;
@@ -189,20 +192,20 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
 
   /**
    *
-   * @param keySpace
-   * @param startRow
-   * @param endRow
+   * @param keySpace 一块内存空间（单位字节），其大小与维度数量、游标中单行向量最大大小（默认512）相关
+   * @param startRow 每次聚合一个粒度，startRow为该粒度的起始时间index（__time列数组下标）
+   * @param endRow 该粒度的结束时间index（__time列数组下标）
    */
   @Override
   public AggregateResult aggregateVector(Memory keySpace, int startRow, int endRow)
   {
+    // 要处理的行数：endRow和startRow都是__time列数组下标，__time列数组每一项都代表一行数据，所以二者相减就等于要处理的行数
     final int numRows = endRow - startRow;
 
     // Hoisted bounds check on keySpace.
     if (keySpace.getCapacity() < (long) numRows * Integer.BYTES) {
       throw new IAE("Not enough keySpace capacity for the provided start/end rows");
     }
-
     // We use integer indexes into the keySpace.
     if (keySpace.getCapacity() > Integer.MAX_VALUE) {
       throw new ISE("keySpace too large to handle");
@@ -227,16 +230,21 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
     } else {
       for (int i = 0; i < numRows; i++) {
         // +1 matches what hashFunction() would do.
+        // dimIndex值与查询行号是一一对应关系
         final int dimIndex = keySpace.getInt(((long) i) * Integer.BYTES) + 1;
 
         if (dimIndex < 0 || dimIndex >= cardinalityWithMissingValue) {
           throw new IAE("Invalid dimIndex[%s]", dimIndex);
         }
 
+        // recordSize：所有聚合值的大小
+        // 由此可见vAggregationPositions数组中存储了“每行所有聚合值的位置”，
+        // i对应的是“第几行”，第i位的值就是“第i个所有聚合值处于内存空间的偏移量位置”
         vAggregationPositions[i] = dimIndex * recordSize;
 
         initializeSlotIfNeeded(dimIndex);
       }
+
       /**
        * 查询聚合结果，并填充valBuffer
        * {@link AggregatorAdapters#aggregateVector(ByteBuffer, int, int[], int[])}

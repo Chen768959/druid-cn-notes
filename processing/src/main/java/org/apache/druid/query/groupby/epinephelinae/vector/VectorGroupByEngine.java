@@ -47,6 +47,7 @@ import org.apache.druid.query.groupby.epinephelinae.HashVectorGrouper;
 import org.apache.druid.query.groupby.epinephelinae.VectorGrouper;
 import org.apache.druid.query.vector.VectorCursorGranularizer;
 import org.apache.druid.segment.DimensionHandlerUtils;
+import org.apache.druid.segment.QueryableIndexCursorSequenceBuilder;
 import org.apache.druid.segment.QueryableIndexStorageAdapter;
 import org.apache.druid.segment.ReferenceCountingSegment;
 import org.apache.druid.segment.SimpleQueryableIndex;
@@ -176,6 +177,7 @@ public class VectorGroupByEngine
              * {@link QueryableIndexStorageAdapter#makeVectorCursor(Filter, Interval, VirtualColumns, boolean, int, QueryMetrics)}
              *
              * 获取“cursor游标”，游标可以用来查询每一行数据
+             * {@link QueryableIndexCursorSequenceBuilder.QueryableIndexVectorCursor}
              */
             final VectorCursor cursor = storageAdapter.makeVectorCursor(
                 // 查询请求中的“filter”过滤条件
@@ -335,7 +337,7 @@ public class VectorGroupByEngine
      * 将ReferenceCountingSegment转换成适配器{@link QueryableIndexStorageAdapter}
      * 其中包含了启动时加载的segment对象数据，具体可查看{@link SimpleQueryableIndex}
      *
-     * @param cursor 游标，可以用来查询每一行数据
+     * @param cursor 游标，可以用来查询每一行数据 {@link QueryableIndexCursorSequenceBuilder.QueryableIndexVectorCursor}
      * @param queryInterval 要查询的时间区间
      * @param selectors
      * 迭代请求对象中的每一个维度信息，然后获取对应的GroupByVectorColumnSelector组成列表，
@@ -362,7 +364,13 @@ public class VectorGroupByEngine
       this.selectors = selectors;
       this.processingBuffer = processingBuffer;
       this.fudgeTimestamp = fudgeTimestamp;
+      // 维度数量
       this.keySize = selectors.stream().mapToInt(GroupByVectorColumnSelector::getGroupingKeySize).sum();
+      /**
+       * 开辟一块内存空间，入参为以字节为单位的指定容量，
+       * cursor.getMaxVectorSize()为游标中单行向量最大的大小，默认512
+       */
+      log.info("!!!：keySize="+keySize+"...MaxVectorSize="+cursor.getMaxVectorSize());
       this.keySpace = WritableMemory.allocate(keySize * cursor.getMaxVectorSize());
       this.vectorGrouper = makeGrouper();
 
