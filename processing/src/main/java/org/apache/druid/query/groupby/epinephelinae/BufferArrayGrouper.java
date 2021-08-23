@@ -24,19 +24,24 @@ import com.google.common.base.Supplier;
 import com.google.common.primitives.Ints;
 import org.apache.datasketches.memory.Memory;
 import org.apache.datasketches.memory.WritableMemory;
+import org.apache.druid.collections.StupidPool;
 import org.apache.druid.java.util.common.IAE;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.java.util.common.parsers.CloseableIterator;
 import org.apache.druid.query.aggregation.AggregatorAdapters;
 import org.apache.druid.query.aggregation.AggregatorFactory;
+import org.apache.druid.query.groupby.GroupByQuery;
 import org.apache.druid.query.groupby.epinephelinae.column.GroupByColumnSelectorStrategy;
+import org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine;
+import org.apache.druid.segment.vector.VectorColumnSelectorFactory;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 /**
@@ -58,6 +63,14 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
   private static final Logger log = new Logger(BufferArrayGrouper.class);
 
   private final Supplier<ByteBuffer> bufferSupplier;
+  /**
+   * {@link VectorGroupByEngine.VectorGroupByEngineIterator#makeGrouper()}中创建当前grouper对象时入参该aggregators，
+   * aggregators通过{@link AggregatorAdapters#factorizeVector(VectorColumnSelectorFactory, List)}创建
+   *
+   * 其是基于查询请求对象的“aggregations”参数（{@link GroupByQuery#getAggregatorSpecs()}），
+   * 根据查询请求参数，获取各聚合器工厂
+   * 并且其中还装了“游标中的列选择器”，从中可获取游标中的segment数据
+   */
   private final AggregatorAdapters aggregators;
   private final int cardinalityWithMissingValue;
   /**
@@ -67,6 +80,7 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
 
   private boolean initialized = false;
   private WritableMemory usedFlagMemory;
+  // 带查询内容就在其中
   private ByteBuffer valBuffer;
 
   // Scratch objects used by aggregateVector(). Only set if initVectorized() is called.
@@ -110,10 +124,19 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
     return (cardinalityWithMissingValue + Byte.SIZE - 1) / Byte.SIZE;
   }
 
+  /**
+   *
+   * @param bufferSupplier
+   * @param aggregators {@link VectorGroupByEngine.VectorGroupByEngineIterator#makeGrouper()}中创建当前grouper对象时入参，
+   * 调用{@link AggregatorAdapters#factorizeVector(VectorColumnSelectorFactory, List)}创建
+   * 基于查询请求对象的“aggregations”参数（{@link GroupByQuery#getAggregatorSpecs()}），
+   * 根据查询请求参数，获取各聚合器工厂
+   * 并且其中还装了“游标中的列选择器”，从中可获取游标中的segment数据
+   * @param cardinality
+   */
   public BufferArrayGrouper(
       // the buffer returned from the below supplier can have dirty bits and should be cleared during initialization
       final Supplier<ByteBuffer> bufferSupplier,
-      // 查询引擎，迭代器中查询的元素，就是通过此对象查询出的
       final AggregatorAdapters aggregators,
       final int cardinality
   )
@@ -191,7 +214,7 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
   }
 
   /**
-   *
+   * 聚合结果，并存入内部valBuffer
    * @param keySpace 一块内存空间（单位字节），其大小与维度数量、游标中单行向量最大大小（默认512）相关
    * @param startRow 每次聚合一个粒度，startRow为该粒度的起始时间index（__time列数组下标）
    * @param endRow 该粒度的结束时间index（__time列数组下标）
@@ -246,8 +269,13 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
       }
 
       /**
-       * 查询聚合结果，并填充valBuffer
        * {@link AggregatorAdapters#aggregateVector(ByteBuffer, int, int[], int[])}
+       *
+       * aggregators是当前grouper被创建时入参进来的，
+       * 里面包含了请求对象的“aggregations”参数（{@link GroupByQuery#getAggregatorSpecs()}）对应的各个聚合器工厂，
+       * 还装了“游标中的列选择器”，从中可获取游标中的segment数据。
+       *
+       * 此处就是调用各个聚合器结合游标的列选择器，查询所有的聚合结果，并装入当前grouper的valBuffer中
        */
       aggregators.aggregateVector(
           valBuffer,
@@ -335,6 +363,7 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
     };
   }
 
+  // 生成查询结果的迭代器
   @Override
   public CloseableIterator<Entry<Integer>> iterator(boolean sorted)
   {

@@ -51,8 +51,8 @@ public class CloseableGrouperIterator<KeyType, T> implements CloseableIterator<T
       final Closeable closeable
   )
   {
-    this.transformer = transformer;
     this.iterator = iterator;
+    this.transformer = transformer;
     this.closer = Closer.create();
 
     closer.register(iterator);

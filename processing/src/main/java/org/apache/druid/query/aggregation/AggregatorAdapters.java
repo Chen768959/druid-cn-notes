@@ -100,6 +100,11 @@ public class AggregatorAdapters implements Closeable
 
   /**
    * Create an adapters object based on {@link VectorAggregator}.
+   *
+   * @param columnSelectorFactory 游标中获取的列选择器
+   * @param aggregatorFactories {@link GroupByQuery#getAggregatorSpecs()}
+   * 基于查询请求对象的“aggregations”参数，
+   * 根据查询请求参数，获取各聚合器工厂
    */
   public static AggregatorAdapters factorizeVector(
       final VectorColumnSelectorFactory columnSelectorFactory,
@@ -218,7 +223,9 @@ public class AggregatorAdapters implements Closeable
    * Call {@link VectorAggregator#aggregate(ByteBuffer, int, int[], int[], int)} on all of our aggregators.
    * This method is only valid if the underlying aggregators are {@link VectorAggregator}.
    *
-   * @param buf
+   * 由grouper中的各个聚合器，通过游标的列选择器，填充grouper的聚合结果buffer
+   *
+   * @param buf {@link org.apache.druid.query.groupby.epinephelinae.BufferArrayGrouper#valBuffer}
    * @param numRows 此次聚合要处理的行数
    * @param positions 数组中存储了“每行所有聚合值的位置”，其i对应的是“第几行”，第i位的值就是“第i个所有聚合值处于内存空间的偏移量位置”
    * @param rows 从0开始的数组，其中装了一个长度为“numRows”的从0开始的递增数列，比如numRows为3，那数组就是[0,1,2]

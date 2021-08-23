@@ -302,6 +302,11 @@ public class VectorGroupByEngine
     private final int keySize;
     private final WritableMemory keySpace;
     /**
+     * 其内部包含了聚合结果，
+     * 并提供方法返回迭代器，迭代聚合结果
+     *
+     * 当前迭代器的next方法实际上也是调用的该vectorGrouper中的具体逻辑
+     *
      * vectorGrouper.iterator()中会产生真正的迭代器，后续的next等方法实际上就是调用该方法产生的迭代器。
      *
      * vectorGrouper由makeGrouper()产生，{@link this#makeGrouper()}
@@ -428,13 +433,15 @@ public class VectorGroupByEngine
      * --------------------------------------------------
      * 每次遍历的ResultRow代表“一行结果”，内部存在一个数组，该数组依次为一行的每一个记录。
      *
-     * 当前迭代器中存在一个{@link delegate}迭代器，真正负责每行数据的查询，
-     * 其初始化方法为{@link this#initNewDelegate()}
-     * （valBuffer也是在该初始化时被填充的）
+     * 当前this迭代器类中有两个对象属性：
+     * 1、vectorGrouper：内部包含聚类结果的buffer（{@link this#makeGrouper()}创建）
+     * 2、delegate：内部包含vectorGrouper迭代器，以及每行ResultRow对象的“构建逻辑”（从vectorGrouper取出每行的聚合结果，等其他构建逻辑）
      *
-     * |->{@link this#initNewDelegate()}    todo 从该逻辑开始详细推导
-     * |->{@link BufferArrayGrouper#aggregateVector(Memory, int, int)}
-     * |->{@link AggregatorAdapters#aggregateVector(ByteBuffer, int, int[], int[])}（buffer在此处被填充）
+     * 以下是delegate创建过程，以及vectorGrouper填充聚合buffer的过程
+     * |->{@link this#initNewDelegate()}（创建delegate，填充vectorGrouper中buffer，并将grouper入参进delegate）
+     *    |->（往vectorGrouper中填充聚合结果）{@link BufferArrayGrouper#aggregateVector(Memory, int, int)}
+     *        |->（由grouper中的各个聚合器，通过游标的列选择器，填充grouper的聚合结果buffer）{@link AggregatorAdapters#aggregateVector(ByteBuffer, int, int[], int[])}（buffer在此处被填充）
+     * |-> 返回delegate迭代器
      */
     @Override
     public ResultRow next()
@@ -488,6 +495,9 @@ public class VectorGroupByEngine
       closer.close();
     }
 
+    /**
+     * 返回的对象中包含聚合结果，并提供方法返回迭代器，迭代聚合结果
+     */
     @VisibleForTesting
     VectorGrouper makeGrouper()
     {
@@ -504,6 +514,14 @@ public class VectorGroupByEngine
         log.info("!!!：生成BufferArrayGrouper");
         grouper = new BufferArrayGrouper(
             Suppliers.ofInstance(processingBuffer),
+            /**
+             * cursor.getColumnSelectorFactory()：
+             * 游标中的列选择器
+             *
+             * query.getAggregatorSpecs():
+             * 基于查询请求对象的“aggregations”参数，
+             * 根据查询请求参数，获取各聚合器工厂
+             */
             AggregatorAdapters.factorizeVector(
                 cursor.getColumnSelectorFactory(),
                 query.getAggregatorSpecs()
@@ -530,7 +548,10 @@ public class VectorGroupByEngine
       return grouper;
     }
 
-    // 初始化，且填充buffer
+    /**
+     * 填充vectorGrouper中buffer聚合结果
+     * 创建delegate，并将vectorGrouper装入delegate
+     */
     private CloseableGrouperIterator<Memory, ResultRow> initNewDelegate()
     {
       // bucketIterator迭代器与查询时间相关，且和查询粒度相关，应该是将总时间区间按粒度来切割，然后再由该迭代器迭代出来。
@@ -574,9 +595,14 @@ public class VectorGroupByEngine
             keyOffset += selector.getGroupingKeySize();
           }
 
-          // Aggregate this vector.
           // 查询聚合结果
-          /**{@link BufferArrayGrouper#aggregateVector(Memory, int, int)}*/
+          /**
+           * Aggregate this vector.
+           *
+           * vectorGrouper中包含valBuffer属性，该属性中包含了所有待查询的数据，
+           * 此处就是填充其内部valBuffer属性
+           * {@link BufferArrayGrouper#aggregateVector(Memory, int, int)}
+           */
           final AggregateResult result = vectorGrouper.aggregateVector(
               keySpace,
               startOffset,
@@ -619,6 +645,7 @@ public class VectorGroupByEngine
           /**
            * 此处的迭代器，
            * 是后续next时真正调用的迭代器
+           * {@link BufferArrayGrouper#iterator()}
            */
           vectorGrouper.iterator(),
 
