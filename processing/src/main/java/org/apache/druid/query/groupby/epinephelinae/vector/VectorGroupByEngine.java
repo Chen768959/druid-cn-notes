@@ -19,6 +19,8 @@
 
 package org.apache.druid.query.groupby.epinephelinae.vector;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonAppend;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Suppliers;
 import org.apache.datasketches.memory.Memory;
@@ -295,6 +297,12 @@ public class VectorGroupByEngine
     private final GroupByQueryConfig querySpecificConfig;
     private final StorageAdapter storageAdapter;
     private final VectorCursor cursor;
+    /**
+     * 请求对象中此次查询涉及的所有列处理器。
+     *
+     * 迭代请求对象中的每一个维度信息，然后获取对应的GroupByVectorColumnSelector组成列表，
+     * 由{@link DimensionHandlerUtils#makeVectorProcessor(DimensionSpec, VectorColumnProcessorFactory, VectorColumnSelectorFactory)}创建
+     */
     private final List<GroupByVectorColumnSelector> selectors;
     private final ByteBuffer processingBuffer;
     // 来自于查询请求context上下文中的“fudgeTimestamp”属性
@@ -651,7 +659,7 @@ public class VectorGroupByEngine
 
           /**
            * 传参entry是聚合的结果，
-           * 也就是上面vectorGrouper.iterator()的查询结果，
+           * 也就是上面vectorGrouper中的valBuffer中的各粒度的聚合结果，
            *
            * 本函数的目的是获得查询的dimensions结果，
            * 然后和传参的聚合结果一起封装成新的ResultRow对象并返回。
@@ -662,19 +670,27 @@ public class VectorGroupByEngine
             // 此时resultRow中内容为null
 
             // Add timestamp, if necessary.
+            // resultRow的第0位是时间戳
             if (resultRowHasTimestamp) {
               resultRow.set(0, timestamp.getMillis());
             }
 
             // 此时resultRow中内容为null
 
-            // Add dimensions.
             /**
-             * 添加dimensions
+             * Add dimensions
+             * 将此次查询请求的各dimensions列名加入resultRow
              */
             int keyOffset = 0;
+            // 迭代每个列选择器（数量与请求对象中的dimensions参数相关）
             for (int i = 0; i < selectors.size(); i++) {
               final GroupByVectorColumnSelector selector = selectors.get(i);
+              // 将entry.getKey()中包含了
+              // 的每列的列名写入resultRow中
+              /**
+               * entry.getKey()中包含了各列的所有数据值，通过keyOffset，找到各列的该行数据，
+               * 然后将该行实际数据写入resultRow中
+               */
               selector.writeKeyToResultRow(
                   entry.getKey(),
                   keyOffset,
@@ -684,7 +700,8 @@ public class VectorGroupByEngine
 
               keyOffset += selector.getGroupingKeySize();
             }
-            // 此时resultRow中已经包含了该行的dimensions和所聚合的时间
+
+            // 此时resultRow中已经包含了该行的各dimensions列的具体值，以及所聚合的时间
 
             // Convert dimension values to desired output types, possibly.
             GroupByQueryEngineV2.convertRowTypesToOutputTypes(
@@ -697,9 +714,8 @@ public class VectorGroupByEngine
 
             // Add aggregations.
             /**
-             * entry是查询出来的聚合结果，
              * 其getValues是个数组，其中包含了每行的聚合结果。
-             * 此处将每行的聚合结果，和该行的dimension进行了合并
+             * 此处将每行的聚合结果，和该行的dimensions列值进行了合并
              */
             for (int i = 0; i < entry.getValues().length; i++) {
               resultRow.set(resultRowAggregatorStart + i, entry.getValues()[i]);
@@ -707,6 +723,7 @@ public class VectorGroupByEngine
 
             // 此时resultRow中额外还加入了该行的聚合结果
 
+            // 所以一个resultRow对象中包含了一行数据的所有待查询值，以及该行的聚合结果
             return resultRow;
           },
           () -> {} // Grouper will be closed when VectorGroupByEngineIterator is closed.
