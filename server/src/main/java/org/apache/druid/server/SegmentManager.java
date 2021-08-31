@@ -235,7 +235,7 @@ public class SegmentManager
   /**
    * Load a single segment.
    *
-   * @param segment segment to load
+   * @param segment 需要被加载的segment的信息（不是真正的segment对象） segmentsegment to load
    * @param lazy    whether to lazy load columns metadata
    *
    * @return true if the segment was newly loaded, false if it was already loaded
@@ -278,6 +278,12 @@ public class SegmentManager
 
     // compute() is used to ensure that the operation for a data source is executed atomically
     /**
+     * compute(String, (k, v)->{})：
+     * 第一个参数就是需要加载的segment的缓存信息，此处获取了需要加载的segment的datasource数据源名字。
+     * 第二个function意思是如果v存在(这个数据源在map中能找到对应v)，则代入function方法处理，最后返回一个新的v。
+     *
+     * 所以此处dataSources
+     *
      * dataSources是个map，
      * key：各数据源名称，
      * value：DataSourceState类型
@@ -355,7 +361,9 @@ public class SegmentManager
             loadedIntervals.add(
                 segment.getInterval(),
                 segment.getVersion(),
+                // 一个segment代表一个信息文件，也就是一个segment的分片信息
                 segment.getShardSpec().createChunk(
+                    // 创建ReferenceCountingSegment对象，并将adapter装入其中
                     ReferenceCountingSegment.wrapSegment(adapter, segment.getShardSpec())
                 )
             );

@@ -65,6 +65,7 @@ import java.util.TreeMap;
  *
  * This class is not thread-safe.
  */
+// 储了某时间区间的一个segment的所有分片
 class OvershadowableManager<T extends Overshadowable<T>>
 {
   /**

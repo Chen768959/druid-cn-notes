@@ -185,6 +185,14 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
         .toSet();
   }
 
+  /**
+   * 将一个segment对象装进当前timeline中
+   * segment对象：{@link org.apache.druid.segment.loading.SegmentLoaderLocalCacheManager#getSegment(DataSegment, boolean)}
+   *
+   * @param interval 被加载的segment的时间区间
+   * @param version 被加载segment的版本
+   * @param object 一个segment的一个分片数据
+   */
   public void add(final Interval interval, VersionType version, PartitionChunk<ObjectType> object)
   {
     log.info("!!!select：timeline.addAll逻辑，进入add");
@@ -201,13 +209,20 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
     try {
       final IdentityHashMap<TimelineEntry, Interval> allEntries = new IdentityHashMap<>();
 
+      // objects中只有一个值，也就是单一segment的单一分片数据
       while (objects.hasNext()) {
-        PartitionChunk<ObjectType> object = objects.next();
+        PartitionChunk<ObjectType> object = objects.next();// 单一segment的单一分片数据
         Interval interval = intervalFunction.apply(object.getObject());
         VersionType version = versionFunction.apply(object.getObject());
         Map<VersionType, TimelineEntry> exists = allTimelineEntries.get(interval);
         TimelineEntry entry;
 
+        /**
+         * 判断当前timeline中是否存在目标分片的时间区间
+         * 如果不存在，则根据此分片以及区间，创建entry
+         *
+         *
+         */
         if (exists == null) {
           entry = new TimelineEntry(interval, version, new PartitionHolder<>(object));
           TreeMap<VersionType, TimelineEntry> versionEntry = new TreeMap<>(versionComparator);

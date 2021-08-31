@@ -29,9 +29,12 @@ import java.util.Objects;
 
 /**
  * An object that clumps together multiple other objects which each represent a shard of some space.
+ *
+ * 一个PartitionHolder，代表了一个时间区间的segment的“所有分片”
  */
 public class PartitionHolder<T extends Overshadowable<T>> implements Iterable<PartitionChunk<T>>
 {
+  // 其中存储了该时间区间segment的所有分片
   private final OvershadowableManager<T> overshadowableManager;
 
   public static <T extends Overshadowable<T>> PartitionHolder<T> copyWithOnlyVisibleChunks(
@@ -70,6 +73,7 @@ public class PartitionHolder<T extends Overshadowable<T>> implements Iterable<Pa
     return new ImmutablePartitionHolder<>(OvershadowableManager.copyVisible(overshadowableManager));
   }
 
+  // 增加一个分片进来
   public boolean add(PartitionChunk<T> chunk)
   {
     return overshadowableManager.addChunk(chunk);

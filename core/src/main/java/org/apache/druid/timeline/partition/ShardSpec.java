@@ -50,6 +50,7 @@ import java.util.Map;
     @JsonSubTypes.Type(name = HashBucketShardSpec.TYPE, value = HashBucketShardSpec.class),
     @JsonSubTypes.Type(name = RangeBucketShardSpec.TYPE, value = RangeBucketShardSpec.class)
 })
+// 单分片信息
 public interface ShardSpec
 {
   @JsonIgnore
