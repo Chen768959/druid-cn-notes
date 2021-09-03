@@ -24,6 +24,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.apache.druid.guice.annotations.PublicApi;
 import org.apache.druid.java.util.common.ISE;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.aggregation.AggregatorFactory;
 import org.apache.druid.query.aggregation.PostAggregator;
 import org.apache.druid.query.planning.DataSourceAnalysis;
@@ -40,6 +41,8 @@ import java.util.Set;
 @PublicApi
 public class Queries
 {
+  private static final Logger log = new Logger(Queries.class);
+
   public static List<PostAggregator> decoratePostAggregators(
       List<PostAggregator> postAggs,
       Map<String, AggregatorFactory> aggFactories
@@ -155,6 +158,7 @@ public class Queries
       final Query<?> subQuery = ((QueryDataSource) query.getDataSource()).getQuery();
       retVal = query.withDataSource(new QueryDataSource(withSpecificSegments(subQuery, descriptors)));
     } else {
+      log.info("!!!：创建MultipleSpecificSegmentSpec，调用new，1");
       retVal = query.withQuerySegmentSpec(new MultipleSpecificSegmentSpec(descriptors));
     }
 
@@ -165,7 +169,6 @@ public class Queries
     if (!analysis.getBaseTableDataSource().isPresent()) {
       throw new ISE("Unable to apply specific segments to non-table-based dataSource[%s]", query.getDataSource());
     }
-
     if (analysis.getBaseQuerySegmentSpec().isPresent()
         && !analysis.getBaseQuerySegmentSpec().get().equals(new MultipleSpecificSegmentSpec(descriptors))) {
       // If you see the error message below, it's a bug in either this function or in DataSourceAnalysis.

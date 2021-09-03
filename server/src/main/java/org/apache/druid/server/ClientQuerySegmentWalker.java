@@ -144,11 +144,17 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
     );
   }
 
+
+  /**
+   * broker节点查询调用，用于创建queryrunner链
+   * @param query 此次查询对象
+   * @param intervals 原始的查询时间区间参数
+   */
   @Override
   public <T> QueryRunner<T> getQueryRunnerForIntervals(Query<T> query, Iterable<Interval> intervals)
   {
     intervals.forEach(interval -> {
-      log.info("!!!select：此次查询interval="+interval.toString());
+      log.info("!!!：创建MultipleSpecificSegmentSpec，此次查询interval="+interval.toString());
     });
 
     //该类与自定义的扩展类有关
@@ -264,7 +270,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
           query,
           newQuery
       );
-    } else if (canRunQueryUsingClusterWalker(newQuery)) {
+    } else if (canRunQueryUsingClusterWalker(newQuery)) {// broker查询进入以下条件逻辑
       log.info("!!!select：满足canRunQueryUsingClusterWalker条件");
       log.info("!!!select：clusterClient类型："+clusterClient.getClass());
       // Note: clusterClient.getQueryRunnerForIntervals() can return an empty sequence if there is no segment
@@ -285,6 +291,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
            * 所以此处实际起作用的queryrunner是clusterClient创建的
            *
            * 此处clusterClient类型为{@link CachingClusteredClient}
+           * 所以调用的是{@link CachingClusteredClient#getQueryRunnerForIntervals(Query, Iterable)}
            * 此类会创建一个匿名QueryRunner对象，其run方法实际调用的是{@link CachingClusteredClient#run(QueryPlus, ResponseContext, UnaryOperator, boolean)}方法
            *
            */

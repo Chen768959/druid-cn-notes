@@ -169,8 +169,16 @@ public class ServerManager implements QuerySegmentWalker
    * 为每一次查询请求创建queryrunner
    * 主要是由{@link org.apache.druid.query.QueryPlus#run(QuerySegmentWalker, ResponseContext)}调用
    *
+   *
+   *
    * @param query 此次查询请求对象
-   * @param specs 也是由请求对象中得来，其中包含了此次请求涉及的segment信息列表
+   * @param specs
+   * 也是由请求对象中得来，包含此次查询涉及的所有segment的信息，包含三点“时间区间、版本、分片号”，
+   * 相当于根据时间区间+版本，可以在当前节点通过segmentManager，找到涉及哪些segment，
+   * 再查看这些segment数据对象有哪些分片，把每一个分片信息都传入进来，
+   *
+   * 在以下方法逻辑中，“会为每一个分片对象，都创建一条queryrunner查询链”，然后再从线程池分配一个线程进行查询处理，
+   * 最后交由当前主线程进行合并
    * @return org.apache.druid.query.QueryRunner<T>
    */
   @Override
@@ -263,9 +271,11 @@ public class ServerManager implements QuerySegmentWalker
      * 此处的exec是线程池，用来并发执行queryRunners中的各个runner，
      * 即并发的从各segment中查询数据。
      */
+    QueryRunner<T> queryRunner = factory.mergeRunners(exec, queryRunners);
+
     return CPUTimeMetricQueryRunner.safeBuild(
         new FinalizeResultsQueryRunner<>(
-            toolChest.mergeResults(factory.mergeRunners(exec, queryRunners)),
+            toolChest.mergeResults(queryRunner),
             toolChest
         ),
         toolChest,

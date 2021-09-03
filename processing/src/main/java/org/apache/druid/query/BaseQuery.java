@@ -152,7 +152,7 @@ public abstract class BaseQuery<T> implements Query<T>
      * 该方法字面含义：“通过walker，找到descriptors(segment信息列表)对应的QueryRunner”
      *
      * 3、通过walker，找到descriptors(segment信息列表)对应的QueryRunner
-     * broker节点：{@link org.apache.druid.server.ClientQuerySegmentWalker#getQueryRunnerForSegments(Query, Iterable)}
+     * broker节点：{@link org.apache.druid.server.ClientQuerySegmentWalker#getQueryRunnerForIntervals(Query, Iterable)}
      * historical节点：{@link org.apache.druid.server.coordination.ServerManager#getQueryRunnerForSegments(Query, Iterable)}
      */
     return getQuerySegmentSpecForLookUp(this).lookup(this, walker);
@@ -188,9 +188,12 @@ public abstract class BaseQuery<T> implements Query<T>
      * 如果上一步获取不到，则使用getQuerySegmentSpec()获取
      *
      */
-    return DataSourceAnalysis.forDataSource(query.getDataSource())
-                             .getBaseQuerySegmentSpec()
-                             .orElseGet(query::getQuerySegmentSpec);
+    log.info("!!!：创建MultipleSpecificSegmentSpec，进入query的lookup");
+    DataSourceAnalysis dataSourceAnalysis = DataSourceAnalysis.forDataSource(query.getDataSource());
+    log.info("!!!：创建MultipleSpecificSegmentSpec，DataSourceAnalysis创建完毕");
+    QuerySegmentSpec querySegmentSpec = dataSourceAnalysis.getBaseQuerySegmentSpec().orElseGet(query::getQuerySegmentSpec);
+    log.info("!!!：创建MultipleSpecificSegmentSpec，QuerySegmentSpec创建完毕");
+    return querySegmentSpec;
   }
 
   @Override

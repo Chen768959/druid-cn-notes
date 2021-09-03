@@ -34,10 +34,12 @@ import java.io.Closeable;
  * org.apache.druid.segment.ColumnValueSelector} objects.
  */
 @ExtensionPoint
-public interface Aggregator extends Closeable
+  public interface Aggregator extends Closeable
 {
+  // 结合列选择器进行聚合，将聚合结果对象写入内部属性对象中
   void aggregate();
 
+  // 从内部属性中取出聚合结果对象
   @Nullable
   Object get();
   float getFloat();

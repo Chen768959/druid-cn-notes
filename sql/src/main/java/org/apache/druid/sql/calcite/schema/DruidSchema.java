@@ -661,7 +661,7 @@ public class DruidSchema extends AbstractSchema
         StreamSupport.stream(segments.spliterator(), false)
                      .map(SegmentId::getDataSource).collect(Collectors.toSet())
     );
-
+    log.info("!!!：创建MultipleSpecificSegmentSpec，调用new，3");
     final MultipleSpecificSegmentSpec querySegmentSpec = new MultipleSpecificSegmentSpec(
         StreamSupport.stream(segments.spliterator(), false)
                      .map(SegmentId::toDescriptor).collect(Collectors.toList())

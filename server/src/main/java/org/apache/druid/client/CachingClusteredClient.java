@@ -203,8 +203,8 @@ public class CachingClusteredClient implements QuerySegmentWalker
      * （发送http请求，异步获取请求结果：{@link org.apache.druid.client.DirectDruidClient#run(QueryPlus, ResponseContext)}）
      * 返回的类型就是Sequence<T>
      */
-    final ClusterQueryResult<T> result = new SpecificQueryRunnable<>(queryPlus, responseContext)
-        .run(timelineConverter, specificSegments);
+    final ClusterQueryResult<T> result =
+            new SpecificQueryRunnable<>(queryPlus, responseContext).run(timelineConverter, specificSegments);
 
     log.info("!!!select：进入CachingClusteredClient匿名queryrunner run()方法end");
     initializeNumRemainingResponsesInResponseContext(queryPlus.getQuery(), responseContext, result.numQueryServers);

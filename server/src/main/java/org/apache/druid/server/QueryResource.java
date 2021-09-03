@@ -345,20 +345,26 @@ public class QueryResource implements QueryCountStatsProvider
       final String prevEtag = getPreviousEtag(req);
 
       /**
-       * 客户端请求查询时请求头会传一个If-None-Match参数，
-       * 服务端查询完毕后，结果数据里有一个ETag参数，
+       * 正常情况下不会进入此条件。
        *
-       * 此处二者相等时满足以下条件
+       * 如果要进入此条件，客户端请求时，请求头中必须带有“If-None-Match”header key
+       * （一般情况下客户端不会专门指定该key）
+       *
+       * 关于If-None-Match与ETAG的介绍：
+       * （1）客户端第一次请求服务端时，服务端在response响应header头中会生成一个ETAG key，其value为一串code码
+       * （2）客户端第二次请求服务端时，request的header中可以带一个If-None-Match key，其value就是之前ETAG对应的code码，
+       *      然后服务端会比较此次查询结果的ETAG值，如果未变化，就将If-None-Match的值设为false，返回状态为304，然后不返回查询结果
+       *      “客户端继续使用本地缓存”
+       * （即满足如下的if条件）
        */
       if (prevEtag != null && prevEtag.equals(responseContext.get(ResponseContext.Key.ETAG))) {
         //发送日志和监控给“getRemoteAddr”地址，也就是请求客户端地址
+        /**
+         * queryLifecycle生命周期4：输出异常日志
+         */
         queryLifecycle.emitLogsAndMetrics(null, req.getRemoteAddr(), -1);
         //successfulQueryCount值+1，看样子是记录成功查询的数量的
         successfulQueryCount.incrementAndGet();
-        /**
-         * 不是很明白，为什么此处返回了个空的响应
-         * 是因为上面的queryLifecycle.emitLogsAndMetrics(null, req.getRemoteAddr(), -1);已经发送了想要的结果吗？
-         */
         return Response.notModified().build();
       }
 

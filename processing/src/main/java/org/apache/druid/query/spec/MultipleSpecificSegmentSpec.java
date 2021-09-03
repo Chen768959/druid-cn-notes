@@ -23,6 +23,8 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.Iterables;
 import org.apache.druid.java.util.common.JodaUtils;
+import org.apache.druid.java.util.common.logger.Logger;
+import org.apache.druid.query.BaseQuery;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryRunner;
 import org.apache.druid.query.QuerySegmentWalker;
@@ -39,6 +41,8 @@ import java.util.Objects;
  */
 public class MultipleSpecificSegmentSpec implements QuerySegmentSpec
 {
+  private static final Logger log = new Logger(MultipleSpecificSegmentSpec.class);
+
   private final List<SegmentDescriptor> descriptors;
 
   private volatile List<Interval> intervals = null;
@@ -49,6 +53,7 @@ public class MultipleSpecificSegmentSpec implements QuerySegmentSpec
   )
   {
     this.descriptors = descriptors;
+    log.info("!!!：创建MultipleSpecificSegmentSpec，descriptors.size="+descriptors.size());
   }
 
   @JsonProperty("segments")
@@ -81,6 +86,7 @@ public class MultipleSpecificSegmentSpec implements QuerySegmentSpec
   @Override
   public <T> QueryRunner<T> lookup(Query<T> query, QuerySegmentWalker walker)
   {
+    log.info("!!!：创建MultipleSpecificSegmentSpec，spec调用lookup");
     /**
      * walker是his节点启动时注入进来的
      * query是此次查询对象
