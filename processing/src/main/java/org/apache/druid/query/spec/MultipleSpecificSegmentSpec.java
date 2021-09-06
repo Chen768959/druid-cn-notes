@@ -65,6 +65,7 @@ public class MultipleSpecificSegmentSpec implements QuerySegmentSpec
   @Override
   public List<Interval> getIntervals()
   {
+    log.info("!!!：创建MultipleSpecificSegmentSpec，调用getIntervals()");
     if (intervals != null) {
       return intervals;
     }

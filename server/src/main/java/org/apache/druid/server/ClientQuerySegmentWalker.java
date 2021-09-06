@@ -295,6 +295,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
            * 此类会创建一个匿名QueryRunner对象，其run方法实际调用的是{@link CachingClusteredClient#run(QueryPlus, ResponseContext, UnaryOperator, boolean)}方法
            *
            */
+          //                            clusterClient.getQueryRunnerForIntervals()：构建查询his节点的queryrunner
           decorateClusterRunner(newQuery, clusterClient.getQueryRunnerForIntervals(newQuery, intervals)),
           query,
           newQuery
@@ -565,6 +566,10 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
     final QueryToolChest<T, Query<T>> toolChest = warehouse.getToolChest(query);
 
     return new FluentQueryRunnerBuilder<>(toolChest)
+        /**
+         * 创建{@link FluentQueryRunnerBuilder.FluentQueryRunner},
+         * 并将SetAndVerifyContextQueryRunner作为baserunner装入其中
+         */
         .create(
             new SetAndVerifyContextQueryRunner<>(
                 serverConfig,

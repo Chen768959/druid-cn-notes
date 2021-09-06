@@ -23,6 +23,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import org.apache.druid.client.CachingClusteredClient;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.guava.BaseSequence;
 import org.apache.druid.java.util.common.guava.BaseSequence.IteratorMaker;
@@ -62,6 +63,13 @@ public class RetryQueryRunner<T> implements QueryRunner<T>
 
   private int totalNumRetries;
 
+  /**
+   *
+   * @param baseRunner baseClusterRunner用于在historic节点查询的runner
+   * @param retryRunnerCreateFn 方法：{@link CachingClusteredClient#getQueryRunnerForSegments(Query, Iterable)}
+   * @param config
+   * @param jsonMapper
+   */
   public RetryQueryRunner(
       QueryRunner<T> baseRunner,
       BiFunction<Query<T>, List<SegmentDescriptor>, QueryRunner<T>> retryRunnerCreateFn,
@@ -74,6 +82,11 @@ public class RetryQueryRunner<T> implements QueryRunner<T>
 
   /**
    * Constructor only for testing.
+   * @param baseRunner baseClusterRunner用于在historic节点查询的runner
+   * @param retryRunnerCreateFn 方法：{@link CachingClusteredClient#getQueryRunnerForSegments(Query, Iterable)}
+   * @param config
+   * @param jsonMapper
+   * @param runnableAfterFirstAttempt 空逻辑
    */
   @VisibleForTesting
   RetryQueryRunner(
@@ -106,7 +119,7 @@ public class RetryQueryRunner<T> implements QueryRunner<T>
     // However, we call baseRunner.run() here instead where it's executed while constructing a query plan.
     // This is because ResultLevelCachingQueryRunner requires to compute the cache key based on
     // the segments to query which is computed in SpecificQueryRunnable.run().
-    LOG.info("!!!：RetryQueryRunner中baseRunner为："+baseRunner.getClass());
+    LOG.info("!!!：创建SpecificQueryRunnable，RetryQueryRunner.baseQuerySegmentSpec："+((BaseQuery<?>) queryPlus.getQuery()).getQuerySegmentSpec().toString());
     /**
      * {@link org.apache.druid.client.CachingClusteredClient#run(QueryPlus, ResponseContext, UnaryOperator, boolean)}
      */

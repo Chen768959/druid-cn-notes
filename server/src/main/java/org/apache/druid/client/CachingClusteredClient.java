@@ -19,6 +19,7 @@
 
 package org.apache.druid.client;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Function;
@@ -52,6 +53,7 @@ import org.apache.druid.java.util.common.guava.ParallelMergeCombiningSequence;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
 import org.apache.druid.java.util.emitter.EmittingLogger;
+import org.apache.druid.query.BaseQuery;
 import org.apache.druid.query.BySegmentResultValueClass;
 import org.apache.druid.query.CacheStrategy;
 import org.apache.druid.query.DruidProcessingConfig;
@@ -71,6 +73,8 @@ import org.apache.druid.query.context.ResponseContext;
 import org.apache.druid.query.context.ResponseContext.Key;
 import org.apache.druid.query.filter.DimFilterUtils;
 import org.apache.druid.query.planning.DataSourceAnalysis;
+import org.apache.druid.query.scan.ScanQuery;
+import org.apache.druid.query.spec.MultipleIntervalSegmentSpec;
 import org.apache.druid.query.spec.QuerySegmentSpec;
 import org.apache.druid.server.QueryResource;
 import org.apache.druid.server.QueryScheduler;
@@ -170,6 +174,11 @@ public class CachingClusteredClient implements QuerySegmentWalker
     );
   }
 
+  /**
+   * 构建请求historic查询的queryrunner
+   * @param query 此次请求对象
+   * @param intervals 此次请求时间区间
+   */
   @Override
   public <T> QueryRunner<T> getQueryRunnerForIntervals(final Query<T> query, final Iterable<Interval> intervals)
   {
@@ -178,6 +187,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
       @Override
       public Sequence<T> run(final QueryPlus<T> queryPlus, final ResponseContext responseContext)
       {
+        // 调用外部对象的run方法
         return CachingClusteredClient.this.run(queryPlus, responseContext, timeline -> timeline, false);
       }
     };
@@ -188,9 +198,9 @@ public class CachingClusteredClient implements QuerySegmentWalker
    * timeline, if desired. This is used by getQueryRunnerForSegments.
    */
   private <T> Sequence<T> run(
-      final QueryPlus<T> queryPlus,
+      final QueryPlus<T> queryPlus,// 请求对象
       final ResponseContext responseContext,
-      final UnaryOperator<TimelineLookup<String, ServerSelector>> timelineConverter,
+      final UnaryOperator<TimelineLookup<String, ServerSelector>> timelineConverter, // timeline -> timeline
       final boolean specificSegments // false
   )
   {
@@ -203,8 +213,8 @@ public class CachingClusteredClient implements QuerySegmentWalker
      * （发送http请求，异步获取请求结果：{@link org.apache.druid.client.DirectDruidClient#run(QueryPlus, ResponseContext)}）
      * 返回的类型就是Sequence<T>
      */
-    final ClusterQueryResult<T> result =
-            new SpecificQueryRunnable<>(queryPlus, responseContext).run(timelineConverter, specificSegments);
+    SpecificQueryRunnable<T> tSpecificQueryRunnable = new SpecificQueryRunnable<>(queryPlus, responseContext);
+    final ClusterQueryResult<T> result = tSpecificQueryRunnable.run(timelineConverter, specificSegments);
 
     log.info("!!!select：进入CachingClusteredClient匿名queryrunner run()方法end");
     initializeNumRemainingResponsesInResponseContext(queryPlus.getQuery(), responseContext, result.numQueryServers);
@@ -286,6 +296,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
     private final int uncoveredIntervalsLimit;
     private final Map<String, Cache.NamedKey> cachePopulatorKeyMap = new HashMap<>();
     private final DataSourceAnalysis dataSourceAnalysis;
+    // 此处的时间区间就是请求参数中的时间区间，如果只有一个时间，那该list中就只有1项
     private final List<Interval> intervals;
 
     SpecificQueryRunnable(final QueryPlus<T> queryPlus, final ResponseContext responseContext)
@@ -314,9 +325,27 @@ public class CachingClusteredClient implements QuerySegmentWalker
       this.dataSourceAnalysis = DataSourceAnalysis.forDataSource(query.getDataSource());
       // For nested queries, we need to look at the intervals of the inner most query.
       // 获取此次查询的时间间隔参数intervals
-      this.intervals = dataSourceAnalysis.getBaseQuerySegmentSpec()
-                                         .map(QuerySegmentSpec::getIntervals)
-                                         .orElseGet(() -> query.getIntervals());
+      Optional<QuerySegmentSpec> baseQuerySegmentSpec = dataSourceAnalysis.getBaseQuerySegmentSpec();
+      /** {@link MultipleIntervalSegmentSpec#getIntervals()} */
+      Optional<List<Interval>> intervals = baseQuerySegmentSpec.map(QuerySegmentSpec::getIntervals);
+      if (intervals.isPresent()){
+        this.intervals = intervals.get();
+      }else {
+        log.info("!!!：创建SpecificQueryRunnable，query类型："+query.getClass());
+        /**
+         * 此处进入此逻辑，query类型为请求对象的类型，
+         * 但getIntervals都是来自{@link BaseQuery#getIntervals()}
+         *
+         * 此处的时间区间就是请求参数中的时间区间，如果只有一个时间，那该list中就只有1项
+         */
+        this.intervals = query.getIntervals();
+        try {
+          log.info("!!!：创建SpecificQueryRunnable，intervals："+new ObjectMapper().writeValueAsString(this.intervals));
+        } catch (JsonProcessingException e) {
+          e.printStackTrace();
+        }
+      }
+
     }
 
     private ImmutableMap<String, Object> makeDownstreamQueryContext()
@@ -349,7 +378,9 @@ public class CachingClusteredClient implements QuerySegmentWalker
      *         participating in query processing.
      */
     /**
-     * 1、根据查询的时间区间，从整个druid集群中找到对应的segment（{@link}）
+     *
+     * @param timelineConverter timeline -> timeline
+     * @param specificSegments false
      */
     ClusterQueryResult<T> run(
         final UnaryOperator<TimelineLookup<String, ServerSelector>> timelineConverter,

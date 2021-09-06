@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableMap;
 import org.apache.druid.client.DirectDruidClient;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.logger.Logger;
+import org.apache.druid.query.BaseQuery;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryContexts;
 import org.apache.druid.query.QueryPlus;
@@ -40,6 +41,11 @@ public class SetAndVerifyContextQueryRunner<T> implements QueryRunner<T>
   private final QueryRunner<T> baseRunner;
   private final long startTimeMillis;
 
+  /**
+   *
+   * @param serverConfig
+   * @param baseRunner {@link org.apache.druid.query.RetryQueryRunner}
+   */
   public SetAndVerifyContextQueryRunner(ServerConfig serverConfig, QueryRunner<T> baseRunner)
   {
     this.serverConfig = serverConfig;
@@ -50,7 +56,8 @@ public class SetAndVerifyContextQueryRunner<T> implements QueryRunner<T>
   @Override
   public Sequence<T> run(QueryPlus<T> queryPlus, ResponseContext responseContext)
   {
-    log.info("!!!：SetAndVerifyContextQueryRunner中runner为："+baseRunner.getClass());
+    log.info("!!!：创建SpecificQueryRunnable，SetAndVerifyContextQueryRunner.baseQuerySegmentSpec："+((BaseQuery<?>) queryPlus.getQuery()).getQuerySegmentSpec().toString());
+
     /**
      * broker中为：
      * {@link org.apache.druid.query.RetryQueryRunner#run(QueryPlus, ResponseContext)}

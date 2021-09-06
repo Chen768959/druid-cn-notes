@@ -47,6 +47,7 @@ public class MultipleIntervalSegmentSpec implements QuerySegmentSpec
       @JsonProperty("intervals") List<Interval> intervals
   )
   {
+    log.info("!!!：创建MultipleIntervalSegmentSpec11111");
     this.intervals = Collections.unmodifiableList(JodaUtils.condenseIntervals(intervals));
   }
 
@@ -54,6 +55,7 @@ public class MultipleIntervalSegmentSpec implements QuerySegmentSpec
   @JsonProperty("intervals")
   public List<Interval> getIntervals()
   {
+    log.info("!!!：创建MultipleIntervalSegmentSpec，调用getIntervals()");
     return intervals;
   }
 
