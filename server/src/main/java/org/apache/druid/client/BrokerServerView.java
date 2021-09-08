@@ -216,8 +216,21 @@ public class BrokerServerView implements TimelineServerView
     return clients.remove(server.getName());
   }
 
+  /**
+   * 该方法一次只加载一个segment的信息
+   * 在server启动时会加载所有segment信息
+   *
+   * （不是加载内容）
+   * 只是加载segment版本号、时间区间、数据源等信息，以及这些segment所在historic节点的ip+port
+   *
+   * 该方法目的是填充timelines。
+   *
+   * @param server segment所在historic节点的ip+port
+   * @param segment segment信息
+   */
   private void serverAddedSegment(final DruidServerMetadata server, final DataSegment segment)
   {
+    log.info("!!!：加载segment，serverName："+server.getName()+"...segmentDataSource："+segment.getDataSource()+"...interval："+segment.getInterval());
     SegmentId segmentId = segment.getId();
     synchronized (lock) {
       // in theory we could probably just filter this to ensure we don't put ourselves in here, to make broker tree

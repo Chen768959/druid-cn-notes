@@ -26,7 +26,9 @@ import org.joda.time.Interval;
 import java.util.Objects;
 
 /**
-*/
+ * 代表了一个segment信息，
+ *
+ */
 public class TimelineObjectHolder<VersionType, ObjectType extends Overshadowable<ObjectType>> implements LogicalSegment
 {
   private final Interval interval;

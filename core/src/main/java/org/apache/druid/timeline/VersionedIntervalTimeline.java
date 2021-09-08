@@ -71,6 +71,8 @@ import java.util.stream.StreamSupport;
  * and {@link #remove} methods to achieve "atomic" updates. First add new items, then check if those items caused
  * anything to be overshadowed, if so, remove the overshadowed elements and you have effectively updated your data set
  * without any user impact.
+ *
+ * 此次查询的数据源的“所有segment信息，以及其所属historic节点信息”
  */
 public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshadowable<ObjectType>>
     implements TimelineLookup<VersionType, ObjectType>
@@ -746,37 +748,44 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
     }
   }
 
+  /**
+   * 查询“此次查询请求的时间区间”包含了当前数据源的那些segment，
+   * 然后返回这些segment
+   *
+   * @param interval 此次查询请求的时间区间
+   * @param completeness Partitions.ONLY_COMPLETE
+   */
   @GuardedBy("lock")
   private List<TimelineObjectHolder<VersionType, ObjectType>> lookup(Interval interval, Partitions completeness)
   {
     log.info("进入VersionedIntervalTimeline.lookup，此次查询时间为："+interval.toString());
+
+    //
     List<TimelineObjectHolder<VersionType, ObjectType>> retVal = new ArrayList<>();
     NavigableMap<Interval, TimelineEntry> timeline;
 
-    //lookup方法传参为ONLY_COMPLETE，不进此逻辑
     if (completeness == Partitions.INCOMPLETE_OK) {
       timeline = incompletePartitionsTimeline;
     } else {
       /**
-       * 看类型是个treeMap，
-       * key为查询时间间隔对象Interval，
-       * value是TimelineEntry类型
+       * completePartitionsTimeline为treeMap类型，是在broker启动时进行赋值。
+       * 当前VersionedIntervalTimeline对象包含了“此次查询的数据源的所有segment信息，以及其所属historic节点信息”
+       * 而completePartitionsTimeline：
+       * key（Interval）：当前数据源中各个segment的时间区间信息
+       * value（TimelineEntry）：对应segment的完整信息，包含3个点：“时间、版本、所有分片”
        */
       timeline = completePartitionsTimeline;
     }
 
     /**
-     * 此处直接迭代timelineMap，
-     * 表示其中数据应该在数据摄入的时候就生成了
+     * 迭代当前数据源中的每一个segment信息
      */
     for (Entry<Interval, TimelineEntry> entry : timeline.entrySet()) {
+      // 当前数据源中各个segment的时间区间信息
       Interval timelineInterval = entry.getKey();
+      // 对应segment的完整信息，包含3个点：“时间、版本、所有分片”
       TimelineEntry val = entry.getValue();
 
-      log.info("!!!select：completePartitionsTimeline中数据key："+timelineInterval.toString());
-      log.info("!!!select：completePartitionsTimeline中数据val.getTrueInterval："+val.getTrueInterval().toString());
-      log.info("!!!select：completePartitionsTimeline中数据val.getVersion："+val.getVersion());
-      log.info("!!!select：completePartitionsTimeline中数据val.getPartitionHolder："+val.getPartitionHolder().toString());
       /**
        * 判断此次查询的时间和集合中的时间是否有重叠的，
        * 如果重叠，则将时间区间对应的TimelineEntry实体存入一个TimelineObjectHolder对象，然后返回

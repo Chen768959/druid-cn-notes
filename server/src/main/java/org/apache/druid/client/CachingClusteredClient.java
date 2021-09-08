@@ -388,18 +388,19 @@ public class CachingClusteredClient implements QuerySegmentWalker
     )
     {
       /**
-       * serverView为启动时注入，此处实际调用的是{@link BrokerServerView#getTimeline(DataSourceAnalysis)}
-       * 此处返回的是一个timeline数据（如果存在的话），
-       * 暂不知道意义
+       * serverView为启动时注入，实现类为BrokerServerView
+       * 此处实际调用的是{@link BrokerServerView#getTimeline(DataSourceAnalysis)}
+       *
+       * 在broker节点启动时，就将每一个segment的信息，以及其对应的historic节点信息存储在serverView中，（{@link BrokerServerView#serverAddedSegment(DruidServerMetadata, DataSegment)}）
+       * 其存储格式就是 Map<String, VersionedIntervalTimeline<String, ServerSelector>>
+       * 一个数据源，对应一个VersionedIntervalTimeline<String, ServerSelector>对象，
+       * VersionedIntervalTimeline中包含了该数据源的所有segment信息，包括时间轴、所在主机等。
+       *
+       * 此处根据请求的数据源，找到该数据源所有的segment信息
        */
       final Optional<? extends TimelineLookup<String, ServerSelector>> maybeTimeline = serverView.getTimeline(
           dataSourceAnalysis
       );
-      if (maybeTimeline.isPresent()){
-        log.info("!!!select：存在maybeTimeline，类型为："+maybeTimeline.get().getClass());
-      }else {
-        log.info("!!!select：maybeTimeline为空");
-      }
 
       // 如果没有maybeTimeline，则直接返回空查询结果
       if (!maybeTimeline.isPresent()) {
@@ -407,16 +408,16 @@ public class CachingClusteredClient implements QuerySegmentWalker
       }
 
       /**
-       * timelineConverter这个参数是一个“函数参数”，
-       * 相当于传进来一个函数，有参数有响应，
-       * 此处的apply就是调用该函数，
-       * 而这个函数当时定义的是“没有任何逻辑，传什么就回显什么”，
+       * timelineConverter：timeline -> timeline
        *
        * 所以此处的timelineConverter.apply()相当于什么都没做，
-       * 直接将maybeTimeline.get()赋值给了timeline
+       * 直接将maybeTimeline.get()赋值给了timeline，
+       *
+       * 也就是获取了此次请求数据源的所有的segment信息
        */
       final TimelineLookup<String, ServerSelector> timeline = timelineConverter.apply(maybeTimeline.get());
 
+      // 该参数默认0，不进此逻辑
       if (uncoveredIntervalsLimit > 0) {
         computeUncoveredIntervals(timeline);
       }
@@ -443,6 +444,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
        *
        * 后续可用每个SegmentServerSelector对象，找到集群中对应的server服务，然后对其发起查询请求。
        */
+      log.info("!!!：SpecificQueryRunnable.run(),准备调用computeSegmentsToQuery");
       final Set<SegmentServerSelector> segmentServers = computeSegmentsToQuery(timeline, specificSegments);
 
       /**
@@ -583,15 +585,31 @@ public class CachingClusteredClient implements QuerySegmentWalker
       }
     }
 
+    /**
+     *
+     * @param timeline 此次查询的数据源的“所有segment信息，以及其所属historic节点信息”
+     * @param specificSegments false
+     */
     private Set<SegmentServerSelector> computeSegmentsToQuery(
         TimelineLookup<String, ServerSelector> timeline,
-        boolean specificSegments //false
+        boolean specificSegments
     )
     {
+      // 构建一个匿名三目运算function
+      final java.util.function.Function<Interval, List<TimelineObjectHolder<String, ServerSelector>>> lookupFn
+          = specificSegments ? timeline::lookupWithIncompletePartitions : timeline::lookup;
+
       /**
-       * specificSegmentswei false，
-       * timeline为之前{@link BrokerServerView#getTimeline(DataSourceAnalysis)}获取
-       * lookupFn = {@link VersionedIntervalTimeline#lookup(Interval, Partitions)}
+       * intervals：就是请求参数中的时间区间，如果只有一个时间，那该list中就只有1项
+       *
+       * lookupFn.apply(i)：
+       * 将此次查询的时间区间代入lookupFn那个三目方程，因为specificSegments=false，
+       * 所以 lookupFn = timeline::lookup，即调用
+       * lookupFn = {@link VersionedIntervalTimeline#lookup(Interval)}
+       *
+       * VersionedIntervalTimeline中包含了此次查询的数据源的“所有segment信息，以及其所属historic节点信息”，
+       * 此处把此次查询时间区间作为参数传入其中，
+       * 查询出
        *
        * 存在一个map集合，其中包含了各种Interval时间区间，和对应的{@link VersionedIntervalTimeline.TimelineEntry}实体。
        * （暂不知道该map是怎么形成的，估计是数据摄入时形成），
@@ -601,13 +619,12 @@ public class CachingClusteredClient implements QuerySegmentWalker
        *
        * 这个lookupFn就是TimelineEntry的包装类
        */
-      final java.util.function.Function<Interval, List<TimelineObjectHolder<String, ServerSelector>>> lookupFn
-          = specificSegments ? timeline::lookupWithIncompletePartitions : timeline::lookup;
-
+      List<TimelineObjectHolder<String, ServerSelector>> collect =
+              intervals.stream().flatMap(i -> lookupFn.apply(i).stream()).collect(Collectors.toList());
 
       final List<TimelineObjectHolder<String, ServerSelector>> serversLookup = toolChest.filterSegments(
           query,
-          intervals.stream().flatMap(i -> lookupFn.apply(i).stream()).collect(Collectors.toList())
+          collect
       );
 
       final Set<SegmentServerSelector> segments = new LinkedHashSet<>();
