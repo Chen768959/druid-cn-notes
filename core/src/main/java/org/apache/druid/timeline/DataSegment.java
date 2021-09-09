@@ -97,6 +97,7 @@ public class DataSegment implements Comparable<DataSegment>, Overshadowable<Data
   private final Map<String, Object> loadSpec;
   private final List<String> dimensions;
   private final List<String> metrics;
+  // 单分片信息
   private final ShardSpec shardSpec;
 
   /**
@@ -312,6 +313,9 @@ public class DataSegment implements Comparable<DataSegment>, Overshadowable<Data
     return metrics;
   }
 
+  /**
+   * 获取单个分片的信息
+   */
   @JsonProperty
   public ShardSpec getShardSpec()
   {

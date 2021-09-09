@@ -749,8 +749,13 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
   }
 
   /**
-   * 查询“此次查询请求的时间区间”包含了当前数据源的那些segment，
-   * 然后返回这些segment
+   * 根据查询时间区间，
+   * 获取该时间区间上的所有segment信息的集合
+   *
+   * 该每个segment的待查询时间区间都是完全属于“查询时间区间”内的。
+   * （主要是始末segment，起始segment的初始查询时间就是“请求查询时间”的起始时间，末尾segment同理）
+   *
+   * 这些segment信息都是在broker节点启动时加载的
    *
    * @param interval 此次查询请求的时间区间
    * @param completeness Partitions.ONLY_COMPLETE
@@ -760,7 +765,7 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
   {
     log.info("进入VersionedIntervalTimeline.lookup，此次查询时间为："+interval.toString());
 
-    //
+    // 根据查询时间区间interval，找到当前数据源中，存在时间重叠的segment，然后装入此list中
     List<TimelineObjectHolder<VersionType, ObjectType>> retVal = new ArrayList<>();
     NavigableMap<Interval, TimelineEntry> timeline;
 
@@ -781,14 +786,14 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
      * 迭代当前数据源中的每一个segment信息
      */
     for (Entry<Interval, TimelineEntry> entry : timeline.entrySet()) {
-      // 当前数据源中各个segment的时间区间信息
+      // 该segment的时间区间
       Interval timelineInterval = entry.getKey();
       // 对应segment的完整信息，包含3个点：“时间、版本、所有分片”
       TimelineEntry val = entry.getValue();
 
       /**
-       * 判断此次查询的时间和集合中的时间是否有重叠的，
-       * 如果重叠，则将时间区间对应的TimelineEntry实体存入一个TimelineObjectHolder对象，然后返回
+       * 判断此次查询的时间和集合中的时间是否有重叠部分，
+       * 如果有重叠部分，则将该segment信息写入结果集retVal中
        */
       if (timelineInterval.overlaps(interval)) {
         retVal.add(
@@ -806,6 +811,14 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
       return retVal;
     }
 
+    /**
+     * 获取当前segment时间重叠segment结果集中的第一项segment信息，
+     *
+     * 如果“interval.getStart()”在“firstEntry.getInterval().getStart()”之后，
+     *
+     * 则替换首位的segment信息，
+     * 将首位的segment的开始查询时间，设置为interval.getStart()
+     */
     TimelineObjectHolder<VersionType, ObjectType> firstEntry = retVal.get(0);
     if (interval.overlaps(firstEntry.getInterval()) &&
         interval.getStart().isAfter(firstEntry.getInterval().getStart())) {
@@ -820,6 +833,7 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
       );
     }
 
+    // 和上一步同理，要是查询时间的最大值，小于末尾segment的最大值，就缩小末尾segment的查询区间
     TimelineObjectHolder<VersionType, ObjectType> lastEntry = retVal.get(retVal.size() - 1);
     if (interval.overlaps(lastEntry.getInterval()) && interval.getEnd().isBefore(lastEntry.getInterval().getEnd())) {
       retVal.set(
@@ -832,6 +846,7 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
           )
       );
     }
+    // 以上两步缩小始末查询时间后，返回的segment结果集，就是此次请求的时间对应的所有segment，并且每个segment中的待查时间区间也是完全符合此次查询时间
 
     return retVal;
   }

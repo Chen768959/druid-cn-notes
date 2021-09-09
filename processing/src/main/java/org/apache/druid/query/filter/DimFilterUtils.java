@@ -117,6 +117,20 @@ public class DimFilterUtils
    *
    * @return The set of filtered object, in the same order as input
    */
+  /**
+   * 在创建分片时，可能会设置该分片的各维度的存值范围，
+   * 入参传入了一个“维度过滤器”，相当于指定了某维度的查询范围。
+   * 此方法根据每一个分片的各维度存值范围，与此处指定的各维度查询范围做比较。
+   * 排除掉了“不可能包含任一查询维度值”的分片。
+   *
+   * 返回的是个分片结果集，
+   * 里面每个分片，都有可能包含需要被查询的数据
+   *
+   * @param dimFilter 维度过滤器，相当于“只查询过滤器里选择的范围”
+   * @param input 查询时间区间上的某一个segment的信息对象的“所有分片信息”
+   * @param converter partitionChunk -> partitionChunk.getObject().getSegment().getShardSpec()
+   * @param dimensionRangeCache 空的hashmap
+   */
   public static <T> Set<T> filterShards(
       final DimFilter dimFilter,
       final Iterable<T> input,
@@ -126,14 +140,19 @@ public class DimFilterUtils
   {
     Set<T> retSet = new LinkedHashSet<>();
 
+    // 迭代单个segment的每一个分片信息
     for (T obj : input) {
+      // 通过入参的匿名函数获取这个分片信息对象
       ShardSpec shard = converter.apply(obj);
       boolean include = true;
 
       if (dimFilter != null && shard != null) {
         Map<String, RangeSet<String>> filterDomain = new HashMap<>();
+        // 获取该分片上的所有维度名
         List<String> dimensions = shard.getDomainDimensions();
+        // 迭代分片的每一个维度名
         for (String dimension : dimensions) {
+          // 使用维度过滤器，获得dimension维度的“可能的取值范围RangeSet<String>”
           Optional<RangeSet<String>> optFilterRangeSet = dimensionRangeCache
               .computeIfAbsent(dimension, d -> Optional.ofNullable(dimFilter.getDimensionRangeSet(d)));
 
@@ -141,11 +160,15 @@ public class DimFilterUtils
             filterDomain.put(dimension, optFilterRangeSet.get());
           }
         }
+
+        // 根据分片信息，判断其是否可能包含任一维度的值
         if (!filterDomain.isEmpty() && !shard.possibleInDomain(filterDomain)) {
-          include = false;
+          include = false;// 该分片一定不包含此维度
         }
       }
 
+      // 该分片如果可能包含任意维度信息，则此处都是true
+      // 只要确定该分片不可能包含任意查询维度，则不将该分片放入结果集
       if (include) {
         retSet.add(obj);
       }
