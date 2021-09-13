@@ -149,8 +149,14 @@ public class QueryScheduler implements QueryWatcher
    * In the meantime, if a {@link ListenableFuture} is registered for the query that calls this method, it MUST handle
    * this synchronization itself to ensure that no {@link Bulkhead} is acquired without releasing it.
    */
+  /**
+   *
+   * @param query 此次请求对象
+   * @param resultSequence broker节点的懒加载查询结果
+   */
   public <T> Sequence<T> run(Query<?> query, Sequence<T> resultSequence)
   {
+    // 从查询请求中获取通道
     List<Bulkhead> bulkheads = acquireLanes(query);
     return resultSequence.withBaggage(() -> finishLanes(bulkheads));
   }

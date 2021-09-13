@@ -439,16 +439,18 @@ public class CachingClusteredClient implements QuerySegmentWalker
       final Set<SegmentServerSelector> segmentServers = computeSegmentsToQuery(timeline, specificSegments);
 
       /**
+       * “根据此次查询请求中的参数构建缓存key名”
+       *
+       * 由此可见此处的缓存是针对整个查询请求的缓存
+       *
        * 其中populateCache和useCache必须有一个才能执行
        * useCache参数用于查询是否启用缓存，
-       * populateCache参数用于查询结果是否更新缓存，
-       * 这两个都是“段级”缓存的参数
-       *
-       * 如果开启段级缓存，则通过strategy对象查询出缓存key
+       * populateCache参数用于查询结果是否更新缓存
        */
       @Nullable
       final byte[] queryCacheKey = computeQueryCacheKey();
 
+      // 判断是否启用ETag机制，启用的话，后端数据如果没有更新，则提醒前端使用以前的数据，此处则直接返回空结果
       if (query.getContext().get(QueryResource.HEADER_IF_NONE_MATCH) != null) {
         @Nullable
         final String prevEtag = (String) query.getContext().get(QueryResource.HEADER_IF_NONE_MATCH);
@@ -460,7 +462,12 @@ public class CachingClusteredClient implements QuerySegmentWalker
       }
 
       /**
-       * 根据缓存key获取缓存结果
+       * 首先根据分片信息+queryCacheKey，计算了该查询请求每一个分片的缓存key
+       *
+       * 获取此次查询的每一个分片请求的缓存结果，
+       * 如果分片存在缓存，则从此次分片查询集合“segmentServers”中剔除这个分片的查询请求。
+       *
+       * 最后返回的list中包含了所有缓存了的分片结果，Pair的left是该分片的查询时间区间，right是缓存内容
        */
       final List<Pair<Interval, byte[]>> alreadyCachedResults =
           pruneSegmentsWithCachedResults(queryCacheKey, segmentServers);
@@ -474,12 +481,8 @@ public class CachingClusteredClient implements QuerySegmentWalker
       queryPlus = queryPlus.withQuery(query);
 
       /**
-       * 迭代每个SegmentServerSelector，调用其pick方法获得所有segment所在主机对象
-       * {@link ServerSelector#pick()}
-       *
-       * 然后将这些主机对象{@link DruidServer}去重后返回
-       * key就是{@link DruidServer}主机对象，
-       * value是一个SegmentDescriptor，表示该主机上包含的此次查询所需的所有Segment的分片
+       * 按照带查询主机，将分片查询集合group，
+       * 得到了key（主机信息），以及value（该主机上所有待查询的分片信息）
        */
       final SortedMap<DruidServer, List<SegmentDescriptor>> segmentsByServer = groupSegmentsByServer(segmentServers);
 
@@ -522,11 +525,20 @@ public class CachingClusteredClient implements QuerySegmentWalker
       });
 
       /**
+       * ClusterQueryResult：
+       * 封装此次查询结果
+       *
+       * scheduler.run：
+       *
+       *
        * 将查询对象交由scheduler调度器来查询
        *
        * scheduler：注入进来，
        *
        * query：与原本对象相比，此方法中将上下文中的lane参数解析并设置了进去（lane默认为null）
+       * 该参数用来控制“查询工作负载的利用率”，
+       * 所谓通道目的是让用户能控制每次查询，希望占用的资源是多少，不同查询重要程度不同，希望其占用的资源多少也可能不同，
+       * lane就是用来控制通道策略
        *
        * mergedResultSequence：
        * 其中包含了上面设置的匿名函数，可根据segment主机信息发送http请求获取查询结果，然后汇总后返回查询结果
@@ -536,7 +548,6 @@ public class CachingClusteredClient implements QuerySegmentWalker
        * key是之前解析的DruidServer（druid主机对象），
        * value是SegmentDescriptor标识该主机上所有查询所需的segment
        */
-      log.info("!!!：调度器准备开始查询");
       return new ClusterQueryResult<>(scheduler.run(query, mergedResultSequence), segmentsByServer.size());
     }
 
@@ -784,6 +795,17 @@ public class CachingClusteredClient implements QuerySegmentWalker
       }
     }
 
+    /**
+     * 首先根据分片信息+queryCacheKey，计算了该查询请求每一个分片的缓存key
+     *
+     * 获取每一个查询分片请求的缓存结果，
+     * 如果分片存在缓存，则从此次分片查询集合“segments”中剔除这个分片的查询请求。
+     *
+     * 最后返回的list中包含了所有缓存了的分片结果，Pair的left是该分片的查询时间区间，right是缓存内容
+     *
+     * @param queryCacheKey 根据请求query对象中参数构建的“针对整个查询的缓存key”
+     * @param segments set集合，里面每一个对象都包含了“待查询的segment分片信息，及其所在主机信息”
+     */
     private List<Pair<Interval, byte[]>> pruneSegmentsWithCachedResults(
         final byte[] queryCacheKey,
         final Set<SegmentServerSelector> segments
@@ -793,20 +815,29 @@ public class CachingClusteredClient implements QuerySegmentWalker
         return Collections.emptyList();
       }
       final List<Pair<Interval, byte[]>> alreadyCachedResults = new ArrayList<>();
+      // 获取每个分片查询请求的对应缓存key
       Map<SegmentServerSelector, Cache.NamedKey> perSegmentCacheKeys = computePerSegmentCacheKeys(
           segments,
           queryCacheKey
       );
       // Pull cached segments from cache and remove from set of segments to query
+      // 获取每个分片的缓存
       final Map<Cache.NamedKey, byte[]> cachedValues = computeCachedValues(perSegmentCacheKeys);
 
+      /**
+       * 迭代每个分片缓存key，
+       *
+       */
       perSegmentCacheKeys.forEach((segment, segmentCacheKey) -> {
-        final Interval segmentQueryInterval = segment.getSegmentDescriptor().getInterval();
+        final Interval segmentQueryInterval = segment.getSegmentDescriptor().getInterval(); //获取此分片的查询时间区间
 
-        final byte[] cachedValue = cachedValues.get(segmentCacheKey);
+        final byte[] cachedValue = cachedValues.get(segmentCacheKey);// 获取该分片的缓存value
         if (cachedValue != null) {
           // remove cached segment from set of segments to query
+          // 从此次分片查询请求集合中，删掉该分片的请求
+          // （因为已经获取到此分片的缓存结果了）
           segments.remove(segment);
+          //
           alreadyCachedResults.add(Pair.of(segmentQueryInterval, cachedValue));
         } else if (populateCache) {
           // otherwise, if populating cache, add segment to list of segments to cache
@@ -817,6 +848,11 @@ public class CachingClusteredClient implements QuerySegmentWalker
       return alreadyCachedResults;
     }
 
+    /**
+     * 获取每个分片查询请求的对应缓存key
+     * @param queryCacheKey 根据请求query对象中参数构建的“针对整个查询的缓存key”
+     * @param segments set集合，里面每一个对象都包含了“待查询的segment分片信息，及其所在主机信息”
+     */
     private Map<SegmentServerSelector, Cache.NamedKey> computePerSegmentCacheKeys(
         Set<SegmentServerSelector> segments,
         byte[] queryCacheKey
@@ -825,6 +861,9 @@ public class CachingClusteredClient implements QuerySegmentWalker
       // cacheKeys map must preserve segment ordering, in order for shards to always be combined in the same order
       Map<SegmentServerSelector, Cache.NamedKey> cacheKeys = Maps.newLinkedHashMap();
       for (SegmentServerSelector segmentServer : segments) {
+        // 根据每一个分片查询请求，构建缓存的key
+        // 且queryCacheKey也包含在了其中
+        // 相当于此cacheKey就是该请求中每个查询分片的独有缓存key
         final Cache.NamedKey segmentCacheKey = CacheUtil.computeSegmentCacheKey(
             segmentServer.getServer().getSegment().getId().toString(),
             segmentServer.getSegmentDescriptor(),
@@ -859,13 +898,18 @@ public class CachingClusteredClient implements QuerySegmentWalker
       return cachePopulatorKeyMap.get(StringUtils.format("%s_%s", segmentId, segmentInterval));
     }
 
+    /**
+     * 按照请求主机，将分片查询集合分组，
+     * 得到了key（主机信息），以及value（该主机上所有待查询的分片信息）
+     *
+     * @param segments set集合，装了每一个待查询分片的信息，及其所在主机信息
+     */
     private SortedMap<DruidServer, List<SegmentDescriptor>> groupSegmentsByServer(Set<SegmentServerSelector> segments)
     {
       final SortedMap<DruidServer, List<SegmentDescriptor>> serverSegments = new TreeMap<>();
+      // 迭代每一个待查询分片的信息，及其所在主机信息
       for (SegmentServerSelector segmentServer : segments) {
-        /**
-         * 调用pick方法获取segment所在主机对象
-         */
+        // 获取此待查询分片的所在主机信息（先从历史节点里找，找不到就从实时节点里找）
         final QueryableDruidServer queryableDruidServer = segmentServer.getServer().pick();
 
         if (queryableDruidServer == null) {
@@ -875,7 +919,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
               query.getDataSource()
           ).emit();
         } else {
-          final DruidServer server = queryableDruidServer.getServer();
+          final DruidServer server = queryableDruidServer.getServer();// 此待查询分片的所在主机信息
           /**
            * 从SegmentServerSelector中获取到每一个segment所在的DruidServer，
            * 然后放入返回集合中
