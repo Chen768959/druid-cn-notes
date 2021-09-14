@@ -35,18 +35,26 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 在his节点查询初始会被调用，
- * 本质上是封装此次查询涉及到那些segment，
- * List<SegmentDescriptor>中就包含了这些被涉及的segment的信息。
+ * 1、在broker节点查询时也会调用，会将某台主机上所有待查询的分片信息都封装进来。
+ *
+ * 2、在his节点查询的初始阶段也会被调用，
+ *    会将来自broker节点的查询请求，反序列化成这个对象，
+ *    这样就知道此次请求需要查询那些分片信息。
  */
 public class MultipleSpecificSegmentSpec implements QuerySegmentSpec
 {
   private static final Logger log = new Logger(MultipleSpecificSegmentSpec.class);
 
+  // 所有待查询的分片信息
   private final List<SegmentDescriptor> descriptors;
 
   private volatile List<Interval> intervals = null;
 
+  /**
+   * 在broker节点查询时
+   * 由{@link org.apache.druid.query.Queries#withSpecificSegments(Query, List)}调用
+   * @param descriptors 某主机上，所有待查询的分片信息
+   */
   @JsonCreator
   public MultipleSpecificSegmentSpec(
       @JsonProperty("segments") List<SegmentDescriptor> descriptors
@@ -81,6 +89,7 @@ public class MultipleSpecificSegmentSpec implements QuerySegmentSpec
   }
 
   /**
+   * his节点调用
    * lookup本意为“查询”
    * getQueryRunnerForIntervals：字面含义“通过walker，找到descriptors(segment信息列表)对应的QueryRunner”
    */

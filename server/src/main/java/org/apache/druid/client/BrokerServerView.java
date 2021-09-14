@@ -61,7 +61,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- *
+ * 管理所有节点（历史节点+实时节点）的queryRunner
+ * 通过此对象，可以根据主机描述，如主机名，找到该主机对应的queryRunner对象，以便用于查询
  */
 @ManageLifecycle
 public class BrokerServerView implements TimelineServerView
@@ -70,6 +71,10 @@ public class BrokerServerView implements TimelineServerView
 
   private final Object lock = new Object();
 
+  /**
+   * key：主机名
+   * value：主机对应的queryRunner对象
+   */
   private final ConcurrentMap<String, QueryableDruidServer> clients;
   private final Map<SegmentId, ServerSelector> selectors;
   private final Map<String, VersionedIntervalTimeline<String, ServerSelector>> timelines;
@@ -184,8 +189,13 @@ public class BrokerServerView implements TimelineServerView
     initialized.await();
   }
 
+  /**
+   * 将server主机描述信息加载成queryRunner对象，并存入当前对象clients map属性中
+   * @param server 主机描述信息
+   */
   private QueryableDruidServer addServer(DruidServer server)
   {
+    // 创建该主机queryRunner（DirectDruidClient类型）
     QueryableDruidServer retVal = new QueryableDruidServer<>(server, makeDirectClient(server));
     QueryableDruidServer exists = clients.put(server.getName(), retVal);
     if (exists != null) {
@@ -217,13 +227,17 @@ public class BrokerServerView implements TimelineServerView
   }
 
   /**
-   * 该方法一次只加载一个segment的信息
-   * 在server启动时会加载所有segment信息
+   * broker启动时会调用，在his节点发生变动（segment发生变动、his集群发生变动）都可能重新调用
    *
+   * 1、填充timelines
+   * 该方法一次只加载一个segment的信息
+   * （在broker启动时，会循环调用，加载所有segment的信息）
    * （不是加载内容）
    * 只是加载segment版本号、时间区间、数据源等信息，以及这些segment所在historic节点的ip+port
    *
-   * 该方法目的是填充timelines。
+   * 2、填充clients
+   * 该方法每次还会加载该segment的所属主机，
+   * 将主机信息加载成水印queryRunner，以用于以后的查询
    *
    * @param server segment所在historic节点的ip+port
    * @param segment segment信息
@@ -252,8 +266,13 @@ public class BrokerServerView implements TimelineServerView
           selectors.put(segmentId, selector);
         }
 
+        /**
+         * 判断当前加载的segment所属主机，有没有被加载成queryRunner过。
+         * 如果没有被加载过，则为server创建queryRunner，并装入当前对象clients map中
+         */
         QueryableDruidServer queryableDruidServer = clients.get(server.getName());
         if (queryableDruidServer == null) {
+          // 为server创建queryRunner，并装入当前对象clients map中
           queryableDruidServer = addServer(baseView.getInventoryValue(server.getName()));
         }
         selector.addServerAndUpdateSegment(queryableDruidServer, segment);
@@ -346,7 +365,10 @@ public class BrokerServerView implements TimelineServerView
   {
     synchronized (lock) {
       /**
+       * clients是一个，map，在broker节点启动时，就将所有segment所在主机全部u加载成了queryRunner，并存入了clients map中，
+       * 主机queryRunner生成逻辑：{@link this#makeDirectClient(DruidServer)}
        *
+       * 其实就是把主机信息作为入参，new了一个{@link DirectDruidClient}类型的queryRunner对象
        */
       QueryableDruidServer queryableDruidServer = clients.get(server.getName());
       if (queryableDruidServer == null) {

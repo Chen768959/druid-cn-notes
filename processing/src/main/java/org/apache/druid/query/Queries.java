@@ -150,6 +150,12 @@ public class Queries
    * Because {@link BaseQuery#getRunner} is implemented using {@link DataSourceAnalysis#getBaseQuerySegmentSpec}, this
    * method will cause the runner to be a specific-segments runner.
    */
+  /**
+   * 将所有的待查询分片信息封装进{@link MultipleSpecificSegmentSpec}对象中，并装入query，
+   * 后续在his节点收到来自broker的查询请求后，还会把这个{@link MultipleSpecificSegmentSpec}对象反序列化出来，用来接收要查询的分片信息
+   * @param query 此次查询请求对象
+   * @param descriptors 所有待查询的分片信息list
+   */
   public static <T> Query<T> withSpecificSegments(final Query<T> query, final List<SegmentDescriptor> descriptors)
   {
     final Query<T> retVal;
@@ -157,8 +163,12 @@ public class Queries
     if (query.getDataSource() instanceof QueryDataSource) {
       final Query<?> subQuery = ((QueryDataSource) query.getDataSource()).getQuery();
       retVal = query.withDataSource(new QueryDataSource(withSpecificSegments(subQuery, descriptors)));
+
+    // 一般查询为TableDataSource，进以下逻辑
     } else {
       log.info("!!!：创建MultipleSpecificSegmentSpec，调用new，1");
+      // 将所有的待查询分片信息封装进MultipleSpecificSegmentSpec对象中，并装入query，
+      // 后续在his节点收到来自broker的查询请求后，还会把这个MultipleSpecificSegmentSpec对象反序列化出来，用来接收要查询的分片信息
       retVal = query.withQuerySegmentSpec(new MultipleSpecificSegmentSpec(descriptors));
     }
 

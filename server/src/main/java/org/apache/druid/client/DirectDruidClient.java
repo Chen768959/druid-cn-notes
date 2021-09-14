@@ -55,7 +55,10 @@ import org.apache.druid.query.aggregation.MetricManipulatorFns;
 import org.apache.druid.query.context.ConcurrentResponseContext;
 import org.apache.druid.query.context.ResponseContext;
 import org.apache.druid.query.context.ResponseContext.Key;
+import org.apache.druid.query.spec.MultipleSpecificSegmentSpec;
 import org.apache.druid.server.QueryResource;
+import org.apache.druid.server.coordination.DruidServerMetadata;
+import org.apache.druid.timeline.DataSegment;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.handler.codec.http.HttpChunk;
@@ -95,7 +98,9 @@ public class DirectDruidClient<T> implements QueryRunner<T>
   private final QueryWatcher queryWatcher;
   private final ObjectMapper objectMapper;
   private final HttpClient httpClient;
+  // 待查询节点每次http请求使用的“http”还是“https”
   private final String scheme;
+  // 待查询节点 ip + 端口
   private final String host;
   private final ServiceEmitter emitter;
 
@@ -120,6 +125,12 @@ public class DirectDruidClient<T> implements QueryRunner<T>
     return responseContext;
   }
 
+  /**
+   * 由{@link BrokerServerView#serverAddedSegment(DruidServerMetadata, DataSegment)}调用
+   *
+   * 在broker节点启动时，加载所有segment信息时，就也会创建所有DirectDruidClient对象，
+   * 每一台主机的各种信息，就是在创建这个DirectDruidClient对象时传入的
+   */
   public DirectDruidClient(
       QueryToolChestWarehouse warehouse,
       QueryWatcher queryWatcher,
@@ -149,8 +160,18 @@ public class DirectDruidClient<T> implements QueryRunner<T>
   }
 
   /**
-   * 发送请求，获得请求的异步结果future，
-   * 最后返回的对象就是请求结果的迭代器的包装类
+   * （该方法调用时机：broker节点的最终懒加载Sequence结果，调用toYielder时，需要真正进行查询时的逻辑）
+   *
+   * 当前DirectDruidClient对象是一个his节点主机的queryRunner，broker可调用该run方法，从指定主机上查询数据。
+   * 当前Runner对象会对应一个实际的his（或实时）节点主机，
+   * 在broker节点启动时，加载所有segment信息时，就也会创建所有DirectDruidClient对象，
+   * 每一台主机的各种信息，就是在创建这个DirectDruidClient对象时传入的
+   *
+   * @param queryPlus 其中包含了一个{@link MultipleSpecificSegmentSpec}对象，
+   *                   该对象中封装了此次所有待查询的分片信息list，
+   *                   后续在his节点收到来自broker的查询请求后，
+   *                   还会把这个{@link MultipleSpecificSegmentSpec}对象反序列化出来，用来接收要查询的分片信息
+   * @param context
    */
   @Override
   public Sequence<T> run(final QueryPlus<T> queryPlus, final ResponseContext context)
@@ -160,12 +181,12 @@ public class DirectDruidClient<T> implements QueryRunner<T>
     boolean isBySegment = QueryContexts.isBySegment(query);
     final JavaType queryResultType = isBySegment ? toolChest.getBySegmentResultType() : toolChest.getBaseResultType();
 
+    // 谷歌的多线程包，与jdk中的包区别就是，不需要人为的循环判断子线程是否完成，可以传入一个回调函数，子线程完成后自行调用回调函数
     final ListenableFuture<InputStream> future;
+    // url如：http://localhost:8083/druid/v2/
     final String url = StringUtils.format("%s://%s/druid/v2/", scheme, host);
+    // cancelUrl如：http://localhost:8083/druid/v2/12f4f780-18f8-4e6e-9f92-de0868c62ce2
     final String cancelUrl = StringUtils.format("%s://%s/druid/v2/%s", scheme, host, query.getId());
-
-    log.info("!!!：select，queryRunner获取Sequence，url："+url);
-    log.info("!!!：select，queryRunner获取Sequence，cancelUrl："+cancelUrl);
 
     /**
      *
@@ -173,11 +194,15 @@ public class DirectDruidClient<T> implements QueryRunner<T>
     try {
       log.debug("Querying queryId[%s] url[%s]", query.getId(), url);
 
-      final long requestStartTimeNs = System.nanoTime();
+      final long requestStartTimeNs = System.nanoTime();// 当前纳秒时间戳
       final long timeoutAt = query.getContextValue(QUERY_FAIL_TIME);
+      // 从单个his(realTime)节点查询出的最大字节数
       final long maxScatterGatherBytes = QueryContexts.getMaxScatterGatherBytes(query);
       final AtomicLong totalBytesGathered = (AtomicLong) context.get(ResponseContext.Key.QUERY_TOTAL_BYTES_GATHERED);
+      // 在对数据服务器的通道施加"backpressure"之前，每个查询排队的最大字节数。
+      // 与maxScatterGatherBytes类似，但与该配置不同，此配置将触发"backpressure"而不是查询失败。0表示禁用
       final long maxQueuedBytes = QueryContexts.getMaxQueuedBytes(query, 0);
+      // 使用"backpressure"
       final boolean usingBackpressure = maxQueuedBytes > 0;
 
       //根据query查询对象，创建HttpResponseHandler

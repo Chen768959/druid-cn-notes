@@ -115,6 +115,10 @@ public class QueryScheduler implements QueryWatcher
 
   /**
    * Assign a query a priority and lane (if not set)
+   *
+   * 为查询分配“信号量”
+   * （当前broker有一个总的信号量数量，新的查询都会被分配信号量，型号量如果暂时用完了，则新查询需要等到，等到有空闲信号量时才能执行，
+   * 所以型号量控制了一台主机上的资源分配，一般信号量还和线程挂钩）
    */
   public <T> Query<T> prioritizeAndLaneQuery(QueryPlus<T> queryPlus, Set<SegmentServerSelector> segments)
   {
@@ -156,8 +160,9 @@ public class QueryScheduler implements QueryWatcher
    */
   public <T> Sequence<T> run(Query<?> query, Sequence<T> resultSequence)
   {
-    // 从查询请求中获取通道
+    // 从查询请求中此次查询分配的信号量
     List<Bulkhead> bulkheads = acquireLanes(query);
+    // 将结束“信号量”的操作与查询绑定，当查询结束后，调用finishLanes，结束所有“信号量”
     return resultSequence.withBaggage(() -> finishLanes(bulkheads));
   }
 

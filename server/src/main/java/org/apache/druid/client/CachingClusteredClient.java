@@ -75,6 +75,7 @@ import org.apache.druid.query.filter.DimFilterUtils;
 import org.apache.druid.query.planning.DataSourceAnalysis;
 import org.apache.druid.query.scan.ScanQuery;
 import org.apache.druid.query.spec.MultipleIntervalSegmentSpec;
+import org.apache.druid.query.spec.MultipleSpecificSegmentSpec;
 import org.apache.druid.query.spec.QuerySegmentSpec;
 import org.apache.druid.server.QueryResource;
 import org.apache.druid.server.QueryScheduler;
@@ -473,8 +474,12 @@ public class CachingClusteredClient implements QuerySegmentWalker
           pruneSegmentsWithCachedResults(queryCacheKey, segmentServers);
 
       /**
-       * 从此次查询的上下文context中获取lane参数，
+       * 从此次查询的上下文context中获取lane参数（信号量数量），
        * 并设置到此次查询对象中
+       *
+       * “信号量”：
+       * 当前broker有一个总的信号量数量，新的查询都会被分配信号量，型号量如果暂时用完了，则新查询需要等到，等到有空闲信号量时才能执行，
+       * 所以型号量控制了一台主机上的资源分配，一般信号量还和线程挂钩
        */
       query = scheduler.prioritizeAndLaneQuery(queryPlus, segmentServers);
       //重新将query放入queryPlus
@@ -489,9 +494,8 @@ public class CachingClusteredClient implements QuerySegmentWalker
       /**
        * 懒加载获取此次查询的结果，
        *
-       * 此处的懒加载是指此处只是设置好了“获取查询结果的匿名函数”，
-       * 还未调用，
-       * 具体调用逻辑在下面的scheduler.run中
+       * 在后续调用Sequence结果的“toYielder”方法时，
+       * 才会执行以下匿名方法，开始查询
        */
       log.info("!!!：设置mergedResultSequence");
       LazySequence<T> mergedResultSequence = new LazySequence<>(
@@ -503,14 +507,12 @@ public class CachingClusteredClient implements QuerySegmentWalker
                */
               () -> {
         /**
-         * 由sequencesByInterval的容量大小可看出，
-         * 其中装的是“每一个主机的查询结果”，
-         *
-         * 或者说从某台主机上查询出多个segment的结果，这算是一个Sequence对象结果，
-         * 这些Sequence结果会被放入sequencesByInterval集合中
+         * alreadyCachedResults.size()：缓存的每个分片的结果数量
+         * segmentsByServer.size()：待查询的主机数量
          */
         List<Sequence<T>> sequencesByInterval = new ArrayList<>(alreadyCachedResults.size() + segmentsByServer.size());
 
+        // 将每一个byte[]分片缓存结果 都封装成一个Sequence，并装入sequencesByInterval中
         addSequencesFromCache(sequencesByInterval, alreadyCachedResults);
 
         /**
@@ -931,6 +933,12 @@ public class CachingClusteredClient implements QuerySegmentWalker
       return serverSegments;
     }
 
+    /**
+     * 将每一个byte[]分片结果 都封装成一个Sequence，并装入cachedResults中
+     *
+     * @param listOfSequences 此次查询的汇总结果集合
+     * @param cachedResults 缓存的每个分片的结果
+     */
     private void addSequencesFromCache(
         final List<Sequence<T>> listOfSequences,
         final List<Pair<Interval, byte[]>> cachedResults
@@ -942,8 +950,12 @@ public class CachingClusteredClient implements QuerySegmentWalker
 
       final Function<Object, T> pullFromCacheFunction = strategy.pullFromSegmentLevelCache();
       final TypeReference<Object> cacheObjectClazz = strategy.getCacheObjectClazz();
+
+      // 迭代每一个分片缓存结果，与它的所属时间区间
       for (Pair<Interval, byte[]> cachedResultPair : cachedResults) {
-        final byte[] cachedResult = cachedResultPair.rhs;
+        final byte[] cachedResult = cachedResultPair.rhs; // 该分片的查询缓存
+
+        // 为这个分片缓存，创建对应Sequence
         Sequence<Object> cachedSequence = new BaseSequence<>(
             new BaseSequence.IteratorMaker<Object, Iterator<Object>>()
             {
@@ -976,10 +988,16 @@ public class CachingClusteredClient implements QuerySegmentWalker
     }
 
     /**
+     * （该方法调用时机：broker节点的最终懒加载Sequence结果，调用toYielder时，需要真正进行查询时的逻辑）
+     *
      * Create sequences that reads from remote query servers (historicals and tasks). Note that the broker will
      * hold an HTTP connection per server after this method is called.
-     * listOfSequences：list，其中装了每一个主机的查询结果
-     * segmentsByServer：主机对象，以及对应的该主机上查询所需的segment列表
+     *
+     *
+     * @param listOfSequences 此次查询的汇总结果集合（里面已经保存了各分片的Sequence缓存结果）
+     * @param segmentsByServer 所有待查询的主机总数。
+     *                          之前按照待查询主机，将分片查询集合group，
+     *                          得到了key（主机信息），以及value（该主机上所有待查询的分片信息）
      */
     private void addSequencesFromServer(
         final List<Sequence<T>> listOfSequences,
@@ -987,21 +1005,19 @@ public class CachingClusteredClient implements QuerySegmentWalker
     )
     {
       /**
-       * 此处迭代每一个主机对象
-       *
+       * server：一个待查询主机
+       * segmentsOfServer：该主机对应的所有待查询分片信息
        */
       segmentsByServer.forEach((server, segmentsOfServer) -> {
         /**
-         * （1）serverRunner
-         * 可以看到serverRunner和server是一个一一对应关系，
-         * 根据serverRunner中接口方法可得知，
-         * 该对象与某种类型的查询无关，只与服务主机有关，
-         * 其内部的方法为“接收query查询对象，返回查询结果”，可以理解为QueryRunner中包含了主机信息，所以可以用来查询数据。
+         * {@link BrokerServerView#getQueryRunner(DruidServer)}
+         * 在broker节点启动时，
+         * 就根据所有segment所在主机的主机信息，生成了每个主机的queryRunner对象，并存入了serverView中，
          *
-         * 此处serverRunner类型为{@link org.apache.druid.client.DirectDruidClient}
+         * 此处就是根据主机描述信息，取出了对应的主机queryRunner查询对象，
+         * queryRunner类型为：{@link DirectDruidClient}
          */
         final QueryRunner serverRunner = serverView.getQueryRunner(server);
-        log.info("!!!：为生成预查询结果，serverRunner类型:"+serverRunner.getClass());
 
         if (serverRunner == null) {
           log.error("Server[%s] doesn't have a query runner", server.getName());
@@ -1011,6 +1027,8 @@ public class CachingClusteredClient implements QuerySegmentWalker
         // Divide user-provided maxQueuedBytes by the number of servers, and limit each server to that much.
         final long maxQueuedBytes = QueryContexts.getMaxQueuedBytes(query, httpClientConfig.getMaxQueuedBytes());
         final long maxQueuedBytesPerServer = maxQueuedBytes / segmentsByServer.size();
+
+        // 该主机上所有待分片的查询结果，统一装入一个Sequence中
         final Sequence<T> serverResults;
 
         /**
@@ -1025,7 +1043,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
         /**
          * 判断是否将查询结果存于缓存，也是在上下文中配置，默认为true
          */
-        } else if (!server.isSegmentReplicationTarget() || !populateCache) {
+        } else if (!server.isSegmentReplicationTarget() || !populateCache) { // 查询结果不做缓存
           log.info("!!!：进入getSimpleServerResults...");
           /**
            * 这三个方法的核心查询逻辑是一样的，
@@ -1043,7 +1061,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
            * Sequence<T>中的泛型为{@link org.apache.druid.query.groupby.ResultRow}
            */
           serverResults = getSimpleServerResults(serverRunner, segmentsOfServer, maxQueuedBytesPerServer);
-        } else {
+        } else { // 查询结果做缓存
           log.info("!!!：进入getAndCacheServerResults");
           serverResults = getAndCacheServerResults(serverRunner, segmentsOfServer, maxQueuedBytesPerServer);
         }
@@ -1074,6 +1092,15 @@ public class CachingClusteredClient implements QuerySegmentWalker
           ));
     }
 
+    /**
+     * （该方法调用时机：broker节点的最终懒加载Sequence结果，调用toYielder时，需要真正进行查询时的逻辑）
+     *
+     * 从一个历史（实时）节点上，查询该节点所有待查询的分片结果
+     *
+     * @param serverRunner {@link DirectDruidClient}：待查询节点的queryRunner对象
+     * @param segmentsOfServer 该主机上所有待查询的分片信息
+     * @param maxQueuedBytesPerServer 用户maxQueuedBytes配置 / 所有待查询主机数
+     */
     @SuppressWarnings("unchecked")
     private Sequence<T> getSimpleServerResults(
         final QueryRunner serverRunner,
@@ -1082,9 +1109,12 @@ public class CachingClusteredClient implements QuerySegmentWalker
     )
     {
       /**
-       * 相当于将此server上的所有待查segment列表放进query查询对象
+       * {@link org.apache.druid.client.DirectDruidClient#run(QueryPlus, ResponseContext)}
+       * 调用该主机queryRunner的run方法，查询出该主机上的所有待查询分片的结果，且统一封装成一个Sequence
        *
-       * 然后将查询对象交由serverRunner（{@link org.apache.druid.client.DirectDruidClient}）
+       * Queries.withSpecificSegments：
+       * 将所有的待查询分片信息封装进{@link MultipleSpecificSegmentSpec}对象中，并装入query，
+       * 后续在his节点收到来自broker的查询请求后，还会把这个{@link MultipleSpecificSegmentSpec}对象反序列化出来，用来接收要查询的分片信息
        */
       return serverRunner.run(
           queryPlus.withQuery(
