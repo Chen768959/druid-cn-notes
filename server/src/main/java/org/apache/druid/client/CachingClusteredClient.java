@@ -1046,25 +1046,28 @@ public class CachingClusteredClient implements QuerySegmentWalker
         } else if (!server.isSegmentReplicationTarget() || !populateCache) { // 查询结果不做缓存
           log.info("!!!：进入getSimpleServerResults...");
           /**
-           * 这三个方法的核心查询逻辑是一样的，
-           * 以直接查询不缓存为例
+           * 此处调用serverRunner.run()方法，
+           * 从一个历史（实时）节点上，异步查询该节点所有待查询的分片结果。
            *
-           * 都是调用serverRunner.run()方法，
-           * 其中传参为“Queries.withSpecificSegments(queryPlus.getQuery(), segmentsOfServer)”一个新的query对象
-           *
-           * serverRunner：包含了被查询的druid主机上的信息，通过此对象才能找到主机并查询。
-           * segmentsOfServer：在这台主机上需要查的所有segment
-           * maxQueuedBytesPerServer：
-           *
-           * serverResults就是http请求后的异步结果包装类
-           *
-           * Sequence<T>中的泛型为{@link org.apache.druid.query.groupby.ResultRow}
+           * 该方法中使用netty，异步发送查询此主机所有分片信息的请求：
+           * 然后异步线程每收到一个数据包，就交由一个responseHandler对象处理，
+           * handler会将“请求头+请求行+后续所有chunk包”，全部依次handle的内部queue队列中
+           * 当异步线程接收并处理完所有chunk时，就将handler的处理结果“ClientResponse”对象装入一个future中。
+           * （ClientResponse对象可以操作遍历handler内部的queue队列）
+           * 也就是说通过future可以获取到ClientResponse是否准备好，如果准备完毕就通过其遍历结果数据集queue队列。
+           * 然后这个future又会被封装进Sequence，等着Sequence被迭代时，来迭代异步的响应查询结果。
+           * 总结：
+           * 异步请求后，异步线程收到的结果集会封装进future对象中，future可判断结果集是否准备好，
+           * 如果所有结果都获取到了，则future中可查询出此次响应结果，
+           * 而future存在于此次Sequence响应中
            */
           serverResults = getSimpleServerResults(serverRunner, segmentsOfServer, maxQueuedBytesPerServer);
         } else { // 查询结果做缓存
           log.info("!!!：进入getAndCacheServerResults");
           serverResults = getAndCacheServerResults(serverRunner, segmentsOfServer, maxQueuedBytesPerServer);
         }
+
+        // 将每一台主机上的查询结果（serverResults），都装入结果集中
         listOfSequences.add(serverResults);
       });
     }
@@ -1095,7 +1098,20 @@ public class CachingClusteredClient implements QuerySegmentWalker
     /**
      * （该方法调用时机：broker节点的最终懒加载Sequence结果，调用toYielder时，需要真正进行查询时的逻辑）
      *
-     * 从一个历史（实时）节点上，查询该节点所有待查询的分片结果
+     * 调用serverRunner.run()方法，
+     * 从一个历史（实时）节点上，异步查询该节点所有待查询的分片结果。
+     *
+     * 该方法中使用netty，异步发送查询此主机所有分片信息的请求：
+     * 然后异步线程每收到一个数据包，就交由一个responseHandler对象处理，
+     * handler会将“请求头+请求行+后续所有chunk包”，全部依次handle的内部queue队列中
+     * 当异步线程接收并处理完所有chunk时，就将handler的处理结果“ClientResponse”对象装入一个future中。
+     * （ClientResponse对象可以操作遍历handler内部的queue队列）
+     * 也就是说通过future可以获取到ClientResponse是否准备好，如果准备完毕就通过其遍历结果数据集queue队列。
+     * 然后这个future又会被封装进Sequence，等着Sequence被迭代时，来迭代异步的响应查询结果。
+     * 总结：
+     * 异步请求后，异步线程收到的结果集会封装进future对象中，future可判断结果集是否准备好，
+     * 如果所有结果都获取到了，则future中可查询出此次响应结果，
+     * 而future存在于此次Sequence响应中
      *
      * @param serverRunner {@link DirectDruidClient}：待查询节点的queryRunner对象
      * @param segmentsOfServer 该主机上所有待查询的分片信息

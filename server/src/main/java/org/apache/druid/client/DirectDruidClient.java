@@ -73,6 +73,7 @@ import java.io.InputStream;
 import java.io.SequenceInputStream;
 import java.net.URL;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -160,12 +161,26 @@ public class DirectDruidClient<T> implements QueryRunner<T>
   }
 
   /**
-   * （该方法调用时机：broker节点的最终懒加载Sequence结果，调用toYielder时，需要真正进行查询时的逻辑）
+   * （该方法调用时机：broker节点的最终懒加载Sequence结果，调用toYielder时，需要真正进行查询时的逻辑
+   * 由{@link org.apache.druid.client.CachingClusteredClient.SpecificQueryRunnable#getSimpleServerResults(QueryRunner, List, long)}调用）
    *
    * 当前DirectDruidClient对象是一个his节点主机的queryRunner，broker可调用该run方法，从指定主机上查询数据。
    * 当前Runner对象会对应一个实际的his（或实时）节点主机，
    * 在broker节点启动时，加载所有segment信息时，就也会创建所有DirectDruidClient对象，
    * 每一台主机的各种信息，就是在创建这个DirectDruidClient对象时传入的
+   *
+   * 该方法中使用netty，异步发送查询此主机所有分片信息的请求：
+   * 然后异步线程每收到一个数据包，就交由一个responseHandler对象处理，
+   * handler会将“请求头+请求行+后续所有chunk包”，全部依次handle的内部queue队列中
+   * 当异步线程接收并处理完所有chunk时，就将handler的处理结果“ClientResponse”对象装入一个future中。
+   * （ClientResponse对象可以操作遍历handler内部的queue队列）
+   * 也就是说通过future可以获取到ClientResponse是否准备好，如果准备完毕就通过其遍历结果数据集queue队列。
+   * 然后这个future又会被封装进Sequence，等着Sequence被迭代时，来迭代异步的响应查询结果。
+   *
+   * 总结：
+   * 异步请求后，异步线程收到的结果集会封装进future对象中，future可判断结果集是否准备好，
+   * 如果所有结果都获取到了，则future中可查询出此次响应结果，
+   * 而future存在于此次Sequence响应中
    *
    * @param queryPlus 其中包含了一个{@link MultipleSpecificSegmentSpec}对象，
    *                   该对象中封装了此次所有待查询的分片信息list，
@@ -181,7 +196,13 @@ public class DirectDruidClient<T> implements QueryRunner<T>
     boolean isBySegment = QueryContexts.isBySegment(query);
     final JavaType queryResultType = isBySegment ? toolChest.getBySegmentResultType() : toolChest.getBaseResultType();
 
-    // 谷歌的多线程包，与jdk中的包区别就是，不需要人为的循环判断子线程是否完成，可以传入一个回调函数，子线程完成后自行调用回调函数
+    /**
+     * 异步发送查询请求，然后异步线程每收到一个数据包，就交由responseHandler处理，
+     * handler会将“请求头+请求行+后续所有chunk包”，全部依次handle的内部queue队列中
+     * 当异步线程接收并处理完所有chunk时，就将handler的处理结果“ClientResponse”对象装入以下future中。
+     * （ClientResponse对象可以操作遍历handler内部的queue队列）
+     * 也就是说通过future可以获取到ClientResponse是否准备好，如果准备完毕就通过其遍历结果数据集queue队列。
+     */
     final ListenableFuture<InputStream> future;
     // url如：http://localhost:8083/druid/v2/
     final String url = StringUtils.format("%s://%s/druid/v2/", scheme, host);
@@ -189,11 +210,14 @@ public class DirectDruidClient<T> implements QueryRunner<T>
     final String cancelUrl = StringUtils.format("%s://%s/druid/v2/%s", scheme, host, query.getId());
 
     /**
-     *
+     * 开始异步执行查询
      */
     try {
       log.debug("Querying queryId[%s] url[%s]", query.getId(), url);
 
+      /**
+       * 1
+       */
       final long requestStartTimeNs = System.nanoTime();// 当前纳秒时间戳
       final long timeoutAt = query.getContextValue(QUERY_FAIL_TIME);
       // 从单个his(realTime)节点查询出的最大字节数
@@ -205,12 +229,26 @@ public class DirectDruidClient<T> implements QueryRunner<T>
       // 使用"backpressure"
       final boolean usingBackpressure = maxQueuedBytes > 0;
 
-      //根据query查询对象，创建HttpResponseHandler
+      /**
+       * 2、准备responseHandler对象，
+       *    该对象提供了方法，用于将历史节点（实时节点）的响应内容装入内部queue队列中。
+       *
+       *    druid的http查询是用来chunk模式，会存在响应行+响应头，而所有的数据内容都被划分为多个连续chunk包形式，
+       *    而这些响应内容都会被装在handler对象的内部queue队列中
+       *
+       *    该handler在收到响应行和响应头后，就会产生一个{@link ClientResponse<InputStream>}对象，
+       *    该对象可以操作遍历queue队列的每一项内容。
+       */
       final HttpResponseHandler<InputStream, InputStream> responseHandler = new HttpResponseHandler<InputStream, InputStream>()
       {
         private final AtomicLong totalByteCount = new AtomicLong(0);
         private final AtomicLong queuedByteCount = new AtomicLong(0);
         private final AtomicLong channelSuspendedTime = new AtomicLong(0);
+        /**
+         * 存储所有响应内容，
+         * 其第0项为此次响应的http“响应行+响应头”
+         * 后面的项均为递增的各个“chunk包的内容”
+         */
         private final BlockingQueue<InputStreamHolder> queue = new LinkedBlockingQueue<>();
         private final AtomicBoolean done = new AtomicBoolean(false);
         private final AtomicReference<String> fail = new AtomicReference<>();
@@ -229,7 +267,14 @@ public class DirectDruidClient<T> implements QueryRunner<T>
         }
 
         /**
-         * Queue a buffer. Returns true if we should keep reading, false otherwise.
+         * 往queue队列中加入一个数据包，
+         * queue队列第0项为此次响应的http“响应行+响应头”
+         * 后面的项均为递增的各个“chunk包的内容”。
+         *
+         * @param buffer 响应之初为“响应行+响应头”内容，后续为每一个chunk包的buffer内容
+         * @param chunkNum 响应之初会传入响应行+响应头，此时对应的chunkNum是“0”，后续chunkNum为每一个chunk包的序号
+         *
+         * 如果当前queue中的字节数量，没有达到请求参数中设置的单节点查询的最大量，那么此方法都会返回true
          */
         private boolean enqueue(ChannelBuffer buffer, long chunkNum) throws InterruptedException
         {
@@ -243,6 +288,10 @@ public class DirectDruidClient<T> implements QueryRunner<T>
           return !usingBackpressure || currentQueuedByteCount < maxQueuedBytes;
         }
 
+        /**
+         * 从queue取出一个buffer，
+         * 同时进行一些总量计数
+         */
         private InputStream dequeue() throws InterruptedException
         {
           final InputStreamHolder holder = queue.poll(checkQueryTimeout(), TimeUnit.MILLISECONDS);
@@ -260,6 +309,11 @@ public class DirectDruidClient<T> implements QueryRunner<T>
           return holder.getStream();
         }
 
+        /**
+         * 处理来自his节点的“响应行+响应头”响应结果，并装入queue队列中的第0项
+         * @param response
+         * @param trafficCop
+         */
         @Override
         public ClientResponse<InputStream> handleResponse(HttpResponse response, TrafficCop trafficCop)
         {
@@ -273,12 +327,9 @@ public class DirectDruidClient<T> implements QueryRunner<T>
 
           final boolean continueReading;
           try {
-            log.trace(
-                "Got a response from [%s] for query ID[%s], subquery ID[%s]",
-                url,
-                query.getId(),
-                query.getSubQueryId()
-            );
+            log.trace("Got a response from [%s] for query ID[%s], subquery ID[%s]", url, query.getId(), query.getSubQueryId());
+
+            // 获取响应的上下文
             final String responseContext = response.headers().get(QueryResource.HEADER_RESPONSE_CONTEXT);
             context.add(
                 ResponseContext.Key.REMAINING_RESPONSES_FROM_QUERY_SERVERS,
@@ -288,6 +339,13 @@ public class DirectDruidClient<T> implements QueryRunner<T>
             if (responseContext != null) {
               context.merge(ResponseContext.deserialize(responseContext, objectMapper));
             }
+
+            /**
+             * 将查询内容装入queue队列中
+             *
+             * 如果当前queue中的字节数量，没有达到请求参数中设置的单节点查询的最大量，
+             * 那么此enqueue()方法都会返回true
+             */
             continueReading = enqueue(response.getContent(), 0L);
           }
           catch (final IOException e) {
@@ -308,6 +366,7 @@ public class DirectDruidClient<T> implements QueryRunner<T>
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);
           }
+
           totalByteCount.addAndGet(response.getContent().readableBytes());
           return ClientResponse.finished(
               new SequenceInputStream(
@@ -328,6 +387,9 @@ public class DirectDruidClient<T> implements QueryRunner<T>
                       }
                     }
 
+                    /**
+                     * 每次从queue中取出一个buffer
+                     */
                     @Override
                     public InputStream nextElement()
                     {
@@ -349,6 +411,20 @@ public class DirectDruidClient<T> implements QueryRunner<T>
           );
         }
 
+        /**
+         * 处理来自his节点的“一个”chunk包，并装入queue队列
+         *
+         * @param clientResponse 由handleResponse()方法创建，里面包含了遍历queue的方法，可通过该对象直接获取queue的内容。
+         *
+         * @param chunk 新收到的chunk响应数据包。
+         *              chunk模式属于http协议的一种传输规则，其响应行和响应头都没有变，
+         *              但是响应体是连续发送回来多个数据包，直到发送到一个“空”包为止，意味着数据传输完毕。
+         *              与普通http响应不同，普通http响应是服务端准备好所有数据后，再作为响应体发送给客户端，
+         *              普通http响应体关键是存在一个“响应体字节长度”字段，放在响应体之初，客户端会根据该字段决定读取多少字节，
+         *              但这个字段的前提是需要准备完毕所有响应体后才能计算出来，这样就无法做到“chunk”模式那样，有多少数据就先传输多少数据。
+         *
+         * @param chunkNum 此处收到的chunk包的序列号（单调递增的）
+         */
         @Override
         public ClientResponse<InputStream> handleChunk(
             ClientResponse<InputStream> clientResponse,
@@ -359,13 +435,17 @@ public class DirectDruidClient<T> implements QueryRunner<T>
           checkQueryTimeout();
 
           final ChannelBuffer channelBuffer = chunk.getContent();
+          // 当前channel中可读取的字节数目
           final int bytes = channelBuffer.readableBytes();
 
+          // 检查是否超过上下文配置中的“单节点合计最大可读取byte长度”
           checkTotalBytesLimit(bytes);
 
+          // 判断内部queue还能否装入数据，只要没装满，此处就是true
           boolean continueReading = true;
           if (bytes > 0) {
             try {
+              // 将此chunk内容，加入内部queue队列，此时队列若未到最大限制，则此处返回true，表示还能接着容纳数据
               continueReading = enqueue(channelBuffer, chunkNum);
             }
             catch (InterruptedException e) {
@@ -485,15 +565,18 @@ public class DirectDruidClient<T> implements QueryRunner<T>
       };
 
       long timeLeft = timeoutAt - System.currentTimeMillis();
-
       if (timeLeft <= 0) {
         throw new RE("Query[%s] url[%s] timed out.", query.getId(), url);
       }
 
       /**
+       * 3、异步向历史节点发送http查询请求
        * {@link org.apache.druid.java.util.http.client.NettyHttpClient#go(Request, HttpResponseHandler, Duration)}
        *
-       * future是异步结果对象
+       * 异步发送查询请求，然后异步线程每收到一个数据包，就交由responseHandler处理，
+       * 当接收完所有chunk时，就将{@link ClientResponse<InputStream>}对象装入以下的future中。
+       *
+       * 也就是说通过future可以获取到ClientResponse，也就可以遍历结果数据的queue队列。
        */
       future = httpClient.go(
           //创建请求对象
@@ -512,7 +595,7 @@ public class DirectDruidClient<T> implements QueryRunner<T>
       );
 
       /**
-       * 将此次查询注册进queryWatcher，
+       * 4、将此次查询注册进queryWatcher，
        * queryWatcher目的是保证所有正在进行的、或待进行的查询的可见性
        * 即根据queryWatcher可以找到所有现有查询
        */
@@ -548,9 +631,8 @@ public class DirectDruidClient<T> implements QueryRunner<T>
     }
 
     /**
-     * Sequence的本质就是“请求结果迭代器”的包装类，
-     * JsonParserIterator实现了Iterator接口，
-     * 其next就是future的结果，被转换成了pojo对象
+     * 将异步请求结果集封装进Sequence，
+     * 在调用make时，就遍历这个结果集
      */
     Sequence<T> retVal = new BaseSequence<>(
         new BaseSequence.IteratorMaker<T, JsonParserIterator<T>>()
@@ -558,6 +640,21 @@ public class DirectDruidClient<T> implements QueryRunner<T>
           @Override
           public JsonParserIterator<T> make()
           {
+            /**
+             *
+             * @param typeRef
+             * @param future 异步查询响应结果：
+             *               异步发送查询请求，然后异步线程每收到一个数据包，就交由responseHandler处理，
+             *               handler会将“请求头+请求行+后续所有chunk包”，全部依次handle的内部queue队列中
+             *               当异步线程接收并处理完所有chunk时，就将handler的处理结果“ClientResponse”对象装入以下future中。
+             *               （ClientResponse对象可以操作遍历handler内部的queue队列）
+             *               也就是说通过future可以获取到ClientResponse是否准备好，如果准备完毕就通过其遍历结果数据集queue队列。
+             *
+             * @param url 此次查询的url，如：http://localhost:8083/druid/v2/
+             * @param query 此次查询对象
+             * @param host 待查询主机地址
+             * @param objectMapper
+             */
             return new JsonParserIterator<T>(
                 queryResultType,
                 future,

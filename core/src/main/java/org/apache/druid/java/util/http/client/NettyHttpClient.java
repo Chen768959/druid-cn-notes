@@ -107,6 +107,12 @@ public class NettyHttpClient extends AbstractHttpClient
     pool.close();
   }
 
+  /**
+   *
+   * @param request 请求对象，包含了url与请求方法
+   * @param handler 收到响应后，需要进行如何处理，如broker的DirectDruidClient节点调用go方法后，就传入了操作chunk包的handler对象
+   * @param requestReadTimeout
+   */
   @Override
   public <Intermediate, Final> ListenableFuture<Final> go(
       final Request request,
@@ -114,6 +120,7 @@ public class NettyHttpClient extends AbstractHttpClient
       final Duration requestReadTimeout
   )
   {
+    // 获取请求参数
     final HttpMethod method = request.getMethod();
     final URL url = request.getUrl();
     final Multimap<String, String> headers = request.getHeaders();
@@ -154,7 +161,6 @@ public class NettyHttpClient extends AbstractHttpClient
     if (!headers.containsKey(HttpHeaders.Names.HOST)) {
       httpRequest.headers().add(HttpHeaders.Names.HOST, getHost(url));
     }
-
     // If Accept-Encoding is set in the Request, use that. Otherwise use the default from "compressionCodec".
     if (!headers.containsKey(HttpHeaders.Names.ACCEPT_ENCODING)) {
       httpRequest.headers().set(HttpHeaders.Names.ACCEPT_ENCODING, compressionCodec.getEncodingString());
@@ -198,6 +204,7 @@ public class NettyHttpClient extends AbstractHttpClient
           private long suspendWatermark = -1;
           private long resumeWatermark = -1;
 
+          // 每次收到chunk包，都会调用此方法
           @Override
           public void messageReceived(ChannelHandlerContext ctx, MessageEvent e)
           {
@@ -207,6 +214,7 @@ public class NettyHttpClient extends AbstractHttpClient
             try {
               Object msg = e.getMessage();
 
+              // 如果此次收到的数据包是“响应行+响应头”，则进此逻辑
               if (msg instanceof HttpResponse) {
                 HttpResponse httpResponse = (HttpResponse) msg;
                 if (log.isDebugEnabled()) {
@@ -228,6 +236,7 @@ public class NettyHttpClient extends AbstractHttpClient
 
                   return 0; //If we didn't resume, don't know if backpressure was happening
                 };
+                // 使用handle处理响应行+响应头
                 response = handler.handleResponse(httpResponse, trafficCop);
                 if (response.isFinished()) {
                   retVal.set((Final) response.getObj());
@@ -239,6 +248,7 @@ public class NettyHttpClient extends AbstractHttpClient
                 if (!httpResponse.isChunked()) {
                   finishRequest();
                 }
+              // 如果收到的数据包是chunk包，则进此逻辑
               } else if (msg instanceof HttpChunk) {
                 HttpChunk httpChunk = (HttpChunk) msg;
                 if (log.isDebugEnabled()) {
@@ -254,6 +264,9 @@ public class NettyHttpClient extends AbstractHttpClient
                   finishRequest();
                 } else {
                   response = handler.handleChunk(response, httpChunk, ++currentChunkNum);
+
+                  // 当所有chunk处理完后，会将ClientResponse对象赋值给retVal，
+                  // 这个ClientResponse对象可以遍历queue结果队列。
                   if (response.isFinished() && !retVal.isDone()) {
                     retVal.set((Final) response.getObj());
                   }

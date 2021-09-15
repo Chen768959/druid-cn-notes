@@ -58,6 +58,21 @@ public class JsonParserIterator<T> implements Iterator<T>, Closeable
   private final long timeoutAt;
   private final String queryId;
 
+  /**
+   *
+   * @param typeRef
+   * @param future 异步查询响应结果：
+   *               异步发送查询请求，然后异步线程每收到一个数据包，就交由responseHandler处理，
+   *               handler会将“请求头+请求行+后续所有chunk包”，全部依次handle的内部queue队列中
+   *               当异步线程接收并处理完所有chunk时，就将handler的处理结果“ClientResponse”对象装入以下future中。
+   *               （ClientResponse对象可以操作遍历handler内部的queue队列）
+   *               也就是说通过future可以获取到ClientResponse是否准备好，如果准备完毕就通过其遍历结果数据集queue队列。
+   *
+   * @param url 此次查询的url，如：http://localhost:8083/druid/v2/
+   * @param query 此次查询对象
+   * @param host 待查询主机地址
+   * @param objectMapper
+   */
   public JsonParserIterator(
       JavaType typeRef,
       Future<InputStream> future,
