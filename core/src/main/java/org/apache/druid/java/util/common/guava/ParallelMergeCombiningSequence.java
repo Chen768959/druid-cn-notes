@@ -85,6 +85,21 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
 
   private final CancellationGizmo cancellationGizmo;
 
+  /**
+   *
+   * @param workerPool
+   * @param inputSequences
+   * @param orderingFn
+   * @param combineFn
+   * @param hasTimeout
+   * @param timeoutMillis
+   * @param queryPriority
+   * @param parallelism
+   * @param yieldAfter
+   * @param batchSize
+   * @param targetTimeMillis
+   * @param reporter
+   */
   public ParallelMergeCombiningSequence(
       ForkJoinPool workerPool,
       List<Sequence<T>> inputSequences,

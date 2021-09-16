@@ -516,13 +516,17 @@ public class CachingClusteredClient implements QuerySegmentWalker
         addSequencesFromCache(sequencesByInterval, alreadyCachedResults);
 
         /**
-         * 根据segment所在主机的信息，使用netty发送http请求，
-         * 然后将结果传入中sequencesByInterval
-         * 其中泛型T为{@link org.apache.druid.query.groupby.ResultRow}
+         * 异步向各历史节点发送http chunk查询请求，查询该节点上的所有分片数据。
+         * 查询结果会回调存入feature对象中，通过操作feature可判断结果是否响应完毕，响应完毕就可进行查询。
+         * 而每一个节点的feature查询结果都会被封装成一个Sequence对象装入listOfSequences结果集中
          */
         addSequencesFromServer(sequencesByInterval, segmentsByServer);
 
-        //汇总
+        /**
+         * sequencesByInterval（List<Sequence>）里面包含了两种东西：
+         * 1、每一个byte[]分片缓存结果，都被封装成一个Sequence对象
+         * 2、每一台主机的异步查询结果feature，都被封装成一个Sequence对象
+         */
         return merge(sequencesByInterval);
       });
 
@@ -553,13 +557,21 @@ public class CachingClusteredClient implements QuerySegmentWalker
       return new ClusterQueryResult<>(scheduler.run(query, mergedResultSequence), segmentsByServer.size());
     }
 
+    /**
+     * 将各分片的缓存结果与各分片的实时查询结果 合并为一个统一的Sequence
+     *
+     *
+     * @param sequencesByInterval List<Sequence>类型，里面每个Sequence对象可能包含以下两种东西：
+     *                             1、每一个byte[]分片缓存结果，都被封装成一个Sequence对象
+     *                             2、每一台主机的异步查询结果feature，都被封装成一个Sequence对象
+     */
     private Sequence<T> merge(List<Sequence<T>> sequencesByInterval)
     {
       // 获取请求json中指定的聚合器，后续聚合结果时使用
       BinaryOperator<T> mergeFn = toolChest.createMergeFn(query);
       if (processingConfig.useParallelMergePool() && QueryContexts.getEnableParallelMerges(query) && mergeFn != null) {
         return new ParallelMergeCombiningSequence<>(
-            pool,
+            pool, //
             sequencesByInterval,
             query.getResultOrdering(),
             mergeFn,
@@ -993,6 +1005,9 @@ public class CachingClusteredClient implements QuerySegmentWalker
      * Create sequences that reads from remote query servers (historicals and tasks). Note that the broker will
      * hold an HTTP connection per server after this method is called.
      *
+     * 异步向各历史节点发送查询请求，查询该节点上的所有分片数据。
+     * 查询结果会回调存入feature对象中，通过操作feature可判断结果是否响应完毕，响应完毕就可进行查询。
+     * 而每一个节点的feature查询结果都会被封装成一个Sequence对象装入listOfSequences结果集中
      *
      * @param listOfSequences 此次查询的汇总结果集合（里面已经保存了各分片的Sequence缓存结果）
      * @param segmentsByServer 所有待查询的主机总数。
