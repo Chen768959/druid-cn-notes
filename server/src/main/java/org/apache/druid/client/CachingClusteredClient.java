@@ -559,22 +559,28 @@ public class CachingClusteredClient implements QuerySegmentWalker
 
     /**
      * 将各分片的缓存结果与各分片的实时查询结果 合并为一个统一的Sequence
-     *
-     *
+     * 
      * @param sequencesByInterval List<Sequence>类型，里面每个Sequence对象可能包含以下两种东西：
      *                             1、每一个byte[]分片缓存结果，都被封装成一个Sequence对象
      *                             2、每一台主机的异步查询结果feature，都被封装成一个Sequence对象
      */
     private Sequence<T> merge(List<Sequence<T>> sequencesByInterval)
     {
-      // 获取请求json中指定的聚合器，后续聚合结果时使用
+      /**
+       * 获取请求json中指定的聚合器，后续聚合结果时使用。
+       * 如果此次查询不涉及聚合操作，则此对象为null。
+       *
+       * timeseries查询：toolChest（TimeseriesQueryQueryToolChest），mergeFn（TimeseriesBinaryFn）
+       * topN查询：toolChest（TopNQueryQueryToolChest），mergeFn（TopNBinaryFn）
+       * groupBy查询：toolChest（GroupByQueryQueryToolChest），mergeFn（GroupByBinaryFnV2）
+       */
       BinaryOperator<T> mergeFn = toolChest.createMergeFn(query);
       if (processingConfig.useParallelMergePool() && QueryContexts.getEnableParallelMerges(query) && mergeFn != null) {
         return new ParallelMergeCombiningSequence<>(
-            pool, //
-            sequencesByInterval,
-            query.getResultOrdering(),
-            mergeFn,
+            pool, /**{@link org.apache.druid.guice.LifecycleForkJoinPoolProvider}中的ForkJoinPool线程池*/
+            sequencesByInterval, // 里面每个Sequence有可能是“一个分片的缓存结果”，或者“某台主机上所有分片的查询结果”
+            query.getResultOrdering(), // 查询的排序规则
+            mergeFn, // 包含
             QueryContexts.hasTimeout(query),
             QueryContexts.getTimeout(query),
             QueryContexts.getPriority(query),

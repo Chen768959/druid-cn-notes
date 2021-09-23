@@ -180,6 +180,7 @@ public class JsonParserIterator<T> implements Iterator<T>, Closeable
         if (is != null) {
           //从输入流中获取JsonParser对象
           jp = objectMapper.getFactory().createParser(is);
+
         } else if (checkTimeout()) {
           throw interruptQuery(timeoutQuery());
         } else {
