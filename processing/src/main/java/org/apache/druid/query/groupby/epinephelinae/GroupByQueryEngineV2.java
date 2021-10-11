@@ -131,7 +131,7 @@ public class GroupByQueryEngineV2
   )
   {
     /**{@link org.apache.druid.segment.QueryableIndexStorageAdapter}*/
-    log.info("!!!runner：执行查询逻辑，storageAdapter类型："+storageAdapter.getClass()+"...path:"+storageAdapter);
+//    log.info("!!!runner：执行查询逻辑，storageAdapter类型："+storageAdapter.getClass()+"...path:"+storageAdapter);
     if (storageAdapter == null) {
       throw new ISE(
           "Null storage adapter found. Probably trying to issue a query against a segment being memory unmapped."
@@ -164,10 +164,10 @@ public class GroupByQueryEngineV2
      *
      *
      */
-    log.info("!!!：intermediateResultsBufferPool类型："+intermediateResultsBufferPool.getClass());
+//    log.info("!!!：intermediateResultsBufferPool类型："+intermediateResultsBufferPool.getClass());
     final ResourceHolder<ByteBuffer> bufferHolder = intermediateResultsBufferPool.take();
 
-    log.info("!!!：bufferHolder类型："+bufferHolder.getClass());
+//    log.info("!!!：bufferHolder类型："+bufferHolder.getClass());
     try {
       final String fudgeTimestampString = NullHandling.emptyToNullIfNeeded(
           query.getContextValue(GroupByStrategyV2.CTX_KEY_FUDGE_TIMESTAMP, null)
@@ -192,10 +192,10 @@ public class GroupByQueryEngineV2
       ByteBuffer byteBuffer = bufferHolder.get();
 
       //java.nio.DirectByteBuffer[pos=0 lim=52428800 cap=52428800]
-      log.info("!!!：bufferHolder.get()后buffer类型："+byteBuffer);
+//      log.info("!!!：bufferHolder.get()后buffer类型："+byteBuffer);
       //此处doVectorize为true
       if (doVectorize) {
-        log.info("!!!：GroupByQueryEngineV2，process执行向量化");
+//        log.info("!!!：GroupByQueryEngineV2，process执行向量化");
         //result是BaseSequence类型对象，其中包含了make函数，在获取结果是通过该函数执行真正的查询逻辑。
         /**
          * @param query 此处查询对象
@@ -222,15 +222,15 @@ public class GroupByQueryEngineV2
         );
 
         // tmp 提前执行了result中的懒加载查询逻辑
-        result.toList().forEach(x->{
-          int len = x.getArray().length;
-          log.info("!!!：tmp!，x.getArray().length："+len);
-          for (int i=0;i<len;i++){
-            log.info("!!!：tmp!，x.get("+i+")："+x.get(i));
-          }
-        });
+//        result.toList().forEach(x->{
+//          int len = x.getArray().length;
+//          log.info("!!!：tmp!，x.getArray().length："+len);
+//          for (int i=0;i<len;i++){
+//            log.info("!!!：tmp!，x.get("+i+")："+x.get(i));
+//          }
+//        });
       } else {
-        log.info("!!!：GroupByQueryEngineV2，process不执行向量化");
+//        log.info("!!!：GroupByQueryEngineV2，process不执行向量化");
         result = processNonVectorized(
             query,
             storageAdapter,

@@ -75,7 +75,7 @@ public class SpecificSegmentQueryRunner<T> implements QueryRunner<T>
     final String currThreadName = currThread.getName();
     final String newName = StringUtils.format("%s_%s_%s", query.getType(), query.getDataSource(), query.getIntervals());
 
-    log.info("!!!：SpecificSegmentQueryRunner中base runner为："+base.getClass());
+//    log.info("!!!：SpecificSegmentQueryRunner中base runner为："+base.getClass());
     /**
      * 此处返回的就是base.run(queryPlus, responseContext).get()的内容
      *

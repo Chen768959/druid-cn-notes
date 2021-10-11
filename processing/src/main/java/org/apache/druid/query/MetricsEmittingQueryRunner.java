@@ -90,7 +90,7 @@ public class MetricsEmittingQueryRunner<T> implements QueryRunner<T>
 
     applyCustomDimensions.accept(queryMetrics);
 
-    log.info("!!!：MetricsEmittingQueryRunner中queryRunner为："+queryRunner.getClass());
+//    log.info("!!!：MetricsEmittingQueryRunner中queryRunner为："+queryRunner.getClass());
     return Sequences.wrap(
         // Use LazySequence because want to account execution time of queryRunner.run() (it prepares the underlying
         // Sequence) as part of the reported query time, i. e. we want to execute queryRunner.run() after

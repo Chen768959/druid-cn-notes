@@ -134,7 +134,6 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
     byte versionFromBuffer = buffer.get();
 
     if (VERSION_ONE == versionFromBuffer) {
-      new Logger(GenericIndexed.class).info("createGenericIndexedVersionOne 1111111111111111111111111");
       return createGenericIndexedVersionOne(buffer, strategy);
     } else if (VERSION_TWO == versionFromBuffer) {
       throw new IAE(
@@ -153,7 +152,6 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
 
     // V1版本的GenericIndex适用于元素个数较少的情况
     if (VERSION_ONE == versionFromBuffer) {
-      new Logger(GenericIndexed.class).info("createGenericIndexedVersionOne 2222222222222222");
       return createGenericIndexedVersionOne(buffer, strategy);
     // V2版本的GenericIndex适用于元素个数较多的情况
     } else if (VERSION_TWO == versionFromBuffer) {
@@ -239,7 +237,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
     // Ensure the value buffer's limit equals to capacity.
     firstValueBuffer = buffer.slice();
 
-    log.info("!!!：创建GenericIndexed，当前GenericIndexed对象为："+super.toString());
+//    log.info("!!!：创建GenericIndexed，当前GenericIndexed对象为："+super.toString());
 
     valueBuffers = new ByteBuffer[]{firstValueBuffer};
 
@@ -467,7 +465,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
       /**
        * 此处第一次从LITTLE_ENDIAN_BYTE_BUF_POOL队列中取出一个空buffer的holder
        */
-      log.info("!!!：从StupidPool队列中取出一个holder（2）");
+//      log.info("!!!：从StupidPool队列中取出一个holder（2）");
       return strategy.fromByteBuffer(copyValueBuffer, size);
     }
 
@@ -628,15 +626,15 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
          * 进入此方法时，需要get的数据已被写在copyBuffer中
          */
 
-        log.info("!!!：创建新BufferIndexed，获取GenericIndexed中copyBuffer");
+//        log.info("!!!：创建新BufferIndexed，获取GenericIndexed中copyBuffer");
         if (firstValueBuffer!=null){
-          log.info("!!!：创建新BufferIndexed，遍历GenericIndexed中copyBuffer");
+//          log.info("!!!：创建新BufferIndexed，遍历GenericIndexed中copyBuffer");
           for(int i=0;i<firstValueBuffer.capacity();i++){
             if (firstValueBuffer.get(i)!=0){
-              log.info("!!!：singleThreadedVersionOne中buffer，i="+i+"...byte="+firstValueBuffer.get(i));
+//              log.info("!!!：singleThreadedVersionOne中buffer，i="+i+"...byte="+firstValueBuffer.get(i));
             }
           }
-          log.info("!!!：创建新BufferIndexed，遍历GenericIndexed中copyBuffer END");
+//          log.info("!!!：创建新BufferIndexed，遍历GenericIndexed中copyBuffer END");
         }
 
         checkIndex(index);
@@ -753,7 +751,7 @@ public class GenericIndexed<T> implements CloseableIndexed<T>, Serializer
       @Override
       public T get(final int index)
       {
-        log.info("!!!：singleThreadedLongBuffers.get（2）");
+//        log.info("!!!：singleThreadedLongBuffers.get（2）");
         checkIndex(index);
 
         final int startOffset;

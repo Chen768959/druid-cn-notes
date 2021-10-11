@@ -61,7 +61,7 @@ public class BySegmentQueryRunner<T> implements QueryRunner<T>
     /**
      * base为{@link org.apache.druid.client.CachingQueryRunner#run(QueryPlus, ResponseContext)}
      */
-    log.info("!!!：BySegmentQueryRunner中base runner为："+base.getClass());
+//    log.info("!!!：BySegmentQueryRunner中base runner为："+base.getClass());
     if (QueryContexts.isBySegment(queryPlus.getQuery())) {
       final Sequence<T> baseSequence = base.run(queryPlus, responseContext);
       final List<T> results = baseSequence.toList();

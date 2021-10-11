@@ -157,7 +157,6 @@ public class CompressedVSizeColumnarIntsSupplier implements WritableSupplier<Col
 
       final CompressionStrategy compression = CompressionStrategy.forId(buffer.get());
 
-      new Logger(GenericIndexed.class).info("GenericIndexed.read 99999999999999999999");
       return new CompressedVSizeColumnarIntsSupplier(
           totalSize,
           sizePer,

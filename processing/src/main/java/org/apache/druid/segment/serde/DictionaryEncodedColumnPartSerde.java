@@ -304,7 +304,6 @@ public class DictionaryEncodedColumnPartSerde implements ColumnPartSerde
         }
 
         final boolean hasMultipleValues = Feature.MULTI_VALUE.isSet(rFlags) || Feature.MULTI_VALUE_V3.isSet(rFlags);
-        new Logger(GenericIndexed.class).info("GenericIndexed.read2 170000000000000000000");
         final GenericIndexed<String> rDictionary = GenericIndexed.read(
             buffer,
             GenericIndexed.STRING_STRATEGY,
@@ -337,7 +336,6 @@ public class DictionaryEncodedColumnPartSerde implements ColumnPartSerde
             .setDictionaryEncodedColumnSupplier(dictionaryEncodedColumnSupplier);
 
         if (!Feature.NO_BITMAP_INDEX.isSet(rFlags)) {
-          new Logger(GenericIndexed.class).info("GenericIndexed.read2 1800000000000000000000000000");
           GenericIndexed<ImmutableBitmap> rBitmaps = GenericIndexed.read(
               buffer,
               bitmapSerdeFactory.getObjectStrategy(),
@@ -367,7 +365,6 @@ public class DictionaryEncodedColumnPartSerde implements ColumnPartSerde
           case UNCOMPRESSED_WITH_FLAGS:
             return VSizeColumnarInts.readFromByteBuffer(buffer);
           case COMPRESSED:
-            new Logger(GenericIndexed.class).info("fromByteBuffer2 444444444444444");
             return CompressedVSizeColumnarIntsSupplier.fromByteBuffer(buffer, byteOrder);
           default:
             throw new IAE("Unsupported single-value version[%s]", version);

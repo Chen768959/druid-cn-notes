@@ -73,10 +73,10 @@ public class ReferenceCountingSegmentQueryRunner<T> implements QueryRunner<T>
          * 创建GroupByQueryRunner
          */
         /**{@link org.apache.druid.segment.ReferenceCountingSegment}*/
-        log.info("!!!runner：创建segment对应runner(groupby runner)，segment类型："+segment.getClass());
+//        log.info("!!!runner：创建segment对应runner(groupby runner)，segment类型："+segment.getClass());
         QueryRunner<T> queryRunner = factory.createRunner(segment);
 
-        log.info("!!!：ReferenceCountingSegmentQueryRunner中factory.createRunner(segment)为："+queryRunner.getClass());
+//        log.info("!!!：ReferenceCountingSegmentQueryRunner中factory.createRunner(segment)为："+queryRunner.getClass());
         /**
          * {@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory.GroupByQueryRunner#run(QueryPlus, ResponseContext)}
          */
@@ -93,7 +93,7 @@ public class ReferenceCountingSegmentQueryRunner<T> implements QueryRunner<T>
         throw t;
       }
     }).orElseGet(() -> {
-      log.info("!!!：ReferenceCountingSegmentQueryRunner未获取到acquireReferences值");
+//      log.info("!!!：ReferenceCountingSegmentQueryRunner未获取到acquireReferences值");
       return new ReportTimelineMissingSegmentQueryRunner<T>(descriptor).run(queryPlus, responseContext);
     });
   }

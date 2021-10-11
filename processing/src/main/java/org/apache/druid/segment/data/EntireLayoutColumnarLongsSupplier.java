@@ -51,7 +51,7 @@ public class EntireLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs
     @Override
     public long get(int index)
     {
-      log.info("!!!：调用EntireLayoutColumnarLongsSupplier中get");
+//      log.info("!!!：调用EntireLayoutColumnarLongsSupplier中get");
       return reader.read(index);
     }
 

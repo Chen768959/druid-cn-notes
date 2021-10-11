@@ -63,7 +63,7 @@ public interface ObjectStrategy<T> extends Comparator<T>
     ByteBuffer bufferToUse = buffer.asReadOnlyBuffer();
     bufferToUse.limit(bufferToUse.position() + size);
     buffer.position(bufferToUse.limit());
-    log.info("!!!：从从StupidPool队列中取出一个holder（4）");
+//    log.info("!!!：从从StupidPool队列中取出一个holder（4）");
     return fromByteBuffer(bufferToUse, size);
   }
 

@@ -116,7 +116,7 @@ public class DataSourceAnalysis
    */
   public static DataSourceAnalysis forDataSource(final DataSource dataSource)
   {
-    log.info("!!!select：forDataSource，进入时datasource："+dataSource.getClass());
+//    log.info("!!!select：forDataSource，进入时datasource："+dataSource.getClass());
     // Strip outer queries, retaining querySegmentSpecs as we go down (lowest will become the 'baseQuerySegmentSpec').
     Query<?> baseQuery = null;
     // table datasource

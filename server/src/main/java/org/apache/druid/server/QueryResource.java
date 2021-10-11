@@ -230,7 +230,7 @@ public class QueryResource implements QueryCountStatsProvider
       queryLifecycle.initialize(readQuery(req, in, ioReaderWriter));
 
       query = queryLifecycle.getQuery();
-      log.info("!!!select：此次请求query对象："+query.getClass());
+//      log.info("!!!select：此次请求query对象："+query.getClass());
       final String queryId = query.getId();// 此次查询id
 
       // 重命名当前线程名，将相关信息都放进去
@@ -337,7 +337,7 @@ public class QueryResource implements QueryCountStatsProvider
        * 其中就包含了获取dimension值的匿名方法
        */
       final QueryLifecycle.QueryResponse queryResponse = queryLifecycle.execute();
-      log.info("!!!：doPost获取到queryResponse");
+//      log.info("!!!：doPost获取到queryResponse");
       //该results对象中包含了真正执行查询的匿名函数，只有调用了，才会进行查询
       final Sequence<?> results = queryResponse.getResults();
       final ResponseContext responseContext = queryResponse.getResponseContext();
@@ -384,7 +384,7 @@ public class QueryResource implements QueryCountStatsProvider
        * {@link org.apache.druid.client.DirectDruidClient#run(QueryPlus, ResponseContext)}创建LazySequence的时候
        */
       final Yielder<?> yielder = Yielders.each(results);
-      log.info("!!!：yielder中数据类型："+yielder.get().getClass());
+//      log.info("!!!：yielder中数据类型："+yielder.get().getClass());
 
       try {
         boolean shouldFinalize = QueryContexts.isFinalize(query, true);

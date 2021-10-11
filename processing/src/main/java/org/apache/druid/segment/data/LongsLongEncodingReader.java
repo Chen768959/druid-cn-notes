@@ -33,20 +33,20 @@ public class LongsLongEncodingReader implements CompressionFactory.LongEncodingR
 
   public LongsLongEncodingReader(ByteBuffer fromBuffer, ByteOrder order)
   {
-    log.info("!!!：reader中buffer出处1");
+//    log.info("!!!：reader中buffer出处1");
     this.buffer = fromBuffer.asReadOnlyBuffer().order(order).asLongBuffer();
   }
 
   private LongsLongEncodingReader(LongBuffer buffer)
   {
-    log.info("!!!：reader中buffer出处2");
+//    log.info("!!!：reader中buffer出处2");
     this.buffer = buffer;
   }
 
   @Override
   public void setBuffer(ByteBuffer buffer)
   {
-    log.info("!!!：reader中buffer出处3");
+//    log.info("!!!：reader中buffer出处3");
     this.buffer = buffer.asLongBuffer();
   }
 
@@ -59,7 +59,7 @@ public class LongsLongEncodingReader implements CompressionFactory.LongEncodingR
   @Override
   public void read(final long[] out, final int outPosition, final int startIndex, final int length)
   {
-    log.info("!!!调用LongsLongEncodingReader.read");
+//    log.info("!!!调用LongsLongEncodingReader.read");
     final int oldPosition = buffer.position();
     try {
       buffer.position(oldPosition + startIndex);

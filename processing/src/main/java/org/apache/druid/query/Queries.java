@@ -166,7 +166,7 @@ public class Queries
 
     // 一般查询为TableDataSource，进以下逻辑
     } else {
-      log.info("!!!：创建MultipleSpecificSegmentSpec，调用new，1");
+//      log.info("!!!：创建MultipleSpecificSegmentSpec，调用new，1");
       // 将所有的待查询分片信息封装进MultipleSpecificSegmentSpec对象中，并装入query，
       // 后续在his节点收到来自broker的查询请求后，还会把这个MultipleSpecificSegmentSpec对象反序列化出来，用来接收要查询的分片信息
       retVal = query.withQuerySegmentSpec(new MultipleSpecificSegmentSpec(descriptors));

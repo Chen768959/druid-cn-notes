@@ -82,7 +82,7 @@ final class WrappingSequence<T> implements Sequence<T>
   )
   {
     try {
-      log.info("!!!：toYielder中wrapper为："+wrapper.getClass());
+//      log.info("!!!：toYielder中wrapper为："+wrapper.getClass());
       wrapper.before();
       return wrapper.wrap(new Supplier<Yielder<OutType>>()
       {

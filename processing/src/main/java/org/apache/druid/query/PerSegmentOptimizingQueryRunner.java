@@ -53,7 +53,7 @@ public class PerSegmentOptimizingQueryRunner<T> implements QueryRunner<T>
   @Override
   public Sequence<T> run(final QueryPlus<T> input, final ResponseContext responseContext)
   {
-    log.info("!!!：PerSegmentOptimizingQueryRunner中base runner为："+base.getClass());
+//    log.info("!!!：PerSegmentOptimizingQueryRunner中base runner为："+base.getClass());
     /**
      * his中为：{@link org.apache.druid.query.spec.SpecificSegmentQueryRunner#run(QueryPlus, ResponseContext)}
      */

@@ -125,13 +125,13 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
        * segment:{@link org.apache.druid.segment.ReferenceCountingSegment}
        * adapter:{@link org.apache.druid.segment.QueryableIndexStorageAdapter}
        */
-      log.info("!!!runner：初始化GroupByQueryRunner，segment类型："+segment.getClass()+"...adapter："+adapter.getClass()+"...path："+adapter);
+//      log.info("!!!runner：初始化GroupByQueryRunner，segment类型："+segment.getClass()+"...adapter："+adapter.getClass()+"...path："+adapter);
     }
 
     @Override
     public Sequence<ResultRow> run(QueryPlus<ResultRow> queryPlus, ResponseContext responseContext)
     {
-      log.info("!!!：进入GroupByQueryRunner，run方法");
+//      log.info("!!!：进入GroupByQueryRunner，run方法");
       Query<ResultRow> query = queryPlus.getQuery();
       if (!(query instanceof GroupByQuery)) {
         throw new ISE("Got a [%s] which isn't a %s", query.getClass(), GroupByQuery.class);
@@ -140,7 +140,7 @@ public class GroupByQueryRunnerFactory implements QueryRunnerFactory<ResultRow, 
       // 获取GroupByStrategyV2
       GroupByStrategy groupByStrategy = strategySelector.strategize((GroupByQuery) query);
 
-      log.info("!!!：进入GroupByQueryRunner，groupByStrategy为："+groupByStrategy.getClass());
+//      log.info("!!!：进入GroupByQueryRunner，groupByStrategy为："+groupByStrategy.getClass());
       /**
        * {@link org.apache.druid.query.groupby.strategy.GroupByStrategyV2#process(GroupByQuery, StorageAdapter)}
        */

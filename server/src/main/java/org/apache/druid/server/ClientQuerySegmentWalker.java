@@ -154,7 +154,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
   public <T> QueryRunner<T> getQueryRunnerForIntervals(Query<T> query, Iterable<Interval> intervals)
   {
     intervals.forEach(interval -> {
-      log.info("!!!：创建MultipleSpecificSegmentSpec，此次查询interval="+interval.toString());
+//      log.info("!!!：创建MultipleSpecificSegmentSpec，此次查询interval="+interval.toString());
     });
 
     //该类与自定义的扩展类有关
@@ -250,8 +250,8 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
     );
 
     if (canRunQueryUsingLocalWalker(newQuery)) {
-      log.info("!!!select：满足canRunQueryUsingLocalWalker条件");
-      log.info("!!!select：localClient类型："+localClient.getClass());
+//      log.info("!!!select：满足canRunQueryUsingLocalWalker条件");
+//      log.info("!!!select：localClient类型："+localClient.getClass());
       // No need to decorate since LocalQuerySegmentWalker does its own.
       /**
        * 当满足canRunQueryUsingLocalWalker条件时生成的，
@@ -271,8 +271,8 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
           newQuery
       );
     } else if (canRunQueryUsingClusterWalker(newQuery)) {// broker查询进入以下条件逻辑
-      log.info("!!!select：满足canRunQueryUsingClusterWalker条件");
-      log.info("!!!select：clusterClient类型："+clusterClient.getClass());
+//      log.info("!!!select：满足canRunQueryUsingClusterWalker条件");
+//      log.info("!!!select：clusterClient类型："+clusterClient.getClass());
       // Note: clusterClient.getQueryRunnerForIntervals() can return an empty sequence if there is no segment
       // to query, but this is not correct when there's a right or full outer join going on.
       // See https://github.com/apache/druid/issues/9229 for details.
@@ -334,7 +334,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
    */
   private <T> boolean canRunQueryUsingLocalWalker(Query<T> query)
   {
-    log.info("!!!select：进入canRunQueryUsingLocalWalker");
+//    log.info("!!!select：进入canRunQueryUsingLocalWalker");
     final DataSourceAnalysis analysis = DataSourceAnalysis.forDataSource(query.getDataSource());
     final QueryToolChest<T, Query<T>> toolChest = warehouse.getToolChest(query);
 
@@ -353,7 +353,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
    */
   private <T> boolean canRunQueryUsingClusterWalker(Query<T> query)
   {
-    log.info("!!!select：进入canRunQueryUsingClusterWalker");
+//    log.info("!!!select：进入canRunQueryUsingClusterWalker");
     //将query和datasource封装进Analysis方法
     final DataSourceAnalysis analysis = DataSourceAnalysis.forDataSource(query.getDataSource());
     final QueryToolChest<T, Query<T>> toolChest = warehouse.getToolChest(query);
@@ -372,21 +372,21 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
   )
   {
     if (dataSource instanceof TableDataSource) {
-      log.info("!!!select：datasource为TableDataSource");
+//      log.info("!!!select：datasource为TableDataSource");
       GlobalTableDataSource maybeGlobal = new GlobalTableDataSource(((TableDataSource) dataSource).getName());
       if (joinableFactory.isDirectlyJoinable(maybeGlobal)) {
         return maybeGlobal;
       }
       return dataSource;
     } else {
-      log.info("!!!select：datasource为其他类型");
+//      log.info("!!!select：datasource为其他类型");
       List<DataSource> currentChildren = dataSource.getChildren();
       List<DataSource> newChildren = new ArrayList<>(currentChildren.size());
       for (DataSource child : currentChildren) {
         child.getTableNames().stream().forEach(name->{
-          log.info("!!!select：datasource的children包含table："+name);
+//          log.info("!!!select：datasource的children包含table："+name);
         });
-        log.info("!!!select：datasource的children结束");
+//        log.info("!!!select：datasource的children结束");
         newChildren.add(globalizeIfPossible(child));
       }
       return dataSource.withChildren(newChildren);
@@ -425,8 +425,8 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
       final boolean dryRun
   )
   {
-    log.info("!!!select：inlineIfNecessary，查看datasource类型："+ dataSource.getClass()+
-            "...当前int原子为："+subqueryRowLimitAccumulator.get()+"...maxRows为："+maxSubqueryRows);
+//    log.info("!!!select：inlineIfNecessary，查看datasource类型："+ dataSource.getClass()+
+//            "...当前int原子为："+subqueryRowLimitAccumulator.get()+"...maxRows为："+maxSubqueryRows);
     if (dataSource instanceof QueryDataSource) {
       // This datasource is a subquery.
       //从datasource中找到子查询对象
@@ -435,7 +435,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
       final QueryToolChest toolChest = warehouse.getToolChest(subQuery);
 
       if (toolChestIfOutermost != null && toolChestIfOutermost.canPerformSubquery(subQuery)) {
-        log.info("!!!select：inlineIfNecessary，进入存在toolChestIfOutermost的条件分支");
+//        log.info("!!!select：inlineIfNecessary，进入存在toolChestIfOutermost的条件分支");
         // Strip outer queries that are handleable by the toolchest, and inline subqueries that may be underneath
         // them (e.g. subqueries nested under a join).
         final Stack<DataSource> stack = new Stack<>();
@@ -467,11 +467,11 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
          *
          */
       } else if (canRunQueryUsingLocalWalker(subQuery) || canRunQueryUsingClusterWalker(subQuery)) {
-        log.info("!!!select：inlineIfNecessary，进入处理子查询逻辑");
+//        log.info("!!!select：inlineIfNecessary，进入处理子查询逻辑");
         // Subquery needs to be inlined. Assign it a subquery id and run it.
         // 为子查询分配一个id
         final Query subQueryWithId = subQuery.withDefaultSubQueryId();
-        log.info("!!!select：inlineIfNecessary，分配id后的子查询query类型："+subQueryWithId.getClass());
+//        log.info("!!!select：inlineIfNecessary，分配id后的子查询query类型："+subQueryWithId.getClass());
 
         final Sequence<?> queryResults;
 
@@ -521,7 +521,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
             maxSubqueryRows
         );
       } else {
-        log.info("!!!select：inlineIfNecessary，无法内联子查询");
+//        log.info("!!!select：inlineIfNecessary，无法内联子查询");
         // Cannot inline subquery. Attempt to inline one level deeper, and then try again.
         return inlineIfNecessary(
             dataSource.withChildren(
@@ -626,7 +626,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
       final int limit
   )
   {
-    log.info("!!!select：toInlineDataSource中");
+//    log.info("!!!select：toInlineDataSource中");
     //immediately.druid.server.http.maxSubqueryRows参数设置为负数，则表示为最大值
     final int limitToUse = limit < 0 ? Integer.MAX_VALUE : limit;
 
@@ -682,7 +682,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
         throw new ISE("Unexpected query received");
       }
 
-      log.info("!!!：QuerySwappingQueryRunner中baseRunner为："+baseRunner.getClass());
+//      log.info("!!!：QuerySwappingQueryRunner中baseRunner为："+baseRunner.getClass());
 
       return baseRunner.run(queryPlus.withQuery(newQuery), responseContext);
     }

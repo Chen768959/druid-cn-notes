@@ -66,7 +66,7 @@ public class CPUTimeMetricQueryRunner<T> implements QueryRunner<T>
   {
     final long startRun = JvmUtils.getCurrentThreadCpuTime();
     final QueryPlus<T> queryWithMetrics = queryPlus.withQueryMetrics(queryToolChest);
-    log.info("!!!：CPUTimeMetricQueryRunner中delegate runner为："+delegate.getClass());
+//    log.info("!!!：CPUTimeMetricQueryRunner中delegate runner为："+delegate.getClass());
     /**
      * broker中逻辑为：
      * delegate为{@link FinalizeResultsQueryRunner}
@@ -80,7 +80,7 @@ public class CPUTimeMetricQueryRunner<T> implements QueryRunner<T>
      */
     final Sequence<T> baseSequence = delegate.run(queryWithMetrics, responseContext);
 
-    log.info("!!!：CPUTimeMetricQueryRunner中delegate runner END..");
+//    log.info("!!!：CPUTimeMetricQueryRunner中delegate runner END..");
     cpuTimeAccumulator.addAndGet(JvmUtils.getCurrentThreadCpuTime() - startRun);
 
     /**

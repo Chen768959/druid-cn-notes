@@ -56,7 +56,7 @@ public class SetAndVerifyContextQueryRunner<T> implements QueryRunner<T>
   @Override
   public Sequence<T> run(QueryPlus<T> queryPlus, ResponseContext responseContext)
   {
-    log.info("!!!：创建SpecificQueryRunnable，SetAndVerifyContextQueryRunner.baseQuerySegmentSpec："+((BaseQuery<?>) queryPlus.getQuery()).getQuerySegmentSpec().toString());
+//    log.info("!!!：创建SpecificQueryRunnable，SetAndVerifyContextQueryRunner.baseQuerySegmentSpec："+((BaseQuery<?>) queryPlus.getQuery()).getQuerySegmentSpec().toString());
 
     /**
      * broker中为：

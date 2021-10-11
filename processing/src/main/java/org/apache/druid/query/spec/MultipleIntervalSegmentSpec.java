@@ -47,7 +47,7 @@ public class MultipleIntervalSegmentSpec implements QuerySegmentSpec
       @JsonProperty("intervals") List<Interval> intervals
   )
   {
-    log.info("!!!：创建MultipleIntervalSegmentSpec11111");
+//    log.info("!!!：创建MultipleIntervalSegmentSpec11111");
     this.intervals = Collections.unmodifiableList(JodaUtils.condenseIntervals(intervals));
   }
 
@@ -55,7 +55,7 @@ public class MultipleIntervalSegmentSpec implements QuerySegmentSpec
   @JsonProperty("intervals")
   public List<Interval> getIntervals()
   {
-    log.info("!!!：创建MultipleIntervalSegmentSpec，调用getIntervals()");
+//    log.info("!!!：创建MultipleIntervalSegmentSpec，调用getIntervals()");
     return intervals;
   }
 
@@ -66,7 +66,7 @@ public class MultipleIntervalSegmentSpec implements QuerySegmentSpec
   @Override
   public <T> QueryRunner<T> lookup(Query<T> query, QuerySegmentWalker walker)
   {
-    log.info("!!!：创建MultipleSpecificSegmentSpec，MultipleIntervalSegmentSpec调用lookup");
+//    log.info("!!!：创建MultipleSpecificSegmentSpec，MultipleIntervalSegmentSpec调用lookup");
     /**
      * query就是外面调用的query
      * {@link org.apache.druid.server.ClientQuerySegmentWalker#getQueryRunnerForIntervals(Query, Iterable)}

@@ -125,7 +125,7 @@ public class NettyHttpClient extends AbstractHttpClient
     final URL url = request.getUrl();
     final Multimap<String, String> headers = request.getHeaders();
 
-    log.info("!!!：select，使用NettyHttpClient.go，url："+url.toString());
+//    log.info("!!!：select，使用NettyHttpClient.go，url："+url.toString());
 
     final String requestDesc = StringUtils.format("%s %s", method, url);
     if (log.isDebugEnabled()) {

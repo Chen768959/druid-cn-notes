@@ -42,11 +42,16 @@ import org.apache.druid.query.groupby.GroupByQuery;
  */
 public class FinalizeResultsQueryRunner<T> implements QueryRunner<T>
 {
-  private static final Logger log = new Logger(FinalizeResultsQueryRunner.class);
+  private static final Logger log = new Logger(DruidProcessingConfig.class);
 
   private final QueryRunner<T> baseRunner;
   private final QueryToolChest<T, Query<T>> toolChest;
 
+  /**
+   *
+   * @param baseRunner 由toolChest处理过的QueryRunner
+   * @param toolChest
+   */
   public FinalizeResultsQueryRunner(
       QueryRunner<T> baseRunner,
       QueryToolChest<T, Query<T>> toolChest
@@ -70,6 +75,7 @@ public class FinalizeResultsQueryRunner<T> implements QueryRunner<T>
 
     if (shouldFinalize) {
       queryToRun = query.withOverriddenContext(ImmutableMap.of("finalize", false));
+      log.info("!!!：his节点合并runner，执行runner，创建MetricManipulatorFns.finalizing");
       metricManipulationFn = MetricManipulatorFns.finalizing();
     } else {
       queryToRun = query;
@@ -110,7 +116,7 @@ public class FinalizeResultsQueryRunner<T> implements QueryRunner<T>
       finalizerFn = toolChest.makePostComputeManipulatorFn(query, metricManipulationFn);
     }
 
-    log.info("!!!：FinalizeResultsQueryRunner中baseRunner为："+baseRunner.getClass());
+//    log.info("!!!：FinalizeResultsQueryRunner中baseRunner为："+baseRunner.getClass());
     //noinspection unchecked (Technically unsound, but see class-level javadoc for rationale)
     /**
      * 此处的baseRunner指{@link org.apache.druid.query.groupby.GroupByQueryQueryToolChest#preMergeQueryDecoration(QueryRunner)}

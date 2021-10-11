@@ -356,7 +356,7 @@ public class AggregatorAdapters implements Closeable
        * 此时每一次循环都是为了将一部分查询结果值放入“buf”中，
        * 而这查询结果其底层是StupidPool队列返回的holder中的数据
        */
-      log.info("!!!：aggregateVector，adapter类型："+adapter.getClass()+"...VectorAggregator类型："+adapter.asVectorAggregator().getClass());
+//      log.info("!!!：aggregateVector，adapter类型："+adapter.getClass()+"...VectorAggregator类型："+adapter.asVectorAggregator().getClass());
 
       /**
        * adapter.asVectorAggregator()获取“聚合器”
@@ -393,7 +393,7 @@ public class AggregatorAdapters implements Closeable
   public Object get(final ByteBuffer buf, final int position, final int aggregatorNumber)
   {
     Adapter adapter = adapters.get(aggregatorNumber);
-    log.info("!!!：AggregatorAdapters中获取聚合器类型为："+adapter.getClass());
+//    log.info("!!!：AggregatorAdapters中获取聚合器类型为："+adapter.getClass());
     return adapter.get(buf, position + aggregatorPositions[aggregatorNumber]);
   }
 
@@ -472,7 +472,7 @@ public class AggregatorAdapters implements Closeable
     @Override
     public Object get(final ByteBuffer buf, final int position)
     {
-      log.info("!!!：VectorAggregatorAdapter内部聚合器为："+aggregator.getClass());
+//      log.info("!!!：VectorAggregatorAdapter内部聚合器为："+aggregator.getClass());
       return aggregator.get(buf, position);
     }
 
@@ -532,7 +532,7 @@ public class AggregatorAdapters implements Closeable
     @Override
     public Object get(final ByteBuffer buf, final int position)
     {
-      log.info("!!!：BufferAggregatorAdapter内部聚合器为："+aggregator.getClass());
+//      log.info("!!!：BufferAggregatorAdapter内部聚合器为："+aggregator.getClass());
       return aggregator.get(buf, position);
     }
 

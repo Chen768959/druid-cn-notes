@@ -75,9 +75,9 @@ public class LongsColumn implements NumericColumn
   @Override
   public long getLongSingleValueRow(int rowNum)
   {
-    log.info("!!!：调用get方法获取ColumnarLongs（0）");
+//    log.info("!!!：调用get方法获取ColumnarLongs（0）");
     long res = column.get(rowNum);
-    log.info("!!!：调用get方法获取ColumnarLongs（0），完毕，long="+res);
+//    log.info("!!!：调用get方法获取ColumnarLongs（0），完毕，long="+res);
     return res;
   }
 

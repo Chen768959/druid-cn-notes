@@ -205,7 +205,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
       final boolean specificSegments // false
   )
   {
-    log.info("!!!select：进入CachingClusteredClient匿名queryrunner run()方法");
+//    log.info("!!!select：进入CachingClusteredClient匿名queryrunner run()方法");
 
     /**
      * 1、根据查询时间区间，从整个集群中找到对应的segment以及其所在的主机信息。
@@ -217,7 +217,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
     SpecificQueryRunnable<T> tSpecificQueryRunnable = new SpecificQueryRunnable<>(queryPlus, responseContext);
     final ClusterQueryResult<T> result = tSpecificQueryRunnable.run(timelineConverter, specificSegments);
 
-    log.info("!!!select：进入CachingClusteredClient匿名queryrunner run()方法end");
+//    log.info("!!!select：进入CachingClusteredClient匿名queryrunner run()方法end");
     initializeNumRemainingResponsesInResponseContext(queryPlus.getQuery(), responseContext, result.numQueryServers);
     return result.sequence;
   }
@@ -311,6 +311,9 @@ public class CachingClusteredClient implements QuerySegmentWalker
       this.useCache = CacheUtil.isUseSegmentCache(query, strategy, cacheConfig, CacheUtil.ServerType.BROKER);
       this.populateCache = CacheUtil.isPopulateSegmentCache(query, strategy, cacheConfig, CacheUtil.ServerType.BROKER);
       this.isBySegment = QueryContexts.isBySegment(query);
+
+      log.info("!!!：创建SpecificQueryRunnable，useCache："+useCache+"...populateCache:"+populateCache+"...isBySegment:"+isBySegment);
+
       // Note that enabling this leads to putting uncovered intervals information in the response headers
       // and might blow up in some cases https://github.com/apache/druid/issues/2108
       this.uncoveredIntervalsLimit = QueryContexts.getUncoveredIntervalsLimit(query);
@@ -332,7 +335,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
       if (intervals.isPresent()){
         this.intervals = intervals.get();
       }else {
-        log.info("!!!：创建SpecificQueryRunnable，query类型："+query.getClass());
+//        log.info("!!!：创建SpecificQueryRunnable，query类型："+query.getClass());
         /**
          * 此处进入此逻辑，query类型为请求对象的类型，
          * 但getIntervals都是来自{@link BaseQuery#getIntervals()}
@@ -340,11 +343,11 @@ public class CachingClusteredClient implements QuerySegmentWalker
          * 此处的时间区间就是请求参数中的时间区间，如果只有一个时间，那该list中就只有1项
          */
         this.intervals = query.getIntervals();
-        try {
-          log.info("!!!：创建SpecificQueryRunnable，intervals："+new ObjectMapper().writeValueAsString(this.intervals));
-        } catch (JsonProcessingException e) {
-          e.printStackTrace();
-        }
+//        try {
+//          log.info("!!!：创建SpecificQueryRunnable，intervals："+new ObjectMapper().writeValueAsString(this.intervals));
+//        } catch (JsonProcessingException e) {
+//          e.printStackTrace();
+//        }
       }
 
     }
@@ -497,7 +500,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
        * 在后续调用Sequence结果的“toYielder”方法时，
        * 才会执行以下匿名方法，开始查询
        */
-      log.info("!!!：设置mergedResultSequence");
+//      log.info("!!!：设置mergedResultSequence");
       LazySequence<T> mergedResultSequence = new LazySequence<>(
               /**
                * 创建匿名函数{@link Supplier#get()}
@@ -558,7 +561,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
     }
 
     /**
-     * 将各分片的缓存结果与各分片的实时查询结果 合并为一个统一的Sequence
+     * 将各分片的缓存结果与各分片的实时查询结果 合并为一个统一的“懒加载”Sequence
      * 
      * @param sequencesByInterval List<Sequence>类型，里面每个Sequence对象可能包含以下两种东西：
      *                             1、每一个byte[]分片缓存结果，都被封装成一个Sequence对象
@@ -733,7 +736,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
       boolean uncoveredIntervalsOverflowed = false;
 
       for (Interval interval : intervals) {
-        log.info("!!!select：computeUncoveredIntervals处理查询时间参数，查询时间："+interval.toString());
+//        log.info("!!!select：computeUncoveredIntervals处理查询时间参数，查询时间："+interval.toString());
         Iterable<TimelineObjectHolder<String, ServerSelector>> lookup = timeline.lookup(interval);
         long startMillis = interval.getStartMillis();
         long endMillis = interval.getEndMillis();
@@ -773,16 +776,16 @@ public class CachingClusteredClient implements QuerySegmentWalker
     private byte[] computeQueryCacheKey()
     {
       if (strategy!=null){
-        log.info("!!!select：computeQueryCacheKey，缓存工具对象strategy："+strategy.getClass());
+//        log.info("!!!select：computeQueryCacheKey，缓存工具对象strategy："+strategy.getClass());
       }
       if ((populateCache || useCache) // implies strategy != null
           && !isBySegment) { // explicit bySegment queries are never cached
         assert strategy != null;
         byte[] cacheKey = strategy.computeCacheKey(query);
-        log.info("!!!select：computeQueryCacheKey，以开启缓存，key为："+new String(cacheKey));
+//        log.info("!!!select：computeQueryCacheKey，以开启缓存，key为："+new String(cacheKey));
         return cacheKey;
       } else {
-        log.info("!!!select：computeQueryCacheKey，未开启缓存");
+//        log.info("!!!select：computeQueryCacheKey，未开启缓存");
         return null;
       }
     }
@@ -1058,14 +1061,14 @@ public class CachingClusteredClient implements QuerySegmentWalker
          * 多用于调试
          */
         if (isBySegment) {
-          log.info("!!!：进入getBySegmentServerResults");
+//          log.info("!!!：进入getBySegmentServerResults");
           serverResults = getBySegmentServerResults(serverRunner, segmentsOfServer, maxQueuedBytesPerServer);
 
         /**
          * 判断是否将查询结果存于缓存，也是在上下文中配置，默认为true
          */
         } else if (!server.isSegmentReplicationTarget() || !populateCache) { // 查询结果不做缓存
-          log.info("!!!：进入getSimpleServerResults...");
+//          log.info("!!!：进入getSimpleServerResults...");
           /**
            * 此处调用serverRunner.run()方法，
            * 从一个历史（实时）节点上，异步查询该节点所有待查询的分片结果。
@@ -1084,7 +1087,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
            */
           serverResults = getSimpleServerResults(serverRunner, segmentsOfServer, maxQueuedBytesPerServer);
         } else { // 查询结果做缓存
-          log.info("!!!：进入getAndCacheServerResults");
+//          log.info("!!!：进入getAndCacheServerResults");
           serverResults = getAndCacheServerResults(serverRunner, segmentsOfServer, maxQueuedBytesPerServer);
         }
 

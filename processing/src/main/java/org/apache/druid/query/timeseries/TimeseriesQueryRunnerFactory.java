@@ -22,6 +22,7 @@ package org.apache.druid.query.timeseries;
 import com.google.inject.Inject;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.guava.Sequence;
+import org.apache.druid.java.util.emitter.EmittingLogger;
 import org.apache.druid.query.ChainedExecutionQueryRunner;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryPlus;
@@ -41,6 +42,8 @@ import java.util.concurrent.ExecutorService;
 public class TimeseriesQueryRunnerFactory
     implements QueryRunnerFactory<Result<TimeseriesResultValue>, TimeseriesQuery>
 {
+  private static final EmittingLogger log = new EmittingLogger(TimeseriesQueryRunnerFactory.class);
+
   private final TimeseriesQueryQueryToolChest toolChest;
   private final TimeseriesQueryEngine engine;
   private final QueryWatcher queryWatcher;
@@ -69,6 +72,7 @@ public class TimeseriesQueryRunnerFactory
       Iterable<QueryRunner<Result<TimeseriesResultValue>>> queryRunners
   )
   {
+//    log.info("!!!：his节点合并runner，正在创建runner，TimeseriesQueryRunnerFactory.mergeRunners，queryWatcher："+queryWatcher.getClass());
     return new ChainedExecutionQueryRunner<>(queryExecutor, queryWatcher, queryRunners);
   }
 

@@ -79,7 +79,7 @@ public class LongSumVectorAggregator implements VectorAggregator
       final int positionOffset
   )
   {
-    log.info("!!!：LongSumVectorAggregator，selector类型："+selector.getClass());
+//    log.info("!!!：LongSumVectorAggregator，selector类型："+selector.getClass());
     /**
      * selector：是ColumnarLongs的内部类，其可提供外部对象ColumnarLongs所对应一个列的所有数据
      *
@@ -99,7 +99,7 @@ public class LongSumVectorAggregator implements VectorAggregator
       long value = buf.getLong(position) + vector[rows != null ? rows[i] : i];
       buf.putLong(position, value);
 
-      log.info("!!!：LongSumVectorAggregator.aggregate聚合结果"+i+"："+value);
+//      log.info("!!!：LongSumVectorAggregator.aggregate聚合结果"+i+"："+value);
     }
   }
 

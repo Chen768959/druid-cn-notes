@@ -52,7 +52,7 @@ public interface ColumnarLongs extends Closeable
   default void get(long[] out, int start, int length)
   {
     for (int i = 0; i < length; i++) {
-      log.info("!!!：调用get方法获取ColumnarLongs（1），i="+i);
+//      log.info("!!!：调用get方法获取ColumnarLongs（1），i="+i);
       out[i] = get(i + start);
     }
   }
@@ -60,7 +60,7 @@ public interface ColumnarLongs extends Closeable
   default void get(long[] out, int[] indexes, int length)
   {
     for (int i = 0; i < length; i++) {
-      log.info("!!!：调用get方法获取ColumnarLongs（2），i="+i);
+//      log.info("!!!：调用get方法获取ColumnarLongs（2），i="+i);
       out[i] = get(indexes[i]);
     }
   }
@@ -82,14 +82,14 @@ public interface ColumnarLongs extends Closeable
         @Override
         public long getLong()
         {
-          log.info("!!!：调用get方法获取ColumnarLongs（3）");
+//          log.info("!!!：调用get方法获取ColumnarLongs（3）");
           return ColumnarLongs.this.get(offset.getOffset());
         }
 
         @Override
         public double getDouble(int offset)
         {
-          log.info("!!!：调用get方法获取ColumnarLongs（4）");
+//          log.info("!!!：调用get方法获取ColumnarLongs（4）");
           return ColumnarLongs.this.get(offset);
         }
 
@@ -132,7 +132,7 @@ public interface ColumnarLongs extends Closeable
         {
           //noinspection AssertWithSideEffects (ignore null handling test initialization check side effect)
           assert NullHandling.replaceWithDefault() || !isNull();
-          log.info("!!!：调用get方法获取ColumnarLongs（5）");
+//          log.info("!!!：调用get方法获取ColumnarLongs（5）");
           return ColumnarLongs.this.get(offset.getOffset());
         }
 
@@ -193,12 +193,12 @@ public interface ColumnarLongs extends Closeable
       @Override
       public long[] getLongVector()
       {
-        log.info("!!!：进入getLongVector，当前类"+this.getClass());
+//        log.info("!!!：进入getLongVector，当前类"+this.getClass());
         // 该方法进行longVector数组的计算，执行该方法之前longVector中没有值
         computeVectorsIfNeeded();
         for (long a:longVector){
           if (a!=0){
-            log.info("!!!：selector.getLongVector，计算之后:"+a);
+//            log.info("!!!：selector.getLongVector，计算之后:"+a);
           }
         }
         return longVector;
@@ -218,7 +218,7 @@ public interface ColumnarLongs extends Closeable
          * 第一次请求不会走此if条件
          */
         if (id == offset.getId()) {
-          log.info("!!!：computeVectorsIfNeeded，id == offset.getId()");
+//          log.info("!!!：computeVectorsIfNeeded，id == offset.getId()");
           return;
         }
 
@@ -228,7 +228,7 @@ public interface ColumnarLongs extends Closeable
          * 批次、连续范围
          */
         if (offset.isContiguous()) {
-          log.info("!!!：computeVectorsIfNeeded，offset.isContiguous()成立");
+//          log.info("!!!：computeVectorsIfNeeded，offset.isContiguous()成立");
           if (offset.getStartOffset() < offsetMark) {
             nullIterator = nullValueBitmap.peekableIterator();
           }
@@ -261,7 +261,7 @@ public interface ColumnarLongs extends Closeable
          * 当前批次不为连续范围
          */
         } else {
-          log.info("!!!：computeVectorsIfNeeded，isContiguous()不成立");
+//          log.info("!!!：computeVectorsIfNeeded，isContiguous()不成立");
           final int[] offsets = offset.getOffsets();
           if (offsets[offsets.length - 1] < offsetMark) {
             nullIterator = nullValueBitmap.peekableIterator();

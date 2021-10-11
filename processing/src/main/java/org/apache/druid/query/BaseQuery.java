@@ -134,7 +134,7 @@ public abstract class BaseQuery<T> implements Query<T>
      *
      * 这两个walker不同，也决定了broker和historical在面对查询请求时，其二者的处理逻辑不同
      */
-    log.info("!!!select：BaseQuery内getRunner时，walker类型："+walker.getClass());
+//    log.info("!!!select：BaseQuery内getRunner时，walker类型："+walker.getClass());
 
     /**
      * 此处的this就是当前query对象，也是此次的请求对象，
@@ -188,11 +188,11 @@ public abstract class BaseQuery<T> implements Query<T>
      * 如果上一步获取不到，则使用getQuerySegmentSpec()获取
      *
      */
-    log.info("!!!：创建MultipleSpecificSegmentSpec，进入query的lookup");
+//    log.info("!!!：创建MultipleSpecificSegmentSpec，进入query的lookup");
     DataSourceAnalysis dataSourceAnalysis = DataSourceAnalysis.forDataSource(query.getDataSource());
-    log.info("!!!：创建MultipleSpecificSegmentSpec，DataSourceAnalysis创建完毕");
+//    log.info("!!!：创建MultipleSpecificSegmentSpec，DataSourceAnalysis创建完毕");
     QuerySegmentSpec querySegmentSpec = dataSourceAnalysis.getBaseQuerySegmentSpec().orElseGet(query::getQuerySegmentSpec);
-    log.info("!!!：创建MultipleSpecificSegmentSpec，QuerySegmentSpec创建完毕");
+//    log.info("!!!：创建MultipleSpecificSegmentSpec，QuerySegmentSpec创建完毕");
     return querySegmentSpec;
   }
 

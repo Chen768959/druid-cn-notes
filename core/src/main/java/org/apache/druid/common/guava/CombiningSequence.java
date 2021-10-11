@@ -19,11 +19,13 @@
 
 package org.apache.druid.common.guava;
 
+import org.apache.druid.collections.CombiningIterable;
 import org.apache.druid.java.util.common.guava.Accumulator;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Yielder;
 import org.apache.druid.java.util.common.guava.Yielders;
 import org.apache.druid.java.util.common.guava.YieldingAccumulator;
+import org.apache.druid.java.util.emitter.EmittingLogger;
 
 import java.io.IOException;
 import java.util.Comparator;
@@ -31,6 +33,7 @@ import java.util.function.BinaryOperator;
 
 public class CombiningSequence<T> implements Sequence<T>
 {
+  private static final EmittingLogger log = new EmittingLogger(CombiningIterable.class);
   public static <T> CombiningSequence<T> create(
       Sequence<T> baseSequence,
       Comparator<T> ordering,
@@ -208,6 +211,7 @@ public class CombiningSequence<T> implements Sequence<T>
     @Override
     public T accumulate(T prevValue, T t)
     {
+      log.info("!!!：his节点合并runner，执行runner，CombiningYieldingAccumulator调用accumulate，mergeFn："+mergeFn.getClass());
       if (!accumulatedSomething) {
         accumulatedSomething = true;
       }
@@ -259,6 +263,7 @@ public class CombiningSequence<T> implements Sequence<T>
     @Override
     public T accumulate(T prevValue, T t)
     {
+      log.info("!!!：his节点合并runner，执行runner，CombiningAccumulator调用accumulate，mergeFn："+mergeFn.getClass());
       if (!accumulatedSomething) {
         accumulatedSomething = true;
       }

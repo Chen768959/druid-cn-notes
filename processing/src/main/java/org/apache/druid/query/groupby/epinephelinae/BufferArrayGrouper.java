@@ -414,7 +414,7 @@ public class BufferArrayGrouper implements VectorGrouper, IntGrouper
            * 得找到valBuffer是何时被填充了聚合结果
            */
           values[i] = aggregators.get(valBuffer, recordOffset, i);
-          log.info("!!!：查询聚合结果position："+recordOffset+"...value："+values[i]);
+//          log.info("!!!：查询聚合结果position："+recordOffset+"...value："+values[i]);
         }
         // shift by -1 since values are initially shifted by +1 so they are all positive and
         // GroupByColumnSelectorStrategy.GROUP_BY_MISSING_VALUE is -1

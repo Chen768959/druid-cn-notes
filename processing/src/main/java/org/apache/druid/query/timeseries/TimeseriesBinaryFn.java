@@ -19,8 +19,11 @@
 
 package org.apache.druid.query.timeseries;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.druid.java.util.common.granularity.AllGranularity;
 import org.apache.druid.java.util.common.granularity.Granularity;
+import org.apache.druid.java.util.emitter.EmittingLogger;
+import org.apache.druid.query.DruidProcessingConfig;
 import org.apache.druid.query.Result;
 import org.apache.druid.query.aggregation.AggregatorFactory;
 
@@ -33,6 +36,8 @@ import java.util.function.BinaryOperator;
  */
 public class TimeseriesBinaryFn implements BinaryOperator<Result<TimeseriesResultValue>>
 {
+  private static final EmittingLogger log = new EmittingLogger(DruidProcessingConfig.class);
+
   private final Granularity gran;
   private final List<AggregatorFactory> aggregations;
 
@@ -48,6 +53,21 @@ public class TimeseriesBinaryFn implements BinaryOperator<Result<TimeseriesResul
   @Override
   public Result<TimeseriesResultValue> apply(Result<TimeseriesResultValue> arg1, Result<TimeseriesResultValue> arg2)
   {
+    for (AggregatorFactory factory : aggregations) {
+      log.info("!!!：his节点合并runner，执行runner，pre,遍历factory："+factory.getClass()+"...arg1:"+arg1+"...arg2:"+arg2);
+    }
+    try {
+      ObjectMapper objectMapper = new ObjectMapper();
+      if (arg1!=null){
+        log.info("!!!：his节点合并runner，执行runner，pre,json_arg1："+objectMapper.writeValueAsString(arg1));
+      }
+      if (arg2!=null){
+        log.info("!!!：his节点合并runner，执行runner，pre,json_arg2："+objectMapper.writeValueAsString(arg2));
+      }
+    }catch (Exception e){
+      log.info("!!!：his节点合并runner，执行runner，pre,解析arg失败");
+    }
+
     if (arg1 == null) {
       return arg2;
     }
@@ -62,6 +82,7 @@ public class TimeseriesBinaryFn implements BinaryOperator<Result<TimeseriesResul
     Map<String, Object> retVal = new LinkedHashMap<String, Object>();
 
     for (AggregatorFactory factory : aggregations) {
+      log.info("!!!：his节点合并runner，执行runner，遍历factory："+factory.getClass());
       final String metricName = factory.getName();
       retVal.put(metricName, factory.combine(arg1Val.getMetric(metricName), arg2Val.getMetric(metricName)));
     }

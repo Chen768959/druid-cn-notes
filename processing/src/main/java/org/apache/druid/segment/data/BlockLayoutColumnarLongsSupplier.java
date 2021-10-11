@@ -66,7 +66,6 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
       CompressionStrategy strategy
   )
   {
-    new Logger(GenericIndexed.class).info("GenericIndexed.read 777777777777777");
     // 将fromBuffer解析成GenericIndexed对象
     baseLongBuffers = GenericIndexed.read(fromBuffer, new DecompressingByteBufferObjectStrategy(order, strategy));
     this.totalSize = totalSize;
@@ -100,14 +99,14 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
              * 请求第一次到达此逻辑，
              * 在下面loadBuffer逻辑中
              */
-            log.info("!!!：调用BlockLayoutColumnarLongsSupplier中if成立get");
+//            log.info("!!!：调用BlockLayoutColumnarLongsSupplier中if成立get");
             // optimize division and remainder for powers of 2
             final int bufferNum = index >> div;
 
             // 初始加载buffer之前buffer为空
 
             if (bufferNum != currBufferNum) {
-              log.info("!!!：准备加载buffer");
+//              log.info("!!!：准备加载buffer");
               loadBuffer(bufferNum);
             }
 
@@ -115,13 +114,13 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
              * 第一次会将所有结果行的对应时间戳装入buffer
              */
             final int bufferIndex = index & rem;
-            log.info("!!!：BlockLayoutColumnarLongs准备遍历longBuffer");
+//            log.info("!!!：BlockLayoutColumnarLongs准备遍历longBuffer");
             for(int i=0;i<longBuffer.capacity();i++){
               if (longBuffer.get(i)!=0){
-                log.info("!!!：BlockLayoutColumnarLongs，longBuffer，i="+i+"...long="+longBuffer.get(i));
+//                log.info("!!!：BlockLayoutColumnarLongs，longBuffer，i="+i+"...long="+longBuffer.get(i));
               }
             }
-            log.info("!!!：BlockLayoutColumnarLongs遍历完毕longBuffer");
+//            log.info("!!!：BlockLayoutColumnarLongs遍历完毕longBuffer");
             return longBuffer.get(bufferIndex);
           }
 
@@ -153,10 +152,10 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
              * 这个buffer里面才是查询的结果
              * 所以关键是关注此copyBuffer的由来
              */
-            log.info("!!!：singleThreadedLongBuffers类型："+singleThreadedLongBuffers.getClass());
+//            log.info("!!!：singleThreadedLongBuffers类型："+singleThreadedLongBuffers.getClass());
             holder = singleThreadedLongBuffers.get(bufferNum);
             buffer = holder.get();
-            log.info("!!!：取出holder");
+//            log.info("!!!：取出holder");
 
             // asLongBuffer() makes the longBuffer's position = 0
             // 将StupidPool中获取的buffer转换赋值给longBuffer
@@ -174,7 +173,7 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
           @Override
           public long get(int index)
           {
-            log.info("!!!：调用BlockLayoutColumnarLongsSupplier中if不成立get");
+//            log.info("!!!：调用BlockLayoutColumnarLongsSupplier中if不成立get");
             // optimize division and remainder for powers of 2
             final int bufferNum = index >> div;
 
@@ -218,7 +217,7 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
     @Override
     public long get(int index)
     {
-      log.info("!!!：调用BlockLayoutColumnarLongs中get");
+//      log.info("!!!：调用BlockLayoutColumnarLongs中get");
       // division + remainder is optimized by the compiler so keep those together
       final int bufferNum = index / sizePer;
       final int bufferIndex = index % sizePer;
@@ -240,7 +239,7 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
     @Override
     public void get(final long[] out, final int start, final int length)
     {
-      log.info("!!!：进入BlockLayoutColumnarLongsSupplier.get(final long[] out, final int start, final int length)");
+//      log.info("!!!：进入BlockLayoutColumnarLongsSupplier.get(final long[] out, final int start, final int length)");
       // division + remainder is optimized by the compiler so keep those together
       int bufferNum = start / sizePer;
       int bufferIndex = start % sizePer;
@@ -265,7 +264,7 @@ public class BlockLayoutColumnarLongsSupplier implements Supplier<ColumnarLongs>
         }
 
         final int limit = Math.min(length - p, sizePer - bufferIndex);
-        log.info("!!!：read连续时间范围，p="+p+"...bufferIndex="+bufferIndex+"...limit="+limit);
+//        log.info("!!!：read连续时间范围，p="+p+"...bufferIndex="+bufferIndex+"...limit="+limit);
         /**
          * 之前的loadBuffer(bufferNum);方法将buffer获取到后并装入此reader对象，
          * 此处的read就是将buffer中的内容读取到out数组中

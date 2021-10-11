@@ -50,7 +50,7 @@ public class DecompressingByteBufferObjectStrategy implements ObjectStrategy<Res
   @Override
   public ResourceHolder<ByteBuffer> fromByteBuffer(ByteBuffer buffer, int numBytes)
   {
-    log.info("!!!：DecompressingByteBufferObjectStrategy.fromByteBuffer，准备获取holder");
+//    log.info("!!!：DecompressingByteBufferObjectStrategy.fromByteBuffer，准备获取holder");
     /**
      * 从StupidPool队列（LITTLE_ENDIAN_BYTE_BUF_POOL）中取出一个holder，
      * 第一次取时holder中的buffer是空的
@@ -77,7 +77,7 @@ public class DecompressingByteBufferObjectStrategy implements ObjectStrategy<Res
     // 将position移到初始位置，且limit被设置成capacity，相当于还原了buffer的初始属性，但其中的数据没有清除
     buf.clear();
 
-    log.info("!!!：fromByteBuffer取出holder");
+//    log.info("!!!：fromByteBuffer取出holder");
 
     // 将buffer中的数据传给buf（第一次调用时buf为新建holder是空的，但是buffer中已经有了所有行的时间戳）
     decompressor.decompress(buffer, numBytes, buf);
@@ -92,7 +92,7 @@ public class DecompressingByteBufferObjectStrategy implements ObjectStrategy<Res
       @Override
       public ByteBuffer get()
       {
-        log.info("!!!：调用DecompressingByteBufferObjectStrategy中匿名ResourceHolder.get()");
+//        log.info("!!!：调用DecompressingByteBufferObjectStrategy中匿名ResourceHolder.get()");
         return buf;
       }
 

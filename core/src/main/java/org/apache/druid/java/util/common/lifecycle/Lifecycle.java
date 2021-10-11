@@ -346,7 +346,7 @@ public class Lifecycle
 
   public void start() throws Exception
   {
-    log.info("!!!：执行lifecycle.start()");
+//    log.info("!!!：执行lifecycle.start()");
     startStopLock.lock();
     try {
       if (!state.get().equals(State.NOT_STARTED)) {
@@ -359,7 +359,7 @@ public class Lifecycle
         currStage = e.getKey();
         log.info("Starting lifecycle [%s] stage [%s]", name, currStage.name());
         for (Handler handler : e.getValue()) {
-          log.info("!!!：遍历handler，class：" + handler.getClass());
+//          log.info("!!!：遍历handler，class：" + handler.getClass());
           handler.start();
         }
       }

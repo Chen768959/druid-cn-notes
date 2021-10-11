@@ -317,7 +317,7 @@ public class GroupByMergingQueryRunnerV2 implements QueryRunner<ResultRow>
                                           Releaser grouperReleaser = grouperHolder.increment()
                                       ) {
                                         // Return true if OK, false if resources were exhausted.
-                                        log.info("!!!：V2异步执行查询任务，查询input类型："+input.getClass());
+//                                        log.info("!!!：V2异步执行查询任务，查询input类型："+input.getClass());
                                         /**
                                          * 此处input：
                                          * {@link org.apache.druid.server.SetAndVerifyContextQueryRunner#run(QueryPlus, ResponseContext)}

@@ -19,6 +19,7 @@
 
 package org.apache.druid.server.coordination;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
 import com.google.inject.Inject;
@@ -26,6 +27,7 @@ import org.apache.druid.client.CachingQueryRunner;
 import org.apache.druid.client.cache.Cache;
 import org.apache.druid.client.cache.CacheConfig;
 import org.apache.druid.client.cache.CachePopulator;
+import org.apache.druid.discovery.DiscoveryDruidNode;
 import org.apache.druid.guice.annotations.Processing;
 import org.apache.druid.guice.annotations.Smile;
 import org.apache.druid.java.util.common.ISE;
@@ -82,7 +84,7 @@ import java.util.function.Function;
  */
 public class ServerManager implements QuerySegmentWalker
 {
-  private static final EmittingLogger log = new EmittingLogger(ServerManager.class);
+  private static final EmittingLogger log = new EmittingLogger(DiscoveryDruidNode.class);
   private final QueryRunnerFactoryConglomerate conglomerate;
   private final ServiceEmitter emitter;
   private final ExecutorService exec;
@@ -234,10 +236,20 @@ public class ServerManager implements QuerySegmentWalker
         analysis.getBaseQuery().orElse(query)
     );
 
+    specs.forEach(sp->{
+      try {
+        log.info("!!!：his节点合并runner，正在创建runner，spec："+new ObjectMapper().writeValueAsString(sp));
+      } catch (JsonProcessingException e) {
+        log.info("!!!：his节点合并runner，正在创建runner，spec解析失败");
+      }
+    });
+    /**
+     * 该runners，其每一个runner都是用来处理一个segment分片的查询
+     */
     final FunctionalIterable<QueryRunner<T>> queryRunners = FunctionalIterable
         /**
          * 创建函数式工具类{@link FunctionalIterable}
-         * 并传入“待处理列表”
+         * 并传入“待处理segment分片列表”
          * （specs：segment信息列表）
          */
         .create(specs)
@@ -271,8 +283,9 @@ public class ServerManager implements QuerySegmentWalker
      * 此处的exec是线程池，用来并发执行queryRunners中的各个runner，
      * 即并发的从各segment中查询数据。
      */
+    log.info("!!!：his节点合并runner，正在创建runner，factory："+factory.getClass());
     QueryRunner<T> queryRunner = factory.mergeRunners(exec, queryRunners);
-
+    log.info("!!!：his节点合并runner，正在创建runner，toolChest："+toolChest.getClass());
     return CPUTimeMetricQueryRunner.safeBuild(
         new FinalizeResultsQueryRunner<>(
             toolChest.mergeResults(queryRunner),
@@ -350,7 +363,7 @@ public class ServerManager implements QuerySegmentWalker
   )
   {
     /**{@link org.apache.druid.segment.ReferenceCountingSegment}*/
-    log.info("!!!runner：创建segment对应runner，segment类型："+segment.getClass());
+//    log.info("!!!runner：创建segment对应runner，segment类型："+segment.getClass());
 
     // segment描述信息的包装对象，主要是要利用其lookup（查找）方法
     final SpecificSegmentSpec segmentSpec = new SpecificSegmentSpec(segmentDescriptor);

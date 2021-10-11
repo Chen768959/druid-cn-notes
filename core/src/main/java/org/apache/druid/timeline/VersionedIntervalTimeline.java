@@ -121,7 +121,7 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
       Iterator<DataSegment> segments
   )
   {
-    log.info("!!!select：timeline.addAll逻辑，进入addSegments");
+//    log.info("!!!select：timeline.addAll逻辑，进入addSegments");
     timeline.addAll(
         Iterators.transform(segments, segment -> segment.getShardSpec().createChunk(segment)),
         DataSegment::getInterval,
@@ -197,7 +197,7 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
    */
   public void add(final Interval interval, VersionType version, PartitionChunk<ObjectType> object)
   {
-    log.info("!!!select：timeline.addAll逻辑，进入add");
+//    log.info("!!!select：timeline.addAll逻辑，进入add");
     addAll(Iterators.singletonIterator(object), o -> interval, o -> version);
   }
 
@@ -254,7 +254,7 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
         Interval interval = entry.getValue();
 
         if (entry.getKey().getPartitionHolder().isComplete()) {
-          log.info("!!!select：初始化，value属于completePartitionsTimeline，value："+interval.toString());
+//          log.info("!!!select：初始化，value属于completePartitionsTimeline，value："+interval.toString());
           add(completePartitionsTimeline, interval, entry.getKey());
         }
 

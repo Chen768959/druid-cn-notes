@@ -244,7 +244,7 @@ public class BrokerServerView implements TimelineServerView
    */
   private void serverAddedSegment(final DruidServerMetadata server, final DataSegment segment)
   {
-    log.info("!!!：加载segment，serverName："+server.getName()+"...segmentDataSource："+segment.getDataSource()+"...interval："+segment.getInterval());
+//    log.info("!!!：加载segment，serverName："+server.getName()+"...segmentDataSource："+segment.getDataSource()+"...interval："+segment.getInterval());
     SegmentId segmentId = segment.getId();
     synchronized (lock) {
       // in theory we could probably just filter this to ensure we don't put ourselves in here, to make broker tree

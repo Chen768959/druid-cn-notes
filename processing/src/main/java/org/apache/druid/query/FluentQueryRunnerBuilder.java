@@ -55,7 +55,7 @@ public class FluentQueryRunnerBuilder<T>
     @Override
     public Sequence<T> run(QueryPlus<T> queryPlus, ResponseContext responseContext)
     {
-      log.info("!!!：FluentQueryRunner中baseRunner为："+baseRunner.getClass());
+//      log.info("!!!：FluentQueryRunner中baseRunner为："+baseRunner.getClass());
       return baseRunner.run(queryPlus, responseContext);
     }
 

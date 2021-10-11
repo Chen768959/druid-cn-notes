@@ -383,7 +383,7 @@ public class VectorGroupByEngine
        * 开辟一块内存空间，入参为以字节为单位的指定容量，
        * cursor.getMaxVectorSize()为游标中单行向量最大的大小，默认512
        */
-      log.info("!!!：keySize="+keySize+"...MaxVectorSize="+cursor.getMaxVectorSize());
+//      log.info("!!!：keySize="+keySize+"...MaxVectorSize="+cursor.getMaxVectorSize());
       this.keySpace = WritableMemory.allocate(keySize * cursor.getMaxVectorSize());
       this.vectorGrouper = makeGrouper();
 
@@ -519,7 +519,7 @@ public class VectorGroupByEngine
       );
 
       if (cardinalityForArrayAggregation >= 0) {
-        log.info("!!!：生成BufferArrayGrouper");
+//        log.info("!!!：生成BufferArrayGrouper");
         grouper = new BufferArrayGrouper(
             Suppliers.ofInstance(processingBuffer),
             /**
@@ -537,7 +537,7 @@ public class VectorGroupByEngine
             cardinalityForArrayAggregation
         );
       } else {
-        log.info("!!!：生成HashVectorGrouper");
+//        log.info("!!!：生成HashVectorGrouper");
         grouper = new HashVectorGrouper(
             Suppliers.ofInstance(processingBuffer),
             keySize,

@@ -19,6 +19,8 @@
 
 package org.apache.druid.query.timeseries;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterables;
 import com.google.inject.Inject;
@@ -31,6 +33,9 @@ import org.apache.druid.java.util.common.granularity.Granularity;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
 import org.apache.druid.java.util.common.io.Closer;
+import org.apache.druid.java.util.common.logger.Logger;
+import org.apache.druid.query.DruidProcessingConfig;
+import org.apache.druid.query.FinalizeResultsQueryRunner;
 import org.apache.druid.query.QueryContexts;
 import org.apache.druid.query.QueryRunnerHelper;
 import org.apache.druid.query.Result;
@@ -52,12 +57,14 @@ import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  *
  */
 public class TimeseriesQueryEngine
 {
+  private static final Logger log = new Logger(DruidProcessingConfig.class);
   private final NonBlockingPool<ByteBuffer> bufferPool;
 
   /**
@@ -280,6 +287,14 @@ public class TimeseriesQueryEngine
                 aggregator.aggregate();
               }
               cursor.advance();
+            }
+            log.info("!!!：his节点合并runner，执行runner，aggregator完毕");
+            for (Aggregator aggregator : aggregators) {
+              try {
+                log.info("!!!：his节点合并runner，执行runner，aggregator完毕，aggregator："+aggregator+"...res:"+ new ObjectMapper().writeValueAsString(Optional.ofNullable(aggregator.get()).orElse("")));
+              } catch (JsonProcessingException e) {
+                log.info("!!!：his节点合并runner，aggregatorres解析异常");
+              }
             }
 
             TimeseriesResultBuilder bob = new TimeseriesResultBuilder(cursor.getTime());

@@ -61,7 +61,7 @@ public class MultipleSpecificSegmentSpec implements QuerySegmentSpec
   )
   {
     this.descriptors = descriptors;
-    log.info("!!!：创建MultipleSpecificSegmentSpec，descriptors.size="+descriptors.size());
+//    log.info("!!!：创建MultipleSpecificSegmentSpec，descriptors.size="+descriptors.size());
   }
 
   @JsonProperty("segments")
@@ -73,7 +73,7 @@ public class MultipleSpecificSegmentSpec implements QuerySegmentSpec
   @Override
   public List<Interval> getIntervals()
   {
-    log.info("!!!：创建MultipleSpecificSegmentSpec，调用getIntervals()");
+//    log.info("!!!：创建MultipleSpecificSegmentSpec，调用getIntervals()");
     if (intervals != null) {
       return intervals;
     }
@@ -96,7 +96,7 @@ public class MultipleSpecificSegmentSpec implements QuerySegmentSpec
   @Override
   public <T> QueryRunner<T> lookup(Query<T> query, QuerySegmentWalker walker)
   {
-    log.info("!!!：创建MultipleSpecificSegmentSpec，spec调用lookup");
+//    log.info("!!!：创建MultipleSpecificSegmentSpec，spec调用lookup");
     /**
      * walker是his节点启动时注入进来的
      * query是此次查询对象

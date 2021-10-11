@@ -119,16 +119,16 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
   {
     // 匿名对象QueryRunner中的run方法
     return (queryPlus, responseContext) -> {
-      log.info("!!!：进入GroupByQueryQueryToolChest中mergeResults匿名函数");
+//      log.info("!!!：进入GroupByQueryQueryToolChest中mergeResults匿名函数");
       if (QueryContexts.isBySegment(queryPlus.getQuery())) {
-        log.info("!!!：进入isBySegment if，runner类型："+runner.getClass());
+//        log.info("!!!：进入isBySegment if，runner类型："+runner.getClass());
         return runner.run(queryPlus, responseContext);
       }
 
       // his请求到达historical后进入此逻辑
       final GroupByQuery groupByQuery = (GroupByQuery) queryPlus.getQuery();
       if (strategySelector.strategize(groupByQuery).doMergeResults(groupByQuery)) {
-        log.info("!!!：进入strategySelector if,runner类型："+runner.getClass());
+//        log.info("!!!：进入strategySelector if,runner类型："+runner.getClass());
         /**
          * runner类型{@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
          * 所创建的匿名runner
@@ -136,7 +136,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
         return initAndMergeGroupByResults(groupByQuery, runner, responseContext);
       }
 
-      log.info("!!!：没有进入任何if，runner类型："+runner.getClass());
+//      log.info("!!!：没有进入任何if，runner类型："+runner.getClass());
       return runner.run(queryPlus, responseContext);
     };
   }
@@ -208,7 +208,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
   {
     //请求historical未进此if
     if (isNestedQueryPushDown(query, groupByStrategy)) {
-      log.info("!!!：进入isNestedQueryPushDown if");
+//      log.info("!!!：进入isNestedQueryPushDown if");
       return mergeResultsWithNestedQueryPushDown(groupByStrategy, query, resource, runner, context);
     }
 
@@ -316,7 +316,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
       ResponseContext context
   )
   {
-    log.info("!!!：groupByStrategy类型："+groupByStrategy.getClass());
+//    log.info("!!!：groupByStrategy类型："+groupByStrategy.getClass());
     Sequence<ResultRow> pushDownQueryResults = groupByStrategy.mergeResults(runner, query, context);
     final Sequence<ResultRow> finalizedResults = finalizeSubqueryResults(pushDownQueryResults, query);
     GroupByQuery rewrittenQuery = rewriteNestedQueryForPushDown(query);
@@ -522,7 +522,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
           @Override
           public Sequence<ResultRow> run(QueryPlus<ResultRow> queryPlus, ResponseContext responseContext)
           {
-            log.info("!!!：进入GroupByQueryQueryToolChest中Runner run()");
+//            log.info("!!!：进入GroupByQueryQueryToolChest中Runner run()");
             GroupByQuery groupByQuery = (GroupByQuery) queryPlus.getQuery();
             final List<DimensionSpec> dimensionSpecs = new ArrayList<>();
             final BitSet optimizedDimensions = extractionsToRewrite(groupByQuery);
@@ -538,7 +538,7 @@ public class GroupByQueryQueryToolChest extends QueryToolChest<ResultRow, GroupB
               }
             }
 
-            log.info("!!!：GroupByQueryQueryToolChest中Runner 传参为："+runner.getClass());
+//            log.info("!!!：GroupByQueryQueryToolChest中Runner 传参为："+runner.getClass());
             /**
              * 此处传参runner为{@link org.apache.druid.server.SetAndVerifyContextQueryRunner}
              */

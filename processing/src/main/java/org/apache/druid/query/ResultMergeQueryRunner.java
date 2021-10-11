@@ -37,6 +37,10 @@ public class ResultMergeQueryRunner<T> extends BySegmentSkippingQueryRunner<T>
   private final Function<Query<T>, Comparator<T>> comparatorGenerator;
   private final Function<Query<T>, BinaryOperator<T>> mergeFnGenerator;
 
+  /**
+   *
+   * @param baseRunner 所有“单分片runner”的查询结果runner
+   */
   public ResultMergeQueryRunner(
       QueryRunner<T> baseRunner,
       Function<Query<T>, Comparator<T>> comparatorGenerator,
@@ -55,7 +59,7 @@ public class ResultMergeQueryRunner<T> extends BySegmentSkippingQueryRunner<T>
   {
     Query<T> query = queryPlus.getQuery();
     return CombiningSequence.create(
-        baseRunner.run(queryPlus, context),
+        baseRunner.run(queryPlus, context), // 执行所有“单分片runner”.run()，获取所有单分片的查询结果
         comparatorGenerator.apply(query),
         mergeFnGenerator.apply(query));
   }

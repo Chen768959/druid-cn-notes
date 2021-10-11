@@ -119,13 +119,13 @@ public class RetryQueryRunner<T> implements QueryRunner<T>
     // However, we call baseRunner.run() here instead where it's executed while constructing a query plan.
     // This is because ResultLevelCachingQueryRunner requires to compute the cache key based on
     // the segments to query which is computed in SpecificQueryRunnable.run().
-    LOG.info("!!!：创建SpecificQueryRunnable，RetryQueryRunner.baseQuerySegmentSpec："+((BaseQuery<?>) queryPlus.getQuery()).getQuerySegmentSpec().toString());
+//    LOG.info("!!!：创建SpecificQueryRunnable，RetryQueryRunner.baseQuerySegmentSpec："+((BaseQuery<?>) queryPlus.getQuery()).getQuerySegmentSpec().toString());
     /**
      * {@link org.apache.druid.client.CachingClusteredClient#run(QueryPlus, ResponseContext, UnaryOperator, boolean)}
      */
     final Sequence<T> baseSequence = baseRunner.run(queryPlus, context);
     // runnableAfterFirstAttempt is only for testing, it must be no-op for production code.
-    LOG.info("!!!：RetryQueryRunner中runnableAfterFirstAttempt为："+runnableAfterFirstAttempt.getClass());
+//    LOG.info("!!!：RetryQueryRunner中runnableAfterFirstAttempt为："+runnableAfterFirstAttempt.getClass());
     runnableAfterFirstAttempt.run();
 
     return new YieldingSequenceBase<T>()

@@ -56,6 +56,8 @@ import java.util.concurrent.TimeoutException;
  * <p/>
  * That is, the two sub queryables for A would run *after* B is run, effectively meaning that the results for B
  * must be fully cached in memory before the results for Aa and Ab are computed.
+ *
+ * 合并多个runner的查询结果
  */
 public class ChainedExecutionQueryRunner<T> implements QueryRunner<T>
 {
@@ -74,12 +76,18 @@ public class ChainedExecutionQueryRunner<T> implements QueryRunner<T>
     this(exec, queryWatcher, Arrays.asList(queryables));
   }
 
+  /**
+   * @param exec 用来执行queryables的线程池
+   * @param queryWatcher
+   * @param queryables runnerList，里面每个runner都用来查询某一个segment分片的结果
+   */
   public ChainedExecutionQueryRunner(
       ExecutorService exec,
       QueryWatcher queryWatcher,
       Iterable<QueryRunner<T>> queryables
   )
   {
+//    log.info("!!!：his节点合并runner，创建ChainedExecutionQueryRunner，queryWatcher："+queryWatcher.getClass());
     // listeningDecorator will leave PrioritizedExecutorService unchanged,
     // since it already implements ListeningExecutorService
     this.exec = MoreExecutors.listeningDecorator(exec);
@@ -104,12 +112,15 @@ public class ChainedExecutionQueryRunner<T> implements QueryRunner<T>
             List<ListenableFuture<Iterable<T>>> futures =
                 Lists.newArrayList(
                     Iterables.transform(
-                        queryables,
+                        queryables,//runnerList，里面每个runner都用来查询某一个segment分片的结果
+
+                        // 迭代queryables中的每一个runner，并执行run方法查询结果
                         input -> {
                           if (input == null) {
                             throw new ISE("Null queryRunner! Looks to be some segment unmapping action happening");
                           }
 
+                          // 使用入参的线程池执行runner的查询方法
                           return exec.submit(
                               new AbstractPrioritizedCallable<Iterable<T>>(priority)
                               {
@@ -134,6 +145,7 @@ public class ChainedExecutionQueryRunner<T> implements QueryRunner<T>
                                   }
                                   catch (Exception e) {
                                     log.noStackTrace().error(e, "Exception with one of the sequences!");
+
                                     Throwables.propagateIfPossible(e);
                                     throw new RuntimeException(e);
                                   }

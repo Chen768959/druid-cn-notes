@@ -81,7 +81,7 @@ public class CachingQueryRunner<T> implements QueryRunner<T>
     /**
      * {@link org.apache.druid.query.MetricsEmittingQueryRunner}
      */
-    log.info("!!!：CachingQueryRunner中base为："+base.getClass());
+//    log.info("!!!：CachingQueryRunner中base为："+base.getClass());
     Query<T> query = queryPlus.getQuery();
     final CacheStrategy strategy = toolChest.getCacheStrategy(query);
     final boolean populateCache = CacheUtil.isPopulateSegmentCache(
@@ -105,7 +105,7 @@ public class CachingQueryRunner<T> implements QueryRunner<T>
 
     //返回缓存结果
     if (useCache) {
-      log.info("!!!：CachingQueryRunner中base使用缓存");
+//      log.info("!!!：CachingQueryRunner中base使用缓存");
       final Function cacheFn = strategy.pullFromSegmentLevelCache();
       final byte[] cachedResult = cache.get(key);
       if (cachedResult != null) {
@@ -145,7 +145,7 @@ public class CachingQueryRunner<T> implements QueryRunner<T>
     }
 
     if (populateCache) {
-      log.info("!!!：CachingQueryRunner中base填充缓存");
+//      log.info("!!!：CachingQueryRunner中base填充缓存");
       final Function cacheFn = strategy.prepareForSegmentLevelCache();
       /**
        * {@link org.apache.druid.query.MetricsEmittingQueryRunner#run(QueryPlus, ResponseContext)}
@@ -153,7 +153,7 @@ public class CachingQueryRunner<T> implements QueryRunner<T>
       return cachePopulator.wrap(base.run(queryPlus, responseContext), value -> cacheFn.apply(value), cache, key);
       //无缓存
     } else {
-      log.info("!!!：CachingQueryRunner中base不填充缓存");
+//      log.info("!!!：CachingQueryRunner中base不填充缓存");
       return base.run(queryPlus, responseContext);
     }
   }

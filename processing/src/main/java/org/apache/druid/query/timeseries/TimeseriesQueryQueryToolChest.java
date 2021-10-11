@@ -35,7 +35,10 @@ import org.apache.druid.java.util.common.granularity.Granularities;
 import org.apache.druid.java.util.common.granularity.Granularity;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.CacheStrategy;
+import org.apache.druid.query.DruidProcessingConfig;
+import org.apache.druid.query.FinalizeResultsQueryRunner;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryContexts;
 import org.apache.druid.query.QueryPlus;
@@ -69,6 +72,8 @@ import java.util.function.BinaryOperator;
  */
 public class TimeseriesQueryQueryToolChest extends QueryToolChest<Result<TimeseriesResultValue>, TimeseriesQuery>
 {
+  private static final Logger log = new Logger(DruidProcessingConfig.class);
+
   private static final byte TIMESERIES_QUERY = 0x0;
   private static final TypeReference<Object> OBJECT_TYPE_REFERENCE =
       new TypeReference<Object>()
@@ -160,11 +165,15 @@ public class TimeseriesQueryQueryToolChest extends QueryToolChest<Result<Timeser
       if (query.isGrandTotal()) {
         // Accumulate grand totals while iterating the sequence.
         final Object[] grandTotals = new Object[query.getAggregatorSpecs().size()];
+        for (int i = 0; i < query.getAggregatorSpecs().size(); i++) {
+          AggregatorFactory aggregatorFactory = query.getAggregatorSpecs().get(i);
+        }
         final Sequence<Result<TimeseriesResultValue>> mappedSequence = Sequences.map(
             finalSequence,
             resultValue -> {
               for (int i = 0; i < query.getAggregatorSpecs().size(); i++) {
                 final AggregatorFactory aggregatorFactory = query.getAggregatorSpecs().get(i);
+
                 final Object value = resultValue.getValue().getMetric(aggregatorFactory.getName());
                 if (grandTotals[i] == null) {
                   grandTotals[i] = value;
@@ -397,6 +406,7 @@ public class TimeseriesQueryQueryToolChest extends QueryToolChest<Result<Timeser
       final MetricManipulationFn fn
   )
   {
+    log.info("!!!：his节点合并runner，执行runner，timTool执行MetricManipulatorFns");
     return makeComputeManipulatorFn(query, fn, false);
   }
 
@@ -478,6 +488,7 @@ public class TimeseriesQueryQueryToolChest extends QueryToolChest<Result<Timeser
         }
       }
       for (AggregatorFactory agg : query.getAggregatorSpecs()) {
+        log.info("!!!：his节点合并runner，执行runner，timTool执行MetricManipulatorFns，agg："+agg.getClass());
         values.put(agg.getName(), fn.manipulate(agg, holder.getMetric(agg.getName())));
       }
 

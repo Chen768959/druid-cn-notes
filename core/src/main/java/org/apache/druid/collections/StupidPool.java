@@ -75,7 +75,7 @@ public class StupidPool<T> implements NonBlockingPool<T>
 
   public StupidPool(String name, Supplier<T> generator, int initCount, int objectsCacheMaxCount)
   {
-    log.info("!!!：创建StupidPool对象，name为："+name);
+//    log.info("!!!：创建StupidPool对象，name为："+name);
     Preconditions.checkArgument(
         initCount <= objectsCacheMaxCount,
         "initCount[%s] must be less/equal to objectsCacheMaxCount[%s]",
@@ -91,7 +91,7 @@ public class StupidPool<T> implements NonBlockingPool<T>
       objects.add(makeObjectWithHandler());
       poolSize.incrementAndGet();
     }
-    log.info("!!!：StupidPool对象创建完毕，内部队列长度："+objects.size()+"...initCount："+initCount+"...name为："+name);
+//    log.info("!!!：StupidPool对象创建完毕，内部队列长度："+objects.size()+"...initCount："+initCount+"...name为："+name);
   }
 
   @Override
@@ -124,10 +124,10 @@ public class StupidPool<T> implements NonBlockingPool<T>
   {
     ObjectResourceHolder resourceHolder = objects.poll();
     if (resourceHolder == null) {
-      log.info("!!!：StupidPool.take()，不存在resourceHolder");
+//      log.info("!!!：StupidPool.take()，不存在resourceHolder");
       return makeObjectWithHandler();
     } else {
-      log.info("!!!：StupidPool.take()，存在resourceHolder");
+//      log.info("!!!：StupidPool.take()，存在resourceHolder");
       // 当前池大小减一
       poolSize.decrementAndGet();
       return resourceHolder;
@@ -137,7 +137,7 @@ public class StupidPool<T> implements NonBlockingPool<T>
   private ObjectResourceHolder makeObjectWithHandler()
   {
     /** {@link org.apache.druid.segment.CompressedPool}*/
-    log.info("!!!：StupidPool中generator类型："+generator.getClass());
+//    log.info("!!!：StupidPool中generator类型："+generator.getClass());
     T object = generator.get();
     createdObjectsCounter.incrementAndGet();
     ObjectId objectId = new ObjectId();
@@ -262,7 +262,7 @@ public class StupidPool<T> implements NonBlockingPool<T>
       final T object = objectRef.get();
       if (object != null && objectRef.compareAndSet(object, null)) {
         try {
-          log.info("!!!：close，尝试将ObjectResourceHolder返回Pool，PoolName："+name+"...objId；"+objectId);
+//          log.info("!!!：close，尝、试将ObjectResourceHolder返回Pool，PoolName："+name+"...objId；"+objectId);
           tryReturnToPool(object, objectId, cleanable, notifier);
         }
         finally {

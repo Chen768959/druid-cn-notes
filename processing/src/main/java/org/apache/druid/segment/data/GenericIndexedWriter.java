@@ -284,7 +284,7 @@ public class GenericIndexedWriter<T> implements Serializer
     ByteBuffer bb = ByteBuffer.allocate(valueSize);
     valuesOut.readFully(startOffset, bb);
     bb.clear();
-    log.info("!!!：从从StupidPool队列中取出一个holder（3）");
+//    log.info("!!!：从从StupidPool队列中取出一个holder（3）");
     return strategy.fromByteBuffer(bb, valueSize);
   }
 
