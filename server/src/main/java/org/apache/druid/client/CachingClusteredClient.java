@@ -443,9 +443,8 @@ public class CachingClusteredClient implements QuerySegmentWalker
       final Set<SegmentServerSelector> segmentServers = computeSegmentsToQuery(timeline, specificSegments);
 
       /**
-       * “根据此次查询请求中的参数构建缓存key名”
-       *
-       * 由此可见此处的缓存是针对整个查询请求的缓存
+       * 根据此次查询请求中的参数构建“第一层”缓存key名
+       * （后续会针对具体segment分片构建第二层key，两层key才能定位到分片缓存上）
        *
        * 其中populateCache和useCache必须有一个才能执行
        * useCache参数用于查询是否启用缓存，
@@ -583,7 +582,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
             pool, /**{@link org.apache.druid.guice.LifecycleForkJoinPoolProvider}中的ForkJoinPool线程池*/
             sequencesByInterval, // 里面每个Sequence有可能是“一个分片的缓存结果”，或者“某台主机上所有分片的查询结果”
             query.getResultOrdering(), // 查询的排序规则
-            mergeFn, // 包含
+            mergeFn, // 请求json中指定的aggregate聚合器
             QueryContexts.hasTimeout(query),
             QueryContexts.getTimeout(query),
             QueryContexts.getPriority(query),
@@ -591,6 +590,7 @@ public class CachingClusteredClient implements QuerySegmentWalker
             QueryContexts.getParallelMergeInitialYieldRows(query, processingConfig.getMergePoolTaskInitialYieldRows()),
             QueryContexts.getParallelMergeSmallBatchRows(query, processingConfig.getMergePoolSmallBatchRows()),
             processingConfig.getMergePoolTargetTaskRunTimeMillis(),
+            //需要打印那些Metrics日志信息
             reportMetrics -> {
               QueryMetrics<?> queryMetrics = queryPlus.getQueryMetrics();
               if (queryMetrics != null) {

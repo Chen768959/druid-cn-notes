@@ -87,10 +87,10 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
 
   /**
    *
-   * @param workerPool
-   * @param inputSequences
-   * @param orderingFn
-   * @param combineFn
+   * @param workerPool {@link org.apache.druid.guice.LifecycleForkJoinPoolProvider}中的ForkJoinPool线程池
+   * @param inputSequences 缓存+实时查询结果，里面每个Sequence有可能是“一个分片的缓存结果”，或者“某台主机上所有分片的查询结果”
+   * @param orderingFn 查询的排序规则
+   * @param combineFn 请求json中指定的aggregate聚合器
    * @param hasTimeout
    * @param timeoutMillis
    * @param queryPriority
@@ -98,7 +98,7 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
    * @param yieldAfter
    * @param batchSize
    * @param targetTimeMillis
-   * @param reporter
+   * @param reporter 需要打印那些Metrics日志信息
    */
   public ParallelMergeCombiningSequence(
       ForkJoinPool workerPool,
@@ -157,7 +157,7 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
     );
     workerPool.execute(mergeCombineAction);
     Sequence<T> finalOutSequence = makeOutputSequenceForQueue(
-        outputQueue,
+        outputQueue, // 最终聚合结果queue
         hasTimeout,
         timeoutAtNanos,
         cancellationGizmo
@@ -300,7 +300,7 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
         List<Sequence<T>> sequences,
         Ordering<T> orderingFn,
         BinaryOperator<T> combineFn,
-        BlockingQueue<ResultBatch<T>> out,
+        BlockingQueue<ResultBatch<T>> out, // 最终聚合结果queue
         int queueSize,
         int parallelism,
         int yieldAfter,
@@ -327,6 +327,7 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
       this.cancellationGizmo = cancellationGizmo;
     }
 
+    // 该方法被forkJoin线程池处理
     @Override
     protected void compute()
     {
@@ -527,8 +528,8 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
     private final CancellationGizmo cancellationGizmo;
 
     private MergeCombineAction(
-        PriorityQueue<BatchedResultsCursor<T>> pQueue,
-        QueuePusher<ResultBatch<T>> outputQueue,
+        PriorityQueue<BatchedResultsCursor<T>> pQueue, // 相当于单个Sequence。来自于总的结果集List<Sequence>中，代表了某个缓存分片结果，或者某个历史节点的查询结果
+        QueuePusher<ResultBatch<T>> outputQueue,  // 最终聚合结果queue
         Ordering<T> orderingFn,
         BinaryOperator<T> combineFn,
         T initialValue,
@@ -580,12 +581,14 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
             counter++;
             // if current value is null, combine null with next value
             if (currentCombinedValue == null) {
+              // 聚合器聚合查询结果
               currentCombinedValue = combineFn.apply(null, nextValueToAccumulate);
               continue;
             }
 
             // if current value is "same" as next value, combine them
             if (orderingFn.compare(currentCombinedValue, nextValueToAccumulate) == 0) {
+              // 聚合器聚合查询结果
               currentCombinedValue = combineFn.apply(currentCombinedValue, nextValueToAccumulate);
               continue;
             }
@@ -594,13 +597,14 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
             outputBatch.add(currentCombinedValue);
             batchCounter++;
             if (batchCounter >= batchSize) {
-              outputQueue.offer(outputBatch);
+              outputQueue.offer(outputBatch);// 将此次的聚合结果装入结果集queue中
               outputBatch = new ResultBatch<>(batchSize);
               metricsAccumulator.incrementOutputRows(batchCounter);
               batchCounter = 0;
             }
 
             // next value is now current value
+            // 聚合器聚合查询结果
             currentCombinedValue = combineFn.apply(null, nextValueToAccumulate);
           } else {
             cursor.close();
@@ -616,7 +620,7 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
           // if there is still work to be done, execute a new task with the current accumulated value to continue
           // combining where we left off
           if (!outputBatch.isDrained()) {
-            outputQueue.offer(outputBatch);
+            outputQueue.offer(outputBatch); // 将此次的聚合结果装入结果集queue中
             metricsAccumulator.incrementOutputRows(batchCounter);
           }
 
@@ -704,8 +708,8 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
     private final CancellationGizmo cancellationGizmo;
 
     private PrepareMergeCombineInputsAction(
-        List<BatchedResultsCursor<T>> partition,
-        QueuePusher<ResultBatch<T>> outputQueue,
+        List<BatchedResultsCursor<T>> partition, // 相当于单个Sequence。来自于总的结果集List<Sequence>中，代表了某个缓存分片结果，或者某个历史节点的查询结果
+        QueuePusher<ResultBatch<T>> outputQueue, // 最终聚合结果queue
         Ordering<T> orderingFn,
         BinaryOperator<T> combineFn,
         int yieldAfter,
