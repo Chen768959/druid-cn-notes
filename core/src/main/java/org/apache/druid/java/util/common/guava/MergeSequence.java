@@ -34,6 +34,11 @@ public class MergeSequence<T> extends YieldingSequenceBase<T>
   private final Ordering<? super T> ordering;
   private final Sequence<? extends Sequence<T>> baseSequences;
 
+  /**
+   *
+   * @param ordering 请求参数中的order参数
+   * @param baseSequences 包含所有Sequence查询结果，{@link MappedSequence}类型
+   */
   public MergeSequence(
       Ordering<? super T> ordering,
       Sequence<? extends Sequence<? extends T>> baseSequences

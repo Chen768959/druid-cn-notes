@@ -38,6 +38,7 @@ import org.apache.druid.client.cache.CacheConfig;
 import org.apache.druid.client.cache.CachePopulator;
 import org.apache.druid.client.selector.QueryableDruidServer;
 import org.apache.druid.client.selector.ServerSelector;
+import org.apache.druid.guice.LifecycleForkJoinPoolProvider;
 import org.apache.druid.guice.annotations.Client;
 import org.apache.druid.guice.annotations.Merging;
 import org.apache.druid.guice.annotations.Smile;
@@ -52,6 +53,7 @@ import org.apache.druid.java.util.common.guava.LazySequence;
 import org.apache.druid.java.util.common.guava.ParallelMergeCombiningSequence;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
+import org.apache.druid.java.util.common.guava.YieldingAccumulator;
 import org.apache.druid.java.util.emitter.EmittingLogger;
 import org.apache.druid.query.BaseQuery;
 import org.apache.druid.query.BySegmentResultValueClass;
@@ -498,8 +500,18 @@ public class CachingClusteredClient implements QuerySegmentWalker
        *
        * 在后续调用Sequence结果的“toYielder”方法时，
        * 才会执行以下匿名方法，开始查询
+       *
+       * 此处返回“最顶层Sequence”，
+       * 以下传入的匿名函数会在调用toYield()时被执行，然后该匿名函数也会返回一个Sequence，
+       * 执行完以下匿名函数并获取子Sequence后，会接着调用子Sequence.toYield()方法，就相当于一个链路一样，
+       *
+       * Sequence链路toYield，转Yield过程如下：
+       * 以下LazySequence执行入参匿名函数
+       *  ->{@link this#merge(List)}
+       *  // 如果使用单线程处理his查询结果，则进行以下逻辑，并传入所有查询结果数据
+       *  ->{@link BaseSequence#toYielder(Object, YieldingAccumulator)}
+       *    ->由YieldingAccumulator聚合每一个Sequence，再将聚合结果与下一个Sequence聚合，最终返回一个聚合后的Yield对象
        */
-//      log.info("!!!：设置mergedResultSequence");
       LazySequence<T> mergedResultSequence = new LazySequence<>(
               /**
                * 创建匿名函数{@link Supplier#get()}
@@ -577,37 +589,52 @@ public class CachingClusteredClient implements QuerySegmentWalker
        * groupBy查询：toolChest（GroupByQueryQueryToolChest），mergeFn（GroupByBinaryFnV2）
        */
       BinaryOperator<T> mergeFn = toolChest.createMergeFn(query);
+      /**
+       * 判断是否使用多线程进行merge
+       *
+       * processingConfig.useParallelMergePool()：默认情况下，只有cpu核数大于2才会为true
+       */
+      log.info("!!!：his节点合并runner，执行runner，start");
       if (processingConfig.useParallelMergePool() && QueryContexts.getEnableParallelMerges(query) && mergeFn != null) {
-        return new ParallelMergeCombiningSequence<>(
-            pool, /**{@link org.apache.druid.guice.LifecycleForkJoinPoolProvider}中的ForkJoinPool线程池*/
-            sequencesByInterval, // 里面每个Sequence有可能是“一个分片的缓存结果”，或者“某台主机上所有分片的查询结果”
-            query.getResultOrdering(), // 查询的排序规则
-            mergeFn, // 请求json中指定的aggregate聚合器
-            QueryContexts.hasTimeout(query),
-            QueryContexts.getTimeout(query),
-            QueryContexts.getPriority(query),
-            QueryContexts.getParallelMergeParallelism(query, processingConfig.getMergePoolDefaultMaxQueryParallelism()),
-            QueryContexts.getParallelMergeInitialYieldRows(query, processingConfig.getMergePoolTaskInitialYieldRows()),
-            QueryContexts.getParallelMergeSmallBatchRows(query, processingConfig.getMergePoolSmallBatchRows()),
-            processingConfig.getMergePoolTargetTaskRunTimeMillis(),
-            //需要打印那些Metrics日志信息
-            reportMetrics -> {
-              QueryMetrics<?> queryMetrics = queryPlus.getQueryMetrics();
-              if (queryMetrics != null) {
-                queryMetrics.parallelMergeParallelism(reportMetrics.getParallelism());
-                queryMetrics.reportParallelMergeParallelism(reportMetrics.getParallelism());
-                queryMetrics.reportParallelMergeInputSequences(reportMetrics.getInputSequences());
-                queryMetrics.reportParallelMergeInputRows(reportMetrics.getInputRows());
-                queryMetrics.reportParallelMergeOutputRows(reportMetrics.getOutputRows());
-                queryMetrics.reportParallelMergeTaskCount(reportMetrics.getTaskCount());
-                queryMetrics.reportParallelMergeTotalCpuTime(reportMetrics.getTotalCpuTime());
-              }
-            }
+        log.info("!!!：his节点合并runner，执行runner，start1");
+        ParallelMergeCombiningSequence<T> tParallelMergeCombiningSequence = new ParallelMergeCombiningSequence<>(
+                pool, /**{@link LifecycleForkJoinPoolProvider}中的ForkJoinPool线程池*/
+                sequencesByInterval, // 里面每个Sequence有可能是“一个分片的缓存结果”，或者“某台主机上所有分片的查询结果”
+                query.getResultOrdering(), // 查询的排序规则
+                mergeFn, // 请求json中指定的aggregate聚合器
+                QueryContexts.hasTimeout(query),
+                QueryContexts.getTimeout(query),
+                QueryContexts.getPriority(query),
+                QueryContexts.getParallelMergeParallelism(query, processingConfig.getMergePoolDefaultMaxQueryParallelism()),
+                QueryContexts.getParallelMergeInitialYieldRows(query, processingConfig.getMergePoolTaskInitialYieldRows()),
+                QueryContexts.getParallelMergeSmallBatchRows(query, processingConfig.getMergePoolSmallBatchRows()),
+                processingConfig.getMergePoolTargetTaskRunTimeMillis(),
+                //需要打印那些Metrics日志信息
+                reportMetrics -> {
+                  QueryMetrics<?> queryMetrics = queryPlus.getQueryMetrics();
+                  if (queryMetrics != null) {
+                    queryMetrics.parallelMergeParallelism(reportMetrics.getParallelism());
+                    queryMetrics.reportParallelMergeParallelism(reportMetrics.getParallelism());
+                    queryMetrics.reportParallelMergeInputSequences(reportMetrics.getInputSequences());
+                    queryMetrics.reportParallelMergeInputRows(reportMetrics.getInputRows());
+                    queryMetrics.reportParallelMergeOutputRows(reportMetrics.getOutputRows());
+                    queryMetrics.reportParallelMergeTaskCount(reportMetrics.getTaskCount());
+                    queryMetrics.reportParallelMergeTotalCpuTime(reportMetrics.getTotalCpuTime());
+                  }
+                }
         );
+        log.info("!!!：his节点合并runner，执行runner，end2");
+        return tParallelMergeCombiningSequence;
       } else {
-        return Sequences
-            .simple(sequencesByInterval)
-            .flatMerge(seq -> seq, query.getResultOrdering());
+        log.info("!!!：his节点合并runner，执行runner，start2");
+        /**
+         * 使用单线程进行合并，此处不进行合并，只是将数据封装进Sequence
+         */
+        Sequence<T> tSequence = Sequences
+                .simple(sequencesByInterval)// 使用sequencesByInterval产生一个新Sequences。sequencesByInterval：里面每个Sequence有可能是“一个分片的缓存结果”，或者“某台主机上所有分片的查询结果”
+                .flatMerge(seq -> seq, query.getResultOrdering());
+        log.info("!!!：his节点合并runner，执行runner，end");
+        return tSequence;
       }
     }
 

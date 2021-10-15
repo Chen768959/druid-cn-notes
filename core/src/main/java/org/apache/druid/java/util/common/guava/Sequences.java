@@ -39,11 +39,16 @@ public class Sequences
 
   private static final EmptySequence EMPTY_SEQUENCE = new EmptySequence();
 
+  /*
+   *
+   * @param iterable List<Sequence<T>>类型，里面每个Sequence有可能是“一个分片的缓存结果”，或者“某台主机上所有分片的查询结果”
+   */
   public static <T> Sequence<T> simple(final Iterable<T> iterable)
   {
     return new BaseSequence<>(
         new BaseSequence.IteratorMaker<T, Iterator<T>>()
         {
+          // 返回List<Sequence<T>>的迭代器
           @Override
           public Iterator<T> make()
           {

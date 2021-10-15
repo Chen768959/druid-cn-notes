@@ -24,9 +24,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
+import org.apache.druid.java.util.emitter.EmittingLogger;
 import org.apache.druid.math.expr.Expr;
 import org.apache.druid.math.expr.ExprMacroTable;
 import org.apache.druid.math.expr.Parser;
+import org.apache.druid.query.DruidProcessingConfig;
 import org.apache.druid.segment.BaseLongColumnValueSelector;
 import org.apache.druid.segment.ColumnInspector;
 import org.apache.druid.segment.ColumnSelectorFactory;
@@ -50,6 +52,7 @@ import java.util.Objects;
  */
 public abstract class SimpleLongAggregatorFactory extends NullableNumericAggregatorFactory<ColumnValueSelector>
 {
+  private static final EmittingLogger log = new EmittingLogger(SimpleLongAggregatorFactory.class);
   protected final String name;
   @Nullable
   protected final String fieldName;
@@ -154,6 +157,7 @@ public abstract class SimpleLongAggregatorFactory extends NullableNumericAggrega
   @Nullable
   public Object finalizeComputation(@Nullable Object object)
   {
+    log.info("!!!：his节点合并runner，执行simplelong finalizeComputation");
     return object;
   }
 

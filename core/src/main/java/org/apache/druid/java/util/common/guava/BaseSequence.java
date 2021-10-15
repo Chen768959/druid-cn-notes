@@ -63,7 +63,7 @@ public class BaseSequence<T, IterType extends Iterator<T>> implements Sequence<T
       final YieldingAccumulator<OutType, T> accumulator
   )
   {
-    final IterType iterator = maker.make();
+    final IterType iterator = maker.make();// 返回List<Sequence<T>>结果集的迭代器
 
     try {
       return makeYielder(initValue, accumulator, iterator);
@@ -82,11 +82,16 @@ public class BaseSequence<T, IterType extends Iterator<T>> implements Sequence<T
   private <OutType> Yielder<OutType> makeYielder(
       final OutType initValue,
       final YieldingAccumulator<OutType, T> accumulator,
-      final IterType iter
+      final IterType iter // List<Sequence<T>>结果集的迭代器
   )
   {
     OutType retVal = initValue;
     while (!accumulator.yielded() && iter.hasNext()) {
+      /**
+       * 遍历List<Sequence<T>>结果集的每一个Sequence，
+       * 然后通过accumulate入参进行“聚合”计算后，将计算结果作为新的“retVal”，
+       * 再与下一个Sequence进行聚合计算，
+       */
       retVal = accumulator.accumulate(retVal, iter.next());
     }
 
@@ -98,6 +103,9 @@ public class BaseSequence<T, IterType extends Iterator<T>> implements Sequence<T
     }
 
     final OutType finalRetVal = retVal;
+    /**
+     * 返回最终的Yielder结果集“retVal”
+     */
     return new Yielder<OutType>()
     {
       @Override
