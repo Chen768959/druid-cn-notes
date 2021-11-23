@@ -95,6 +95,7 @@ import java.util.function.UnaryOperator;
 public class QueryResource implements QueryCountStatsProvider
 {
   protected static final EmittingLogger log = new EmittingLogger(QueryResource.class);
+
   @Deprecated // use SmileMediaTypes.APPLICATION_JACKSON_SMILE
   protected static final String APPLICATION_SMILE = "application/smile";
 
@@ -184,6 +185,8 @@ public class QueryResource implements QueryCountStatsProvider
       @Context final HttpServletRequest req
   ) throws IOException
   {
+    long beginTime = System.currentTimeMillis();
+    log.info("!!!："+Thread.currentThread().getId()+"request post");
     /**
      * new一个queryLifecycle对象，其中很多属性都是从上下文中注入queryLifecycleFactory中的,
      * queryLifecycle对象控制着此次查询的各个阶段的生命周期，有四个生命周期
@@ -227,7 +230,11 @@ public class QueryResource implements QueryCountStatsProvider
        * queryLifecycle.initialize(Query);
        * 然后将特定Query对象，以及context上下文都放入queryLifecycle中
        */
-      queryLifecycle.initialize(readQuery(req, in, ioReaderWriter));
+      log.info("!!!："+Thread.currentThread().getId()+"request init");
+      Query<?> query1 = readQuery(req, in, ioReaderWriter);
+      log.info("!!!："+Thread.currentThread().getId()+"request init2");
+      queryLifecycle.initialize(query1);
+      log.info("!!!："+Thread.currentThread().getId()+"request init3");
 
       query = queryLifecycle.getQuery();
 //      log.info("!!!select：此次请求query对象："+query.getClass());
@@ -250,6 +257,7 @@ public class QueryResource implements QueryCountStatsProvider
       /**
        * queryLifecycle生命周期2：鉴权
        */
+      log.info("!!!："+Thread.currentThread().getId()+"request Access");
       final Access authResult = queryLifecycle.authorize(req);
       if (!authResult.isAllowed()) {
         throw new ForbiddenException(authResult.toString());
@@ -336,6 +344,7 @@ public class QueryResource implements QueryCountStatsProvider
        * 2、{@link org.apache.druid.query.groupby.epinephelinae.vector.VectorGroupByEngine.VectorGroupByEngineIterator#initNewDelegate()}
        * 其中就包含了获取dimension值的匿名方法
        */
+      log.info("!!!："+Thread.currentThread().getId()+"request execute");
       final QueryLifecycle.QueryResponse queryResponse = queryLifecycle.execute();
 //      log.info("!!!：doPost获取到queryResponse");
       //该results对象中包含了真正执行查询的匿名函数，只有调用了，才会进行查询
@@ -419,6 +428,9 @@ public class QueryResource implements QueryCountStatsProvider
 
                       os.flush(); // Some types of OutputStream suppress flush errors in the .close() method.
                       os.close();
+
+                      long endT = System.currentTimeMillis();
+                      log.info("!!!："+Thread.currentThread().getId()+"request end1："+(endT-beginTime));
                     }
                     catch (Exception ex) {
                       e = ex;
@@ -476,10 +488,12 @@ public class QueryResource implements QueryCountStatsProvider
             log.warn(logToPrint);
           }
         }
-
-        return responseBuilder
-            .header(HEADER_RESPONSE_CONTEXT, serializationResult.getResult())
-            .build();
+        Response buildRes = responseBuilder
+                .header(HEADER_RESPONSE_CONTEXT, serializationResult.getResult())
+                .build();
+        long endTime = System.currentTimeMillis();
+        log.info("!!!："+Thread.currentThread().getId()+"request end2："+(endTime-beginTime));
+        return buildRes;
       }
       catch (QueryException e) {
         // make sure to close yielder if anything happened before starting to serialize the response.
@@ -548,6 +562,7 @@ public class QueryResource implements QueryCountStatsProvider
   {
     // 获取ObjectMapper工具类，将此次请求的输入流中的内容反序列化成Query对象
     // 可以理解为客户端的json请求会被序列化成Query对象
+    log.info("!!! objectmapper:"+ioReaderWriter.getInputMapper().getClass());
     Query baseQuery = ioReaderWriter.getInputMapper().readValue(in, Query.class);
     // 获取请求头中的If-None-Match值，该值一开始是由服务端传的，即如果客户端又会传给服务端就是用缓存（不过此值看来在druid中不是这么用的）
     String prevEtag = getPreviousEtag(req);

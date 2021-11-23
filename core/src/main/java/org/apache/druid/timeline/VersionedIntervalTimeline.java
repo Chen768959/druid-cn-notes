@@ -763,8 +763,6 @@ public class VersionedIntervalTimeline<VersionType, ObjectType extends Overshado
   @GuardedBy("lock")
   private List<TimelineObjectHolder<VersionType, ObjectType>> lookup(Interval interval, Partitions completeness)
   {
-    log.info("进入VersionedIntervalTimeline.lookup，此次查询时间为："+interval.toString());
-
     // 根据查询时间区间interval，找到当前数据源中，存在时间重叠的segment，然后装入此list中
     List<TimelineObjectHolder<VersionType, ObjectType>> retVal = new ArrayList<>();
     NavigableMap<Interval, TimelineEntry> timeline;

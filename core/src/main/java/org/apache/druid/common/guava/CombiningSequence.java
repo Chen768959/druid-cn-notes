@@ -211,7 +211,6 @@ public class CombiningSequence<T> implements Sequence<T>
     @Override
     public T accumulate(T prevValue, T t)
     {
-      log.info("!!!：his节点合并runner，执行runner，CombiningYieldingAccumulator调用accumulate，mergeFn："+mergeFn.getClass());
       if (!accumulatedSomething) {
         accumulatedSomething = true;
       }
@@ -222,6 +221,7 @@ public class CombiningSequence<T> implements Sequence<T>
       }
 
       if (ordering.compare(prevValue, t) == 0) {
+        log.info("!!!："+Thread.currentThread().getId()+"...A");
         lastMergedVal = mergeFn.apply(prevValue, t);
         return lastMergedVal;
       }
@@ -263,7 +263,6 @@ public class CombiningSequence<T> implements Sequence<T>
     @Override
     public T accumulate(T prevValue, T t)
     {
-      log.info("!!!：his节点合并runner，执行runner，CombiningAccumulator调用accumulate，mergeFn："+mergeFn.getClass());
       if (!accumulatedSomething) {
         accumulatedSomething = true;
       }
@@ -273,6 +272,7 @@ public class CombiningSequence<T> implements Sequence<T>
       }
 
       if (ordering.compare(prevValue, t) == 0) {
+        log.info("!!!："+Thread.currentThread().getId()+"...B");
         return mergeFn.apply(prevValue, t);
       }
 

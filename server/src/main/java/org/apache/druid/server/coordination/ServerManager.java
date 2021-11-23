@@ -58,6 +58,7 @@ import org.apache.druid.query.context.ResponseContext;
 import org.apache.druid.query.planning.DataSourceAnalysis;
 import org.apache.druid.query.spec.SpecificSegmentQueryRunner;
 import org.apache.druid.query.spec.SpecificSegmentSpec;
+import org.apache.druid.query.timeseries.TimeseriesQueryQueryToolChest;
 import org.apache.druid.segment.ReferenceCountingSegment;
 import org.apache.druid.segment.SegmentReference;
 import org.apache.druid.segment.join.JoinableFactory;
@@ -282,6 +283,10 @@ public class ServerManager implements QuerySegmentWalker
      *
      * 此处的exec是线程池，用来并发执行queryRunners中的各个runner，
      * 即并发的从各segment中查询数据。
+     *
+     * factory.mergeRunners():{@link org.apache.druid.query.timeseries.TimeseriesQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
+     * ->创建：{@link org.apache.druid.query.ChainedExecutionQueryRunner}
+     * toolChest.mergeResults():{@link TimeseriesQueryQueryToolChest#mergeResults(QueryRunner)}
      */
     log.info("!!!：his节点合并runner，正在创建runner，factory："+factory.getClass());
     QueryRunner<T> queryRunner = factory.mergeRunners(exec, queryRunners);
@@ -379,6 +384,13 @@ public class ServerManager implements QuerySegmentWalker
     }
     String segmentIdString = segmentId.toString();
 
+    /**
+     * ！！！！！此runner内部通过factory创建真正的runner用于查询.
+     * {@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory.GroupByQueryRunner}
+     * OR {@link org.apache.druid.query.timeseries.TimeseriesQueryRunnerFactory.TimeseriesQueryRunner}
+     */
+    ReferenceCountingSegmentQueryRunner<T> tReferenceCountingSegmentQueryRunner = new ReferenceCountingSegmentQueryRunner<>(factory, segment, segmentDescriptor);
+
     // 此runner用于计算“内部runner.run”的耗时
     MetricsEmittingQueryRunner<T> metricsEmittingQueryRunnerInner = new MetricsEmittingQueryRunner<>(
         emitter,
@@ -387,7 +399,7 @@ public class ServerManager implements QuerySegmentWalker
          * 此runner内部通过factory创建真正的runner用于查询.
          * {@link org.apache.druid.query.groupby.GroupByQueryRunnerFactory.GroupByQueryRunner}
          */
-        new ReferenceCountingSegmentQueryRunner<>(factory, segment, segmentDescriptor),
+        tReferenceCountingSegmentQueryRunner,
         QueryMetrics::reportSegmentTime,
         queryMetrics -> queryMetrics.segment(segmentIdString)
     );

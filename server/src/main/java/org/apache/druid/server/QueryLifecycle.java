@@ -288,7 +288,7 @@ public class QueryLifecycle
      */
     QueryPlus tmpQueryPlus = QueryPlus.wrap(baseQuery)
             .withIdentity(authenticationResult.getIdentity());
-//    log.info("!!!：获取tmpQueryPlus，准备调用run");
+    log.info("!!!：获取tmpQueryPlus，准备调用run");
 
     /**
      * .run(texasRanger, responseContext)：

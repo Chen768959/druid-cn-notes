@@ -49,15 +49,18 @@ import org.apache.druid.java.util.common.Pair;
 import org.apache.druid.java.util.common.StringUtils;
 import org.apache.druid.java.util.common.concurrent.Execs;
 import org.apache.druid.java.util.common.guava.BaseSequence;
+import org.apache.druid.java.util.common.guava.Comparators;
 import org.apache.druid.java.util.common.guava.LazySequence;
 import org.apache.druid.java.util.common.guava.ParallelMergeCombiningSequence;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
+import org.apache.druid.java.util.common.guava.ThreadPoolMergeCombiningSequence;
 import org.apache.druid.java.util.common.guava.YieldingAccumulator;
 import org.apache.druid.java.util.emitter.EmittingLogger;
 import org.apache.druid.query.BaseQuery;
 import org.apache.druid.query.BySegmentResultValueClass;
 import org.apache.druid.query.CacheStrategy;
+import org.apache.druid.query.CustomConfig;
 import org.apache.druid.query.DruidProcessingConfig;
 import org.apache.druid.query.Queries;
 import org.apache.druid.query.Query;
@@ -93,7 +96,11 @@ import org.apache.druid.timeline.partition.PartitionHolder;
 import org.joda.time.Interval;
 
 import javax.annotation.Nullable;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -580,27 +587,45 @@ public class CachingClusteredClient implements QuerySegmentWalker
      */
     private Sequence<T> merge(List<Sequence<T>> sequencesByInterval)
     {
+      if ("true".equals(query.getContextValue("quickMerge"))){
+        log.info("!!!：his节点合并runner，执行runner，cuskey:yyyy");
+      }
+
       /**
        * 获取请求json中指定的聚合器，后续聚合结果时使用。
        * 如果此次查询不涉及聚合操作，则此对象为null。
        *
        * timeseries查询：toolChest（TimeseriesQueryQueryToolChest），mergeFn（TimeseriesBinaryFn）
+       * {@link org.apache.druid.query.timeseries.TimeseriesQueryQueryToolChest#createMergeFn(Query)}
        * topN查询：toolChest（TopNQueryQueryToolChest），mergeFn（TopNBinaryFn）
        * groupBy查询：toolChest（GroupByQueryQueryToolChest），mergeFn（GroupByBinaryFnV2）
        */
       BinaryOperator<T> mergeFn = toolChest.createMergeFn(query);
+
+      // 使用自定义merge逻辑
+//      boolean needQuickMerge = CustomConfig.needQuickMerge(query);
+//      if (needQuickMerge){
+//        return new ThreadPoolMergeCombiningSequence(
+//                sequencesByInterval,
+//                mergeFn,
+//                query.getResultOrdering());
+//      }
+
+      Ordering<T> resultOrdering = query.getResultOrdering();
+      if (CustomConfig.needQuickMerge(query)){
+        log.info("!!!："+Thread.currentThread().getId()+"...满足quickmerge");
+        resultOrdering = Comparators.alwaysEqual();
+      }
       /**
        * 判断是否使用多线程进行merge
        *
        * processingConfig.useParallelMergePool()：默认情况下，只有cpu核数大于2才会为true
        */
-      log.info("!!!：his节点合并runner，执行runner，start");
       if (processingConfig.useParallelMergePool() && QueryContexts.getEnableParallelMerges(query) && mergeFn != null) {
-        log.info("!!!：his节点合并runner，执行runner，start1");
         ParallelMergeCombiningSequence<T> tParallelMergeCombiningSequence = new ParallelMergeCombiningSequence<>(
                 pool, /**{@link LifecycleForkJoinPoolProvider}中的ForkJoinPool线程池*/
                 sequencesByInterval, // 里面每个Sequence有可能是“一个分片的缓存结果”，或者“某台主机上所有分片的查询结果”
-                query.getResultOrdering(), // 查询的排序规则
+                resultOrdering, // 查询的排序规则
                 mergeFn, // 请求json中指定的aggregate聚合器
                 QueryContexts.hasTimeout(query),
                 QueryContexts.getTimeout(query),

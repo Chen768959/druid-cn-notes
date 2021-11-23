@@ -109,6 +109,13 @@ public class TimeseriesQueryQueryToolChest extends QueryToolChest<Result<Timeser
         this::createMergeFn
     )
     {
+      /**
+       * 该dorun()由当前runner自己的run方法调用
+       * 这个baseRunner就是上面构造时的queryRunner入参：{@link org.apache.druid.query.ChainedExecutionQueryRunner}
+       *
+       * 此处的逻辑其实就是执行baseRunner的run：
+       * {@link org.apache.druid.query.ChainedExecutionQueryRunner#run(QueryPlus, ResponseContext)}
+       */
       @Override
       public Sequence<Result<TimeseriesResultValue>> doRun(
           QueryRunner<Result<TimeseriesResultValue>> baseRunner,
@@ -118,7 +125,7 @@ public class TimeseriesQueryQueryToolChest extends QueryToolChest<Result<Timeser
       {
         int limit = ((TimeseriesQuery) queryPlus.getQuery()).getLimit();
         Sequence<Result<TimeseriesResultValue>> result = super.doRun(
-            baseRunner,
+            baseRunner,// {@link org.apache.druid.query.ChainedExecutionQueryRunner}
             // Don't do post aggs until makePostComputeManipulatorFn() is called
             queryPlus.withQuery(((TimeseriesQuery) queryPlus.getQuery()).withPostAggregatorSpecs(ImmutableList.of())),
             context

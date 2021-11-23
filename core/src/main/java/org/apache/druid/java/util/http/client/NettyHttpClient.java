@@ -59,6 +59,7 @@ import org.joda.time.Duration;
 import java.net.URL;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
@@ -124,6 +125,13 @@ public class NettyHttpClient extends AbstractHttpClient
     final HttpMethod method = request.getMethod();
     final URL url = request.getUrl();
     final Multimap<String, String> headers = request.getHeaders();
+
+    String tId2 = "Null";
+    try {
+      tId2 = headers.get("tId_cust").iterator().next();
+    }catch (Exception e){}
+
+    String tId = tId2;
 
 //    log.info("!!!：select，使用NettyHttpClient.go，url："+url.toString());
 
@@ -305,6 +313,7 @@ public class NettyHttpClient extends AbstractHttpClient
 
           private void finishRequest()
           {
+//            log.info("!!!："+tId+"结束请求 finishRequest"+url);
             ClientResponse<Final> finalResponse = handler.done(response);
 
             if (!finalResponse.isFinished() || !finalResponse.isContinueReading()) {
@@ -388,6 +397,7 @@ public class NettyHttpClient extends AbstractHttpClient
           @Override
           public void operationComplete(ChannelFuture future)
           {
+//            log.info("!!!："+tId+"请求操作完毕 operationComplete"+url);
             if (!future.isSuccess()) {
               channel.close();
               channelResourceContainer.returnResource();

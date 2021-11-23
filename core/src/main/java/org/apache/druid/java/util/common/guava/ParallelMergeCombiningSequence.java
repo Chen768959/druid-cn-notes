@@ -28,8 +28,12 @@ import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.utils.JvmUtils;
 
 import javax.annotation.Nullable;
+import java.io.BufferedReader;
 import java.io.Closeable;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -42,10 +46,15 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.RecursiveAction;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
@@ -134,6 +143,8 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
   @Override
   public <OutType> Yielder<OutType> toYielder(OutType initValue, YieldingAccumulator<OutType, T> accumulator)
   {
+    long tId = Thread.currentThread().getId();
+    LOG.info("!!!："+tId+"...进入ParallelMergeCombiningSequence");
     if (inputSequences.isEmpty()) {
       return Sequences.<T>empty().toYielder(initValue, accumulator);
     }
@@ -141,7 +152,7 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
     final BlockingQueue<ResultBatch<T>> outputQueue = new ArrayBlockingQueue<>(queueSize);
     final MergeCombineMetricsAccumulator metricsAccumulator = new MergeCombineMetricsAccumulator(inputSequences.size());
     MergeCombinePartitioningAction<T> mergeCombineAction = new MergeCombinePartitioningAction<>(
-        inputSequences,
+        inputSequences,// 缓存+实时查询结果，里面每个Sequence有可能是“一个分片的缓存结果”，或者“某台主机上所有分片的查询结果”
         orderingFn,
         combineFn,
         outputQueue,
@@ -153,7 +164,8 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
         hasTimeout,
         timeoutAtNanos,
         metricsAccumulator,
-        cancellationGizmo
+        cancellationGizmo,
+        tId
     );
     workerPool.execute(mergeCombineAction);
     Sequence<T> finalOutSequence = makeOutputSequenceForQueue(
@@ -166,6 +178,8 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
         metricsReporter.accept(metricsAccumulator.build());
       }
     });
+
+    LOG.info("!!!："+tId+"...END ParallelMergeCombiningSequence");
     return finalOutSequence.toYielder(initValue, accumulator);
   }
 
@@ -190,6 +204,16 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
         new BaseSequence.IteratorMaker<T, Iterator<T>>()
         {
           private boolean shouldCancelOnCleanup = true;
+
+          /**
+           * make建立的Iterator，
+           * 其每一次next，返回的都是ResultBatch的next。
+           *
+           * 每次调用该it的hasNext()，都会从“queue”里取出一个ResultBatch
+           * （这个queue就是parrallel中的合并结果集）
+           *
+           *
+           */
           @Override
           public Iterator<T> make()
           {
@@ -242,9 +266,16 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
                   throw cancellationGizmo.getRuntimeException();
                 }
 
-                if (currentBatch == null || currentBatch.isDrained() || currentBatch.isTerminalResult()) {
+                if (currentBatch == null) {
                   throw new NoSuchElementException();
                 }
+                if (currentBatch.isDrained()) {// currentBatch内部Queue<T>是空的
+                  throw new NoSuchElementException();
+                }
+                if (currentBatch.isTerminalResult()) {
+                  throw new NoSuchElementException();
+                }
+
                 return currentBatch.next();
               }
             };
@@ -295,9 +326,10 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
     private final long timeoutAt;
     private final MergeCombineMetricsAccumulator metricsAccumulator;
     private final CancellationGizmo cancellationGizmo;
+    private final long tId;
 
     private MergeCombinePartitioningAction(
-        List<Sequence<T>> sequences,
+        List<Sequence<T>> sequences,// 缓存+实时查询结果，里面每个Sequence有可能是“一个分片的缓存结果”，或者“某台主机上所有分片的查询结果”
         Ordering<T> orderingFn,
         BinaryOperator<T> combineFn,
         BlockingQueue<ResultBatch<T>> out, // 最终聚合结果queue
@@ -309,7 +341,8 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
         boolean hasTimeout,
         long timeoutAt,
         MergeCombineMetricsAccumulator metricsAccumulator,
-        CancellationGizmo cancellationGizmo
+        CancellationGizmo cancellationGizmo,
+        long tId
     )
     {
       this.sequences = sequences;
@@ -325,6 +358,7 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
       this.timeoutAt = timeoutAt;
       this.metricsAccumulator = metricsAccumulator;
       this.cancellationGizmo = cancellationGizmo;
+      this.tId = tId;
     }
 
     // 该方法被forkJoin线程池处理
@@ -362,12 +396,14 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
               batchSize,
               targetTimeNanos,
               soloAccumulator,
-              cancellationGizmo
+              cancellationGizmo,
+                  tId
           );
           getPool().execute(blockForInputsAction);
         } else {
           // 2 layer parallel merge done in fjp
           LOG.debug("Spawning %s parallel merge-combine tasks for %s sequences", parallelTaskCount, sequences.size());
+          LOG.info("!!!："+tId+"...pC："+parallelTaskCount);
           spawnParallelTasks(parallelTaskCount);
         }
       }
@@ -388,7 +424,9 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
       List<? extends List<Sequence<T>>> partitions =
           Lists.partition(sequences, sequences.size() / parallelMergeTasks);
 
+      int i=0;
       for (List<Sequence<T>> partition : partitions) {
+        LOG.info("!!!："+tId+"...startP："+(i++));
         BlockingQueue<ResultBatch<T>> outputQueue = new ArrayBlockingQueue<>(queueSize);
         intermediaryOutputs.add(outputQueue);
         QueuePusher<ResultBatch<T>> pusher = new QueuePusher<>(outputQueue, hasTimeout, timeoutAt);
@@ -407,7 +445,8 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
             batchSize,
             targetTimeNanos,
             partitionAccumulator,
-            cancellationGizmo
+            cancellationGizmo,
+                tId
         );
         tasks.add(blockForInputsAction);
         taskMetrics.add(partitionAccumulator);
@@ -438,10 +477,274 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
           batchSize,
           targetTimeNanos,
           finalMergeMetrics,
-          cancellationGizmo
+          cancellationGizmo,
+              tId
       );
 
       getPool().execute(finalMergeAction);
+    }
+
+    ExecutorService fixedThreadPool = Executors.newFixedThreadPool(500);
+
+    private void spawnParallelTasksQuick(int parallelMergeTasks)
+    {
+      PriorityBlockingQueue<T> cursorsT = new PriorityBlockingQueue<>(sequences.size());
+
+      AtomicInteger needMergeCount = new AtomicInteger(sequences.size()-1);
+      LOG.info("!!!，spawnParallelTasksQuick start："+needMergeCount.get()+"...cursorsT.size:"+cursorsT.size());
+      for (Sequence<T> s : sequences) {
+        ParallelMergeCombiningSequence.YielderBatchedResultsCursor<T> cursor =
+                new ParallelMergeCombiningSequence.YielderBatchedResultsCursor<>(
+                        new ParallelMergeCombiningSequence.SequenceBatcher<>(s, 4096), orderingFn
+                );
+        /**
+         * 开启一条新线程，每条线程会等待
+         */
+        fixedThreadPool.submit(new Runnable() {
+          @Override
+          public void run() {
+            cursor.initialize();
+            int c=0;
+            while (!cursor.isDone()){
+              needMergeCount.getAndAdd(c);
+              cursorsT.offer(cursor.get());
+              cursor.advance();
+              if (c==0){
+                c=1;
+              }
+            }
+            try {
+              cursor.close();
+            } catch (IOException e) {
+              e.printStackTrace();
+            }
+          }
+        });
+      }
+
+      AtomicInteger mergedCount = new AtomicInteger(0);
+      T trueRes = null;
+      boolean start=false;
+      long lastTrueRes = System.currentTimeMillis();
+
+      LOG.info("!!!，needMergeCount："+needMergeCount.get()+"...cursorsT.size:"+cursorsT.size());
+      while (mergedCount.get() < needMergeCount.get() || cursorsT.size()>0){
+        // cursorsT中装了his节点的响应数据，以及两两的聚合信息
+        T poll = cursorsT.poll();
+
+        if (poll != null){
+          LOG.info("!!!，poll != null needMergeCount："+needMergeCount.get()+"...cursorsT.size:"+cursorsT.size());
+          if (trueRes==null){// 第一次进来
+            trueRes = poll;
+
+            start=true;
+            lastTrueRes = System.currentTimeMillis();
+          }else {
+            LOG.info("!!!，poll == null needMergeCount："+needMergeCount.get()+"...cursorsT.size:"+cursorsT.size());
+            start=false;
+            T tmp = trueRes;
+            trueRes = null;
+
+            fixedThreadPool.submit(new Runnable() {
+              @Override
+              public void run() {
+                // 聚合之前的结果集
+                /**{@link org.apache.druid.query.timeseries.TimeseriesQueryQueryToolChest#createMergeFn(Query)}*/
+                T currentCombinedValue = combineFn.apply(tmp, poll);
+                cursorsT.offer(currentCombinedValue);
+
+                mergedCount.getAndIncrement();
+
+              }
+            });
+          }
+        }else {
+          long timeC = System.currentTimeMillis() - lastTrueRes;
+          if (timeC > 200000){
+            fixedThreadPool.shutdownNow();
+            break;
+          }
+          if (timeC > 20000){
+            if (start && trueRes!=null){
+              break;
+            }else {
+              LOG.info("!!!!，"+Thread.currentThread().getId()+"mergedCount："+mergedCount.get()+"needMergeCount："+needMergeCount.get()+"...cursorsT.size:"+cursorsT.size());
+            }
+          }
+          try {
+            Thread.sleep(2000);
+          } catch (InterruptedException e) {
+            LOG.info("!!!!，"+e.getMessage());
+          }
+        }
+      }
+
+      // todo del2
+//    PriorityBlockingQueue<ParallelMergeCombiningSequence.BatchedResultsCursor<T>> pQueue = new PriorityBlockingQueue<>();
+//    PriorityBlockingQueue<T> cursorsT = new PriorityBlockingQueue<>();
+//    for (Sequence<T> s : inputSequences) {
+//
+//      ParallelMergeCombiningSequence.SequenceBatcher<T> tSequenceBatcher = new ParallelMergeCombiningSequence.SequenceBatcher<>(s, 4096);
+//
+//      ParallelMergeCombiningSequence.YielderBatchedResultsCursor<T> tYielderBatchedResultsCursor = new ParallelMergeCombiningSequence.YielderBatchedResultsCursor<>(tSequenceBatcher, orderingFn);
+//
+//      tYielderBatchedResultsCursor.initialize();
+//      if (!tYielderBatchedResultsCursor.isDone()) {
+//        pQueue.offer(tYielderBatchedResultsCursor);
+//      } else {
+//        try {
+//          tYielderBatchedResultsCursor.close();
+//        } catch (IOException e) {
+//          LOG.error(e.getMessage()+",0");
+//        }
+//      }
+//    }
+//
+//    // 存储cursor中的结果
+//    // 但是cursor结果并不能一次性get完
+//    while (! pQueue.isEmpty()){
+//      /**
+//       * 每次取出一个cursor
+//       * 判断cursor内数据是否已经取完了
+//       * 取完则关闭该cursor，并取下一个cursor。
+//       *
+//       * 如果cursor内数据未取完，则开启新线程，然后从cursor中取一部分，然后将取出的数据放入“结果队列中”
+//       */
+//      ParallelMergeCombiningSequence.BatchedResultsCursor<T> cursor = pQueue.poll();
+//      // push the queue along
+//      if (!cursor.isDone()) {
+//        fixedThreadPool.submit(new Runnable() {
+//          @Override
+//          public void run() {
+//            T nextValueToAccumulate = cursor.get();
+//            cursorsT.offer(nextValueToAccumulate);
+//            cursor.advance();
+//            if (!cursor.isDone()) {
+//              pQueue.offer(cursor);
+//            } else {
+//              try {
+//                cursor.close();
+//              } catch (IOException e) {
+//                LOG.error(e.getMessage()+",1");
+//              }
+//            }
+//          }
+//        });
+//      } else {
+//        try {
+//          cursor.close();
+//        } catch (IOException e) {
+//          LOG.error(e.getMessage()+",2");
+//        }
+//      }
+//    }
+//
+//    /**
+//     * 每次从结果队列中取出一个结果，
+//     * 与开启新线程，与上一个结果合并，然后将合并结果再放到结果队列中
+//     */
+//    T res = null;
+//    while (! pQueue.isEmpty() || ! cursorsT.isEmpty()){
+//      // cursorsT中装了his节点的响应数据，以及两两的聚合信息
+//      T poll = cursorsT.poll();
+//
+//      if (poll != null){
+//        if (res ==null){// 第一次进来
+//          res = poll;
+//        }else {
+//          T tmp = res;
+//          res = null;
+//
+//          fixedThreadPool.submit(new Runnable() {
+//            @Override
+//            public void run() {
+//              // 聚合之前的结果集
+//              T currentCombinedValue = combineFn.apply(tmp, poll);
+//
+//              cursorsT.offer(currentCombinedValue);
+//            }
+//          });
+//        }
+//      }else {
+//        try {
+//          Thread.sleep(500);
+//        } catch (InterruptedException e) {
+//          e.printStackTrace();
+//        }
+//      }
+//    }
+
+      // todo del
+//    List<ParallelMergeCombiningSequence.BatchedResultsCursor<T>> partitionCursors = new ArrayList<>(inputSequences.size());
+//    for (Sequence<T> s : inputSequences) {
+//      partitionCursors.add(new ParallelMergeCombiningSequence.YielderBatchedResultsCursor<>(new ParallelMergeCombiningSequence.SequenceBatcher<>(s, 4096), orderingFn));
+//    }
+//
+//    PriorityBlockingQueue<T> cursorsT = new PriorityBlockingQueue<>(inputSequences.size());
+//
+//    for (ParallelMergeCombiningSequence.BatchedResultsCursor<T> cursor : partitionCursors) {
+//      fixedThreadPool.submit(new Runnable() {
+//        @Override
+//        public void run() {
+//          cursor.initialize();// 一个cursor只能执行一次，初始化，且初始化过程就已经开始查询信息了，所以此方法必须并发
+//          if (!cursor.isDone()) {
+//            cursorsT.offer(cursor.get());
+//          } else {
+//            try {
+//              cursor.close();
+//            } catch (IOException e) {
+//              e.printStackTrace();
+//            }
+//          }
+//        }
+//      });
+//    }
+//
+//    // 计算需要聚合的次数
+//    final int needMergeCount = partitionCursors.size()-1;
+//    AtomicInteger mergedCount = new AtomicInteger(0);
+//
+//    T res = null;
+//    while (mergedCount.get() < needMergeCount || cursorsT.size()>0){
+//      LOG.info("!!!：his节点合并runner，whhh-mc000："+mergedCount.get()+"...whhh-nmc："+needMergeCount+"...whhh-sz:"+cursorsT.size());
+//
+//      // cursorsT中装了his节点的响应数据，以及两两的聚合信息
+//      T poll = cursorsT.poll();
+//
+//      if (poll != null){
+//        if (res ==null){// 第一次进来
+//          res = poll;
+//        }else {
+//          T tmp = res;
+//          res = null;
+//
+//          fixedThreadPool.submit(new Runnable() {
+//            @Override
+//            public void run() {
+//              // 聚合之前的结果集
+//              T currentCombinedValue = combineFn.apply(tmp, poll);
+//
+//              cursorsT.offer(currentCombinedValue);
+//
+//              mergedCount.getAndIncrement();
+//            }
+//          });
+//        }
+//      }else {
+//        try {
+//          Thread.sleep(500);
+//        } catch (InterruptedException e) {
+//          e.printStackTrace();
+//        }
+//      }
+//    }
+      LOG.info("!!!，end，mergedCount.get()："+mergedCount.get()+"...needMergeCount："+needMergeCount.get()+"...cursorsT.size:"+cursorsT.size());
+      // yuan
+      ParallelMergeCombiningSequence.ResultBatch<T> outputBatch = new ParallelMergeCombiningSequence.ResultBatch<>(batchSize);
+      outputBatch.add(trueRes);
+      out.offer(outputBatch);
+      // ... and the terminal value to indicate the blocking queue holding the values is complete
+      out.offer(ParallelMergeCombiningSequence.ResultBatch.TERMINAL);
     }
 
     /**
@@ -526,6 +829,7 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
     private final long targetTimeNanos;
     private final MergeCombineActionMetricsAccumulator metricsAccumulator;
     private final CancellationGizmo cancellationGizmo;
+    private final long tId;
 
     private MergeCombineAction(
         PriorityQueue<BatchedResultsCursor<T>> pQueue, // 相当于单个Sequence。来自于总的结果集List<Sequence>中，代表了某个缓存分片结果，或者某个历史节点的查询结果
@@ -537,7 +841,8 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
         int batchSize,
         long targetTimeNanos,
         MergeCombineActionMetricsAccumulator metricsAccumulator,
-        CancellationGizmo cancellationGizmo
+        CancellationGizmo cancellationGizmo,
+        long tId
     )
     {
       this.pQueue = pQueue;
@@ -550,11 +855,15 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
       this.targetTimeNanos = targetTimeNanos;
       this.metricsAccumulator = metricsAccumulator;
       this.cancellationGizmo = cancellationGizmo;
+      this.tId = tId;
     }
 
+    private ExecutorService ex = Executors.newFixedThreadPool(50);
     @Override
     protected void compute()
     {
+      long beca = System.currentTimeMillis();
+      LOG.info("!!!："+tId+"...START CA");
       try {
         long start = System.nanoTime();
         long startCpuNanos = JvmUtils.safeGetThreadCpuTime();
@@ -563,7 +872,12 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
         int batchCounter = 0;
         ResultBatch<T> outputBatch = new ResultBatch<>(batchSize);
 
+        AtomicInteger continueI = new AtomicInteger(0);
+        BlockingQueue<T> combinedValueQueue = new LinkedBlockingQueue();
+        List<T> notJoinCombines = new ArrayList<>();
+        boolean be = false;
         T currentCombinedValue = initialValue;
+        // 先两两合并完
         while (counter < yieldAfter && !pQueue.isEmpty()) {
           BatchedResultsCursor<T> cursor = pQueue.poll();
 
@@ -578,36 +892,97 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
               cursor.close();
             }
 
-            counter++;
             // if current value is null, combine null with next value
             if (currentCombinedValue == null) {
-              // 聚合器聚合查询结果
-              currentCombinedValue = combineFn.apply(null, nextValueToAccumulate);
+              if (!be){
+                currentCombinedValue = combineFn.apply(null, nextValueToAccumulate);
+                be = true;
+              }else {
+                currentCombinedValue = nextValueToAccumulate;
+              }
               continue;
             }
 
             // if current value is "same" as next value, combine them
             if (orderingFn.compare(currentCombinedValue, nextValueToAccumulate) == 0) {
-              // 聚合器聚合查询结果
-              currentCombinedValue = combineFn.apply(currentCombinedValue, nextValueToAccumulate);
+              // 开启新线程聚合，并将聚合结果放入queue
+              T tmp = currentCombinedValue;
+              currentCombinedValue = null;
+
+              counter++;
+              continueI.getAndIncrement();
+              ex.submit(new Runnable() {
+                @Override
+                public void run() {
+                  combinedValueQueue.add(combineFn.apply(tmp, nextValueToAccumulate));
+                  continueI.getAndDecrement();
+                }
+              });
               continue;
             }
 
-            // else, push accumulated value to the queue, accumulate again with next value as initial
-            outputBatch.add(currentCombinedValue);
+            notJoinCombines.add(currentCombinedValue);
+
             batchCounter++;
             if (batchCounter >= batchSize) {
-              outputQueue.offer(outputBatch);// 将此次的聚合结果装入结果集queue中
+              if (!outputBatch.isDrained()){
+                outputQueue.offer(outputBatch);// 将此次的聚合结果装入结果集queue中
+              }
               outputBatch = new ResultBatch<>(batchSize);
               metricsAccumulator.incrementOutputRows(batchCounter);
               batchCounter = 0;
             }
 
-            // next value is now current value
-            // 聚合器聚合查询结果
             currentCombinedValue = combineFn.apply(null, nextValueToAccumulate);
           } else {
             cursor.close();
+          }
+        }
+
+        // 完结queue里面的值
+        while (continueI.get()>0 || combinedValueQueue.size()>0){
+          T take = combinedValueQueue.take();
+          if (currentCombinedValue == null){
+            currentCombinedValue = take;
+            continue;
+          }
+
+          if (orderingFn.compare(currentCombinedValue, take) == 0) {
+            // 开启新线程聚合，并将聚合结果放入queue
+            T tmp = currentCombinedValue;
+            currentCombinedValue = null;
+
+            counter++;
+            continueI.getAndIncrement();
+            ex.submit(new Runnable() {
+              @Override
+              public void run() {
+                combinedValueQueue.add(combineFn.apply(tmp, take));
+                continueI.getAndDecrement();
+              }
+            });
+            continue;
+          }
+
+          notJoinCombines.add(currentCombinedValue);
+
+          batchCounter++;
+          if (batchCounter >= batchSize) {
+            if (!outputBatch.isDrained()){
+              outputQueue.offer(outputBatch);// 将此次的聚合结果装入结果集queue中
+            }
+            outputBatch = new ResultBatch<>(batchSize);
+            metricsAccumulator.incrementOutputRows(batchCounter);
+            batchCounter = 0;
+          }
+
+          currentCombinedValue = combineFn.apply(null, take);
+        }
+
+        // 将所有不参与combine的值加入output
+        for (T notJoinCombine : notJoinCombines) {
+          if (notJoinCombine!=null){
+            outputBatch.add(notJoinCombine);
           }
         }
 
@@ -615,6 +990,9 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
         metricsAccumulator.incrementInputRows(counter);
         metricsAccumulator.incrementCpuTimeNanos(elapsedCpuNanos);
         metricsAccumulator.incrementTaskCount();
+
+        long edca = System.currentTimeMillis();
+        LOG.info("!!!："+tId+"...END CA");
 
         if (!pQueue.isEmpty() && !cancellationGizmo.isCancelled()) {
           // if there is still work to be done, execute a new task with the current accumulated value to continue
@@ -631,29 +1009,30 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
           final double nextYieldAfter = Math.max((double) targetTimeNanos * ((double) yieldAfter / elapsedCpuNanos), 1.0);
           final long recursionDepth = metricsAccumulator.getTaskCount();
           final double cumulativeMovingAverage =
-              (nextYieldAfter + (recursionDepth * yieldAfter)) / (recursionDepth + 1);
+                  (nextYieldAfter + (recursionDepth * yieldAfter)) / (recursionDepth + 1);
           final int adjustedNextYieldAfter = (int) Math.ceil(cumulativeMovingAverage);
 
           LOG.debug(
-              "task recursion %s yielded %s results ran for %s millis (%s nanos), %s cpu nanos, next task yielding every %s operations",
-              recursionDepth,
-              yieldAfter,
-              TimeUnit.MILLISECONDS.convert(elapsedNanos, TimeUnit.NANOSECONDS),
-              elapsedNanos,
-              elapsedCpuNanos,
-              adjustedNextYieldAfter
+                  "task recursion %s yielded %s results ran for %s millis (%s nanos), %s cpu nanos, next task yielding every %s operations",
+                  recursionDepth,
+                  yieldAfter,
+                  TimeUnit.MILLISECONDS.convert(elapsedNanos, TimeUnit.NANOSECONDS),
+                  elapsedNanos,
+                  elapsedCpuNanos,
+                  adjustedNextYieldAfter
           );
           getPool().execute(new MergeCombineAction<>(
-              pQueue,
-              outputQueue,
-              orderingFn,
-              combineFn,
-              currentCombinedValue,
-              adjustedNextYieldAfter,
-              batchSize,
-              targetTimeNanos,
-              metricsAccumulator,
-              cancellationGizmo
+                  pQueue,
+                  outputQueue,
+                  orderingFn,
+                  combineFn,
+                  currentCombinedValue,
+                  adjustedNextYieldAfter,
+                  batchSize,
+                  targetTimeNanos,
+                  metricsAccumulator,
+                  cancellationGizmo,
+                  tId
           ));
         } else if (cancellationGizmo.isCancelled()) {
           // if we got the cancellation signal, go ahead and write terminal value into output queue to help gracefully
@@ -664,9 +1043,13 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
           outputQueue.offer(ResultBatch.TERMINAL);
         } else {
           // if priority queue is empty, push the final accumulated value into the output batch and push it out
-          outputBatch.add(currentCombinedValue);
+          if (currentCombinedValue!=null){
+            outputBatch.add(currentCombinedValue);
+          }
           metricsAccumulator.incrementOutputRows(batchCounter + 1L);
-          outputQueue.offer(outputBatch);
+          if (!outputBatch.isDrained()){
+            outputQueue.offer(outputBatch);
+          }
           // ... and the terminal value to indicate the blocking queue holding the values is complete
           outputQueue.offer(ResultBatch.TERMINAL);
           LOG.debug("merge combine complete after %s tasks", metricsAccumulator.getTaskCount());
@@ -678,6 +1061,140 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
         outputQueue.offer(ResultBatch.TERMINAL);
       }
     }
+
+//    @Override
+//    protected void compute()
+//    {
+//      LOG.info("!!!："+tId+"...action,order："+orderingFn.getClass()+"...start action");
+//      try {
+//        long start = System.nanoTime();
+//        long startCpuNanos = JvmUtils.safeGetThreadCpuTime();
+//
+//        int counter = 0;
+//        int batchCounter = 0;
+//        ResultBatch<T> outputBatch = new ResultBatch<>(batchSize);
+//
+//        /**{@link org.apache.druid.query.Result}*/
+//        T currentCombinedValue = initialValue;
+//        while (counter < yieldAfter && !pQueue.isEmpty()) {
+//          BatchedResultsCursor<T> cursor = pQueue.poll();
+//
+//          // push the queue along
+//          if (!cursor.isDone()) {
+//            T nextValueToAccumulate = cursor.get();
+//
+//            cursor.advance();
+//            if (!cursor.isDone()) {
+//              pQueue.offer(cursor);
+//            } else {
+//              cursor.close();
+//            }
+//
+//            counter++;
+//            // if current value is null, combine null with next value
+//            if (currentCombinedValue == null) {
+//              // 聚合器聚合查询结果
+//              currentCombinedValue = combineFn.apply(null, nextValueToAccumulate);
+//              continue;
+//            }
+//
+//            // if current value is "same" as next value, combine them
+//            /**
+//             * orderingFn.compare() 默认使用{@link com.google.common.collect.NaturalOrdering#compare(Comparable, Comparable)},
+//             */
+//            if (orderingFn.compare(currentCombinedValue, nextValueToAccumulate) == 0) {
+//              LOG.info("!!!："+tId+"...action,compare==0");
+//              // 聚合器聚合查询结果
+//              currentCombinedValue = combineFn.apply(currentCombinedValue, nextValueToAccumulate);
+//              continue;
+//            }
+//
+//            // else, push accumulated value to the queue, accumulate again with next value as initial
+//            outputBatch.add(currentCombinedValue);
+//            batchCounter++;
+//            if (batchCounter >= batchSize) {
+//              outputQueue.offer(outputBatch);// 将此次的聚合结果装入结果集queue中
+//              outputBatch = new ResultBatch<>(batchSize);
+//              metricsAccumulator.incrementOutputRows(batchCounter);
+//              batchCounter = 0;
+//            }
+//
+//            // next value is now current value
+//            // 聚合器聚合查询结果
+//            currentCombinedValue = combineFn.apply(null, nextValueToAccumulate);
+//          } else {
+//            cursor.close();
+//          }
+//        }
+//
+//        final long elapsedCpuNanos = JvmUtils.safeGetThreadCpuTime() - startCpuNanos;
+//        metricsAccumulator.incrementInputRows(counter);
+//        metricsAccumulator.incrementCpuTimeNanos(elapsedCpuNanos);
+//        metricsAccumulator.incrementTaskCount();
+//
+//        if (!pQueue.isEmpty() && !cancellationGizmo.isCancelled()) {
+//          // if there is still work to be done, execute a new task with the current accumulated value to continue
+//          // combining where we left off
+//          if (!outputBatch.isDrained()) {
+//            outputQueue.offer(outputBatch); // 将此次的聚合结果装入结果集queue中
+//            metricsAccumulator.incrementOutputRows(batchCounter);
+//          }
+//
+//          // measure the time it took to process 'yieldAfter' elements in order to project a next 'yieldAfter' value
+//          // which we want to target a 10ms task run time. smooth this value with a cumulative moving average in order
+//          // to prevent normal jitter in processing time from skewing the next yield value too far in any direction
+//          final long elapsedNanos = System.nanoTime() - start;
+//          final double nextYieldAfter = Math.max((double) targetTimeNanos * ((double) yieldAfter / elapsedCpuNanos), 1.0);
+//          final long recursionDepth = metricsAccumulator.getTaskCount();
+//          final double cumulativeMovingAverage =
+//                  (nextYieldAfter + (recursionDepth * yieldAfter)) / (recursionDepth + 1);
+//          final int adjustedNextYieldAfter = (int) Math.ceil(cumulativeMovingAverage);
+//
+//          LOG.debug(
+//                  "task recursion %s yielded %s results ran for %s millis (%s nanos), %s cpu nanos, next task yielding every %s operations",
+//                  recursionDepth,
+//                  yieldAfter,
+//                  TimeUnit.MILLISECONDS.convert(elapsedNanos, TimeUnit.NANOSECONDS),
+//                  elapsedNanos,
+//                  elapsedCpuNanos,
+//                  adjustedNextYieldAfter
+//          );
+//          getPool().execute(new MergeCombineAction<>(
+//                  pQueue,
+//                  outputQueue,
+//                  orderingFn,
+//                  combineFn,
+//                  currentCombinedValue,
+//                  adjustedNextYieldAfter,
+//                  batchSize,
+//                  targetTimeNanos,
+//                  metricsAccumulator,
+//                  cancellationGizmo,
+//                  tId
+//          ));
+//        } else if (cancellationGizmo.isCancelled()) {
+//          // if we got the cancellation signal, go ahead and write terminal value into output queue to help gracefully
+//          // allow downstream stuff to stop
+//          LOG.debug("cancelled after %s tasks", metricsAccumulator.getTaskCount());
+//          // make sure to close underlying cursors
+//          closeAllCursors(pQueue);
+//          outputQueue.offer(ResultBatch.TERMINAL);
+//        } else {
+//          // if priority queue is empty, push the final accumulated value into the output batch and push it out
+//          outputBatch.add(currentCombinedValue);
+//          metricsAccumulator.incrementOutputRows(batchCounter + 1L);
+//          outputQueue.offer(outputBatch);
+//          // ... and the terminal value to indicate the blocking queue holding the values is complete
+//          outputQueue.offer(ResultBatch.TERMINAL);
+//          LOG.debug("merge combine complete after %s tasks", metricsAccumulator.getTaskCount());
+//        }
+//      }
+//      catch (Throwable t) {
+//        closeAllCursors(pQueue);
+//        cancellationGizmo.cancel(t);
+//        outputQueue.offer(ResultBatch.TERMINAL);
+//      }
+//    }
   }
 
 
@@ -706,6 +1223,7 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
     private final long targetTimeNanos;
     private final MergeCombineActionMetricsAccumulator metricsAccumulator;
     private final CancellationGizmo cancellationGizmo;
+    private final long tId;
 
     private PrepareMergeCombineInputsAction(
         List<BatchedResultsCursor<T>> partition, // 相当于单个Sequence。来自于总的结果集List<Sequence>中，代表了某个缓存分片结果，或者某个历史节点的查询结果
@@ -716,7 +1234,8 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
         int batchSize,
         long targetTimeNanos,
         MergeCombineActionMetricsAccumulator metricsAccumulator,
-        CancellationGizmo cancellationGizmo
+        CancellationGizmo cancellationGizmo,
+        long tId
     )
     {
       this.partition = partition;
@@ -728,6 +1247,7 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
       this.targetTimeNanos = targetTimeNanos;
       this.metricsAccumulator = metricsAccumulator;
       this.cancellationGizmo = cancellationGizmo;
+      this.tId = tId;
     }
 
     @Override
@@ -735,15 +1255,21 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
     {
       PriorityQueue<BatchedResultsCursor<T>> cursors = new PriorityQueue<>(partition.size());
       try {
+        long startHis = System.currentTimeMillis();
+        LOG.info("!!!："+tId+"...ss");
         for (BatchedResultsCursor<T> cursor : partition) {
           // this is blocking
           cursor.initialize();
           if (!cursor.isDone()) {
-            cursors.offer(cursor);
+            if (cursor.get()!=null && !cursor.resultBatch.isDrained()){
+              cursors.offer(cursor);
+            }
           } else {
             cursor.close();
           }
         }
+        long endHis = System.currentTimeMillis();
+        LOG.info("!!!："+tId+"...ed,"+(endHis-startHis));
 
         if (cursors.size() > 0) {
           getPool().execute(new MergeCombineAction<T>(
@@ -756,7 +1282,8 @@ public class ParallelMergeCombiningSequence<T> extends YieldingSequenceBase<T>
               batchSize,
               targetTimeNanos,
               metricsAccumulator,
-              cancellationGizmo
+              cancellationGizmo,
+                  tId
           ));
         } else {
           outputQueue.offer(ResultBatch.TERMINAL);

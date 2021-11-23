@@ -133,6 +133,10 @@ public class StringDictionaryEncodedColumn implements DictionaryEncodedColumn<St
         return getCardinality();
       }
 
+      /**
+       * 从字典中找到id对应的值，
+       * 即此时需要返回的值已经找到，但是是字典的key，通过此方法找到字典中对应的值
+       */
       @Override
       public String lookupName(int id)
       {
@@ -163,7 +167,7 @@ public class StringDictionaryEncodedColumn implements DictionaryEncodedColumn<St
       }
     }
 
-    if (hasMultipleValues()) {
+    if (hasMultipleValues()) {// 一列是否存在多个值
       class MultiValueDimensionSelector extends QueryableDimensionSelector
       {
         @Override
@@ -212,7 +216,7 @@ public class StringDictionaryEncodedColumn implements DictionaryEncodedColumn<St
         }
       }
       return new MultiValueDimensionSelector();
-    } else {
+    } else {// 创建“单值 可查询 列选择器”
       class SingleValueQueryableDimensionSelector extends QueryableDimensionSelector
           implements SingleValueHistoricalDimensionSelector
       {
@@ -225,6 +229,10 @@ public class StringDictionaryEncodedColumn implements DictionaryEncodedColumn<St
           return row;
         }
 
+        /**
+         * 获取当前列游标所指的值的“字典id”，
+         * 后续会拿着这个id去字典中寻找对应的实际值{@link this#lookupName(int)}
+         */
         public int getRowValue()
         {
           return column.get(offset.getOffset());

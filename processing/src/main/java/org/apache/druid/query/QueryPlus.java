@@ -173,14 +173,17 @@ public final class QueryPlus<T>
    */
   public Sequence<T> run(QuerySegmentWalker walker, ResponseContext context)
   {
-    /**{@link GroupByQuery}*/
+    /**
+     * {@link GroupByQuery}
+     * {@link org.apache.druid.query.metadata.metadata.SegmentMetadataQuery
+     */
     log.info("QueryPlus初始baseQuery："+query.getClass());
     /**
      * 1、此处实际上是调用walker的getQueryRunnerForSegments()方法获取的queryRunner
      * {@link BaseQuery#getRunner(QuerySegmentWalker)}
      * |->{@link org.apache.druid.query.spec.MultipleSpecificSegmentSpec#lookup(Query, QuerySegmentWalker)}
      * |->walker.getQueryRunnerForSegments()，其中broker和historical节点的walker是不同的
-     * broker节点：{@link org.apache.druid.server.ClientQuerySegmentWalker#getQueryRunnerForSegments(Query, Iterable)}
+     * broker节点：{@link org.apache.druid.server.ClientQuerySegmentWalker#getQueryRunnerForIntervals(Query, Iterable)}
      * historical节点：{@link org.apache.druid.server.coordination.ServerManager#getQueryRunnerForSegments(Query, Iterable)}
      *
      * 参数walker为启动时注入而来，

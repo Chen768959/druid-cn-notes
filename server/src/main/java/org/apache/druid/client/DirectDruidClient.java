@@ -191,6 +191,7 @@ public class DirectDruidClient<T> implements QueryRunner<T>
   @Override
   public Sequence<T> run(final QueryPlus<T> queryPlus, final ResponseContext context)
   {
+    long tId = Thread.currentThread().getId();
     final Query<T> query = queryPlus.getQuery();
     QueryToolChest<T, Query<T>> toolChest = warehouse.getToolChest(query);
     boolean isBySegment = QueryContexts.isBySegment(query);
@@ -204,9 +205,9 @@ public class DirectDruidClient<T> implements QueryRunner<T>
      * 也就是说通过future可以获取到ClientResponse是否准备好，如果准备完毕就通过其遍历结果数据集queue队列。
      */
     final ListenableFuture<InputStream> future;
-    // url如：http://localhost:8083/druid/v2/
+    // (his地址) url如：http://localhost:8083/druid/v2/
     final String url = StringUtils.format("%s://%s/druid/v2/", scheme, host);
-    // cancelUrl如：http://localhost:8083/druid/v2/12f4f780-18f8-4e6e-9f92-de0868c62ce2
+    // (取消当前查询地址) cancelUrl如：http://localhost:8083/druid/v2/12f4f780-18f8-4e6e-9f92-de0868c62ce2
     final String cancelUrl = StringUtils.format("%s://%s/druid/v2/%s", scheme, host, query.getId());
 
     /**
@@ -587,7 +588,7 @@ public class DirectDruidClient<T> implements QueryRunner<T>
            .setHeader(
                HttpHeaders.Names.CONTENT_TYPE,
                isSmile ? SmileMediaTypes.APPLICATION_JACKSON_SMILE : MediaType.APPLICATION_JSON
-           ),
+           ).setHeader("tId_cust",tId+""),
 
           //用于异步的处理此次http调用的结果
           responseHandler,

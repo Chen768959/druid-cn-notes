@@ -42,12 +42,15 @@ import org.apache.druid.query.Result;
 import org.apache.druid.query.aggregation.Aggregator;
 import org.apache.druid.query.aggregation.AggregatorAdapters;
 import org.apache.druid.query.aggregation.AggregatorFactory;
+import org.apache.druid.query.extraction.ExtractionFn;
 import org.apache.druid.query.filter.Filter;
 import org.apache.druid.query.vector.VectorCursorGranularizer;
 import org.apache.druid.segment.SegmentMissingException;
 import org.apache.druid.segment.StorageAdapter;
 import org.apache.druid.segment.VirtualColumns;
+import org.apache.druid.segment.data.ReadableOffset;
 import org.apache.druid.segment.filter.Filters;
+import org.apache.druid.segment.vector.ReadableVectorOffset;
 import org.apache.druid.segment.vector.VectorColumnSelectorFactory;
 import org.apache.druid.segment.vector.VectorCursor;
 import org.joda.time.Interval;
@@ -85,6 +88,8 @@ public class TimeseriesQueryEngine
   }
 
   /**
+   * 单分片的runner查询逻辑
+   *
    * Run a single-segment, single-interval timeseries query on a particular adapter. The query must have been
    * scoped down to a single interval before calling this method.
    */
@@ -112,6 +117,9 @@ public class TimeseriesQueryEngine
     if (doVectorize) {
       result = processVectorized(query, adapter, filter, interval, gran, descending);
     } else {
+      /**
+       * 单分片的runner查询进入此处
+       */
       result = processNonVectorized(query, adapter, filter, interval, gran, descending);
     }
 
@@ -268,6 +276,9 @@ public class TimeseriesQueryEngine
         query.getVirtualColumns(),
         descending,
         gran,
+        /**
+         * Sequence toYielder 时执行以下逻辑查询结果
+         */
         cursor -> {
           if (skipEmptyBuckets && cursor.isDone()) {
             return null;
@@ -281,6 +292,13 @@ public class TimeseriesQueryEngine
             aggregatorNames[i] = aggregatorSpecs.get(i).getName();
           }
 
+          /**
+           * ColumnSelectorFactory:
+           * {@link org.apache.druid.segment.QueryableIndexColumnSelectorFactory}
+           *
+           * ColumnValueSelector:
+           * {@link org.apache.druid.segment.column.StringDictionaryEncodedColumn#makeDimensionSelector(ReadableOffset, ExtractionFn)}
+           */
           try {
             while (!cursor.isDone()) {
               for (Aggregator aggregator : aggregators) {

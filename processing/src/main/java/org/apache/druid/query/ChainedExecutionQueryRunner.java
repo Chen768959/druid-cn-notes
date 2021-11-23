@@ -95,6 +95,9 @@ public class ChainedExecutionQueryRunner<T> implements QueryRunner<T>
     this.queryWatcher = queryWatcher;
   }
 
+  /**
+   * 该run的作用是合并“所有单分片查询runner”的run结果。
+   */
   @Override
   public Sequence<T> run(final QueryPlus<T> queryPlus, final ResponseContext responseContext)
   {
@@ -128,11 +131,17 @@ public class ChainedExecutionQueryRunner<T> implements QueryRunner<T>
                                 public Iterable<T> call()
                                 {
                                   try {
+                                    /**
+                                     * 创建Sequence方法
+                                     */
                                     Sequence<T> result = input.run(threadSafeQueryPlus, responseContext);
                                     if (result == null) {
                                       throw new ISE("Got a null result! Segments are missing!");
                                     }
 
+                                    /**
+                                     * 执行toYield方法，即Sequence中的make方法
+                                     */
                                     List<T> retVal = result.toList();
                                     if (retVal == null) {
                                       throw new ISE("Got a null list of results");

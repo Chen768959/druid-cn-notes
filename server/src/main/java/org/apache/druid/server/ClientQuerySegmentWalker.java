@@ -154,7 +154,7 @@ public class ClientQuerySegmentWalker implements QuerySegmentWalker
   public <T> QueryRunner<T> getQueryRunnerForIntervals(Query<T> query, Iterable<Interval> intervals)
   {
     intervals.forEach(interval -> {
-//      log.info("!!!：创建MultipleSpecificSegmentSpec，此次查询interval="+interval.toString());
+      log.info("!!!：创建MultipleSpecificSegmentSpec，此次查询interval="+interval.toString());
     });
 
     //该类与自定义的扩展类有关
