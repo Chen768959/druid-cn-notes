@@ -45,7 +45,6 @@ public class LazySequence<T> implements Sequence<T>
   @Override
   public <OutType> Yielder<OutType> toYielder(OutType initValue, YieldingAccumulator<OutType, T> accumulator)
   {
-//    log.info("!!!：懒加载Sequence被调用toYielder");
     /**
      * 此处provider.get()实际上就是调用之前准备的匿名函数，用于发送http请求获取查询结果，
      * 也是在此处才真正进行查询的

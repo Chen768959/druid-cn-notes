@@ -15,6 +15,8 @@ import java.io.InputStreamReader;
 public class CustomConfig {
   private static final Logger LOG = new Logger(CustomConfig.class);
 
+  public static final String DISTRIBUTE_MERGE = "distributeMerge";
+
   public static boolean needQuickMerge(Query query){
     boolean needQuickMerge = false;
 
@@ -61,5 +63,52 @@ public class CustomConfig {
     }
 
     return needQuickMerge;
+  }
+
+  public static boolean needDistributeMerge(Query query){
+    boolean needDistributeMerge = false;
+
+    if ("true".equals(query.getContextValue(DISTRIBUTE_MERGE))){
+      needDistributeMerge = true;
+    }else if ((!"false".equals(query.getContextValue(DISTRIBUTE_MERGE)))){
+      FileInputStream fileInputStream = null;
+      InputStreamReader inputStreamReader = null;
+      BufferedReader bufferedReader = null;
+      try {
+        File file = new File("/data/druid-config/distributeMerge.config");
+        if (file.exists()){
+          fileInputStream = new FileInputStream(file);
+          inputStreamReader = new InputStreamReader(fileInputStream);
+          bufferedReader = new BufferedReader(inputStreamReader);
+          String dataSourceName = "";
+          config: while ((dataSourceName = bufferedReader.readLine()) != null) {
+            for (String tableName : query.getDataSource().getTableNames()) {
+              if (dataSourceName.equals(tableName) || "all".equals(dataSourceName)){
+                needDistributeMerge = true;
+                break config;
+              }
+            }
+          }
+        }
+      }catch (Exception e){
+        LOG.warn("distributeMerge.config read error");
+      }finally {
+        try {
+          if (fileInputStream!=null){
+            fileInputStream.close();
+          }
+          if (inputStreamReader!=null){
+            inputStreamReader.close();
+          }
+          if (bufferedReader!=null){
+            bufferedReader.close();
+          }
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
+      }
+    }
+
+    return needDistributeMerge;
   }
 }

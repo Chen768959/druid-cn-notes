@@ -192,6 +192,10 @@ public class CachingClusteredClient implements QuerySegmentWalker
   @Override
   public <T> QueryRunner<T> getQueryRunnerForIntervals(final Query<T> query, final Iterable<Interval> intervals)
   {
+    /**
+     * 该runner为broker查询末端runner，
+     * 其中run方法负责了his请求与结果聚合
+     */
     return new QueryRunner<T>()
     {
       @Override
@@ -503,79 +507,132 @@ public class CachingClusteredClient implements QuerySegmentWalker
       final SortedMap<DruidServer, List<SegmentDescriptor>> segmentsByServer = groupSegmentsByServer(segmentServers);
 
       /**
-       * 懒加载获取此次查询的结果，
-       *
-       * 在后续调用Sequence结果的“toYielder”方法时，
-       * 才会执行以下匿名方法，开始查询
-       *
-       * 此处返回“最顶层Sequence”，
-       * 以下传入的匿名函数会在调用toYield()时被执行，然后该匿名函数也会返回一个Sequence，
-       * 执行完以下匿名函数并获取子Sequence后，会接着调用子Sequence.toYield()方法，就相当于一个链路一样，
-       *
-       * Sequence链路toYield，转Yield过程如下：
-       * 以下LazySequence执行入参匿名函数
-       *  ->{@link this#merge(List)}
-       *  // 如果使用单线程处理his查询结果，则进行以下逻辑，并传入所有查询结果数据
-       *  ->{@link BaseSequence#toYielder(Object, YieldingAccumulator)}
-       *    ->由YieldingAccumulator聚合每一个Sequence，再将聚合结果与下一个Sequence聚合，最终返回一个聚合后的Yield对象
+       * !ndm
+       * 发送分布式聚合请求，且阻塞至最终查询聚合完毕
        */
-      LazySequence<T> mergedResultSequence = new LazySequence<>(
-              /**
-               * 创建匿名函数{@link Supplier#get()}
-               *
-               * 该函数根据segment所在主机的信息，使用netty发送http请求，
-               * 获取所有主机返回的查询结果后，交由merge函数汇总
-               */
-              () -> {
+      if (CustomConfig.needDistributeMerge(query)){
+        LazySequence<T> mergedResultSequence = new LazySequence<>(
+                () -> {
+                  // 准备分布式聚合所需参数
+                  updateDistributeMergeQuery(queryPlus.getQuery());
+                  // 发送http请求至所有待查询his
+                  getSequencesFromServer(segmentsByServer);
+                  // 阻塞，直至查询结果主动返回
+                  return waitDistributeResult();
+                });
+        return new ClusterQueryResult<>(scheduler.run(query, mergedResultSequence), segmentsByServer.size());
+      }else {
         /**
-         * alreadyCachedResults.size()：缓存的每个分片的结果数量
-         * segmentsByServer.size()：待查询的主机数量
+         * 懒加载获取此次查询的结果，
+         *
+         * 在后续调用Sequence结果的“toYielder”方法时，
+         * 才会执行以下匿名方法，开始查询
+         *
+         * 此处返回“最顶层Sequence”，
+         * 以下传入的匿名函数会在调用toYield()时被执行，然后该匿名函数也会返回一个Sequence，
+         * 执行完以下匿名函数并获取子Sequence后，会接着调用子Sequence.toYield()方法，就相当于一个链路一样，
+         *
+         * Sequence链路toYield，转Yield过程如下：
+         * 以下LazySequence执行入参匿名函数
+         *  ->{@link this#merge(List)}
+         *  // 如果使用单线程处理his查询结果，则进行以下逻辑，并传入所有查询结果数据
+         *  ->{@link BaseSequence#toYielder(Object, YieldingAccumulator)}
+         *    ->由YieldingAccumulator聚合每一个Sequence，再将聚合结果与下一个Sequence聚合，最终返回一个聚合后的Yield对象
          */
-        List<Sequence<T>> sequencesByInterval = new ArrayList<>(alreadyCachedResults.size() + segmentsByServer.size());
+        LazySequence<T> mergedResultSequence = new LazySequence<>(
+                /**
+                 * 创建匿名函数{@link Supplier#get()}
+                 *
+                 * 该函数根据segment所在主机的信息，使用netty发送http请求，
+                 * 获取所有主机返回的查询结果后，交由merge函数汇总
+                 */
+                () -> {
+                  /**
+                   * alreadyCachedResults.size()：缓存的每个分片的结果数量
+                   * segmentsByServer.size()：待查询的主机数量
+                   */
+                  List<Sequence<T>> sequencesByInterval = new ArrayList<>(alreadyCachedResults.size() + segmentsByServer.size());
 
-        // 将每一个byte[]分片缓存结果 都封装成一个Sequence，并装入sequencesByInterval中
-        addSequencesFromCache(sequencesByInterval, alreadyCachedResults);
+                  // 将每一个byte[]分片缓存结果 都封装成一个Sequence，并装入sequencesByInterval中
+                  addSequencesFromCache(sequencesByInterval, alreadyCachedResults);
+
+                  /**
+                   * 异步向各历史节点发送http chunk查询请求，查询该节点上的所有分片数据。
+                   * 查询结果会回调存入feature对象中，通过操作feature可判断结果是否响应完毕，响应完毕就可进行查询。
+                   * 而每一个节点的feature查询结果都会被封装成一个Sequence对象装入listOfSequences结果集中
+                   */
+                  addSequencesFromServer(sequencesByInterval, segmentsByServer);
+
+                  /**
+                   * sequencesByInterval（List<Sequence>）里面包含了两种东西：
+                   * 1、每一个byte[]分片缓存结果，都被封装成一个Sequence对象
+                   * 2、每一台主机的异步查询结果feature，都被封装成一个Sequence对象
+                   */
+                  return merge(sequencesByInterval);
+                });
 
         /**
-         * 异步向各历史节点发送http chunk查询请求，查询该节点上的所有分片数据。
-         * 查询结果会回调存入feature对象中，通过操作feature可判断结果是否响应完毕，响应完毕就可进行查询。
-         * 而每一个节点的feature查询结果都会被封装成一个Sequence对象装入listOfSequences结果集中
+         * ClusterQueryResult：
+         * 封装此次查询结果
+         *
+         * scheduler.run：
+         *
+         *
+         * 将查询对象交由scheduler调度器来查询
+         *
+         * scheduler：注入进来，
+         *
+         * query：与原本对象相比，此方法中将上下文中的lane参数解析并设置了进去（lane默认为null）
+         * 该参数用来控制“查询工作负载的利用率”，
+         * 所谓通道目的是让用户能控制每次查询，希望占用的资源是多少，不同查询重要程度不同，希望其占用的资源多少也可能不同，
+         * lane就是用来控制通道策略
+         *
+         * mergedResultSequence：
+         * 其中包含了上面设置的匿名函数，可根据segment主机信息发送http请求获取查询结果，然后汇总后返回查询结果
+         *
+         * segmentsByServer.size()：
+         * segmentsByServer是个map，
+         * key是之前解析的DruidServer（druid主机对象），
+         * value是SegmentDescriptor标识该主机上所有查询所需的segment
          */
-        addSequencesFromServer(sequencesByInterval, segmentsByServer);
+        return new ClusterQueryResult<>(scheduler.run(query, mergedResultSequence), segmentsByServer.size());
+      }
+    }
 
-        /**
-         * sequencesByInterval（List<Sequence>）里面包含了两种东西：
-         * 1、每一个byte[]分片缓存结果，都被封装成一个Sequence对象
-         * 2、每一台主机的异步查询结果feature，都被封装成一个Sequence对象
-         */
-        return merge(sequencesByInterval);
-      });
+    /**
+     * 准备分布式聚合所需参数
+     * @param query
+     * @author Chen768959
+     * @date 2021/11/23 下午 6:44
+     * @return void
+     */
+    private void updateDistributeMergeQuery(Query<T> query) {
+      Map<String, Object> context = query.getContext();
+      // 聚合参数强制设置为true
+      context.put(CustomConfig.DISTRIBUTE_MERGE,"true");
+    }
 
-      /**
-       * ClusterQueryResult：
-       * 封装此次查询结果
-       *
-       * scheduler.run：
-       *
-       *
-       * 将查询对象交由scheduler调度器来查询
-       *
-       * scheduler：注入进来，
-       *
-       * query：与原本对象相比，此方法中将上下文中的lane参数解析并设置了进去（lane默认为null）
-       * 该参数用来控制“查询工作负载的利用率”，
-       * 所谓通道目的是让用户能控制每次查询，希望占用的资源是多少，不同查询重要程度不同，希望其占用的资源多少也可能不同，
-       * lane就是用来控制通道策略
-       *
-       * mergedResultSequence：
-       * 其中包含了上面设置的匿名函数，可根据segment主机信息发送http请求获取查询结果，然后汇总后返回查询结果
-       *
-       * segmentsByServer.size()：
-       * segmentsByServer是个map，
-       * key是之前解析的DruidServer（druid主机对象），
-       * value是SegmentDescriptor标识该主机上所有查询所需的segment
-       */
-      return new ClusterQueryResult<>(scheduler.run(query, mergedResultSequence), segmentsByServer.size());
+    /**
+     * 阻塞，直至聚合结果主动从his返回
+     * @author Chen768959
+     * @date 2021/11/23 下午 6:57
+     * @return org.apache.druid.java.util.common.guava.Sequence<T>
+     */
+    private <T> Sequence<T> waitDistributeResult() {
+      String queryId = queryPlus.getQuery().getId();
+      Object key = new Object();
+      Sequence distributeMergeResult = Sequences.empty();
+      try {
+        DistributeMergeManager.getInstance().waitThread(queryId, key);
+        // 等待查询结果
+        synchronized (key){
+          distributeMergeResult = DistributeMergeManager.getInstance().getDistributeMergeResult(queryId);
+        }
+      } catch (InterruptedException e) {
+        log.error("waitDistributeResult error",e);
+      }
+
+      return distributeMergeResult;
     }
 
     /**
@@ -1058,6 +1115,66 @@ public class CachingClusteredClient implements QuerySegmentWalker
         );
         listOfSequences.add(Sequences.map(cachedSequence, pullFromCacheFunction));
       }
+    }
+
+    private void getSequencesFromServer(SortedMap<DruidServer, List<SegmentDescriptor>> segmentsByServer) {
+      // 遍历每一台待查询his主机
+      segmentsByServer.forEach((server, segmentsOfServer) -> {
+        /**
+         * {@link BrokerServerView#getQueryRunner(DruidServer)}
+         * 在broker节点启动时，
+         * 就根据所有segment所在主机的主机信息，生成了每个主机的queryRunner对象，并存入了serverView中，
+         *
+         * 此处就是根据主机描述信息，取出了对应的主机queryRunner查询对象，
+         * queryRunner类型为：{@link DirectDruidClient}
+         */
+        final QueryRunner serverRunner = serverView.getQueryRunner(server);
+
+        if (serverRunner == null) {
+          log.error("Server[%s] doesn't have a query runner", server.getName());
+          return;
+        }
+
+        // Divide user-provided maxQueuedBytes by the number of servers, and limit each server to that much.
+        final long maxQueuedBytes = QueryContexts.getMaxQueuedBytes(query, httpClientConfig.getMaxQueuedBytes());
+        final long maxQueuedBytesPerServer = maxQueuedBytes / segmentsByServer.size();
+
+        /**
+         * 默认为false，为请求上下文中配置
+         * 将其设置为true将返回与它们来自的数据段关联的结果
+         * 多用于调试
+         */
+        if (isBySegment) {
+//          log.info("!!!：进入getBySegmentServerResults");
+          getBySegmentServerResults(serverRunner, segmentsOfServer, maxQueuedBytesPerServer);
+
+          /**
+           * 判断是否将查询结果存于缓存，也是在上下文中配置，默认为true
+           */
+        } else if (!server.isSegmentReplicationTarget() || !populateCache) { // 查询结果不做缓存
+//          log.info("!!!：进入getSimpleServerResults...");
+          /**
+           * 此处调用serverRunner.run()方法，
+           * 从一个历史（实时）节点上，异步查询该节点所有待查询的分片结果。
+           *
+           * 该方法中使用netty，异步发送查询此主机所有分片信息的请求：
+           * 然后异步线程每收到一个数据包，就交由一个responseHandler对象处理，
+           * handler会将“请求头+请求行+后续所有chunk包”，全部依次handle的内部queue队列中
+           * 当异步线程接收并处理完所有chunk时，就将handler的处理结果“ClientResponse”对象装入一个future中。
+           * （ClientResponse对象可以操作遍历handler内部的queue队列）
+           * 也就是说通过future可以获取到ClientResponse是否准备好，如果准备完毕就通过其遍历结果数据集queue队列。
+           * 然后这个future又会被封装进Sequence，等着Sequence被迭代时，来迭代异步的响应查询结果。
+           * 总结：
+           * 异步请求后，异步线程收到的结果集会封装进future对象中，future可判断结果集是否准备好，
+           * 如果所有结果都获取到了，则future中可查询出此次响应结果，
+           * 而future存在于此次Sequence响应中
+           */
+          getSimpleServerResults(serverRunner, segmentsOfServer, maxQueuedBytesPerServer);
+        } else { // 查询结果做缓存
+//          log.info("!!!：进入getAndCacheServerResults");
+          getAndCacheServerResults(serverRunner, segmentsOfServer, maxQueuedBytesPerServer);
+        }
+      });
     }
 
     /**
