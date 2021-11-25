@@ -197,6 +197,7 @@
         <module>extensions-contrib/aliyun-oss-extensions</module>
         <!-- distribution packaging -->
         <module>distribution</module>
+        <module>druid-distribute-merge</module>
     </modules>
 
     <repositories>

@@ -58,7 +58,9 @@ public class ResultMergeQueryRunner<T> extends BySegmentSkippingQueryRunner<T>
   public Sequence<T> doRun(QueryRunner<T> baseRunner, QueryPlus<T> queryPlus, ResponseContext context)
   {
     Query<T> query = queryPlus.getQuery();
+    // 在各个分片的查询结果外面包上一层“CombiningSequence”，该sequence的accumulate方法，会combine每个单分片的结果。
     return CombiningSequence.create(
+        // baseRunner中包含了每个分片的agg结果
         baseRunner.run(queryPlus, context), // 执行所有“单分片runner”.run()，获取所有单分片的查询结果
         comparatorGenerator.apply(query),
         mergeFnGenerator.apply(query));

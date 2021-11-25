@@ -19,7 +19,6 @@
 
 package org.apache.druid.client;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Function;
@@ -54,7 +53,6 @@ import org.apache.druid.java.util.common.guava.LazySequence;
 import org.apache.druid.java.util.common.guava.ParallelMergeCombiningSequence;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
-import org.apache.druid.java.util.common.guava.ThreadPoolMergeCombiningSequence;
 import org.apache.druid.java.util.common.guava.YieldingAccumulator;
 import org.apache.druid.java.util.emitter.EmittingLogger;
 import org.apache.druid.query.BaseQuery;
@@ -78,7 +76,6 @@ import org.apache.druid.query.context.ResponseContext;
 import org.apache.druid.query.context.ResponseContext.Key;
 import org.apache.druid.query.filter.DimFilterUtils;
 import org.apache.druid.query.planning.DataSourceAnalysis;
-import org.apache.druid.query.scan.ScanQuery;
 import org.apache.druid.query.spec.MultipleIntervalSegmentSpec;
 import org.apache.druid.query.spec.MultipleSpecificSegmentSpec;
 import org.apache.druid.query.spec.QuerySegmentSpec;
@@ -86,7 +83,6 @@ import org.apache.druid.server.QueryResource;
 import org.apache.druid.server.QueryScheduler;
 import org.apache.druid.server.coordination.DruidServerMetadata;
 import org.apache.druid.timeline.DataSegment;
-import org.apache.druid.timeline.Partitions;
 import org.apache.druid.timeline.SegmentId;
 import org.apache.druid.timeline.TimelineLookup;
 import org.apache.druid.timeline.TimelineObjectHolder;
@@ -96,11 +92,7 @@ import org.apache.druid.timeline.partition.PartitionHolder;
 import org.joda.time.Interval;
 
 import javax.annotation.Nullable;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -623,10 +615,10 @@ public class CachingClusteredClient implements QuerySegmentWalker
       Object key = new Object();
       Sequence distributeMergeResult = Sequences.empty();
       try {
-        DistributeMergeManager.getInstance().waitThread(queryId, key);
+        DistributeResultManager.getInstance().waitThread(queryId, key);
         // 等待查询结果
         synchronized (key){
-          distributeMergeResult = DistributeMergeManager.getInstance().getDistributeMergeResult(queryId);
+          distributeMergeResult = DistributeResultManager.getInstance().getDistributeMergeResult(queryId);
         }
       } catch (InterruptedException e) {
         log.error("waitDistributeResult error",e);

@@ -24,6 +24,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
 import com.google.inject.Inject;
 import org.apache.druid.client.CachingQueryRunner;
+import org.apache.druid.client.DistributeMergeManager;
 import org.apache.druid.client.cache.Cache;
 import org.apache.druid.client.cache.CacheConfig;
 import org.apache.druid.client.cache.CachePopulator;
@@ -33,10 +34,13 @@ import org.apache.druid.guice.annotations.Smile;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.StringUtils;
 import org.apache.druid.java.util.common.guava.FunctionalIterable;
+import org.apache.druid.java.util.common.guava.Sequence;
+import org.apache.druid.java.util.common.guava.Sequences;
 import org.apache.druid.java.util.emitter.EmittingLogger;
 import org.apache.druid.java.util.emitter.service.ServiceEmitter;
 import org.apache.druid.query.BySegmentQueryRunner;
 import org.apache.druid.query.CPUTimeMetricQueryRunner;
+import org.apache.druid.query.CustomConfig;
 import org.apache.druid.query.FinalizeResultsQueryRunner;
 import org.apache.druid.query.MetricsEmittingQueryRunner;
 import org.apache.druid.query.NoopQueryRunner;
@@ -45,6 +49,7 @@ import org.apache.druid.query.PerSegmentQueryOptimizationContext;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.QueryDataSource;
 import org.apache.druid.query.QueryMetrics;
+import org.apache.druid.query.QueryPlus;
 import org.apache.druid.query.QueryRunner;
 import org.apache.druid.query.QueryRunnerFactory;
 import org.apache.druid.query.QueryRunnerFactoryConglomerate;
@@ -53,12 +58,14 @@ import org.apache.druid.query.QueryToolChest;
 import org.apache.druid.query.QueryUnsupportedException;
 import org.apache.druid.query.ReferenceCountingSegmentQueryRunner;
 import org.apache.druid.query.ReportTimelineMissingSegmentQueryRunner;
+import org.apache.druid.query.Result;
 import org.apache.druid.query.SegmentDescriptor;
 import org.apache.druid.query.context.ResponseContext;
 import org.apache.druid.query.planning.DataSourceAnalysis;
 import org.apache.druid.query.spec.SpecificSegmentQueryRunner;
 import org.apache.druid.query.spec.SpecificSegmentSpec;
 import org.apache.druid.query.timeseries.TimeseriesQueryQueryToolChest;
+import org.apache.druid.query.timeseries.TimeseriesResultValue;
 import org.apache.druid.segment.ReferenceCountingSegment;
 import org.apache.druid.segment.SegmentReference;
 import org.apache.druid.segment.join.JoinableFactory;
@@ -73,8 +80,11 @@ import org.apache.druid.timeline.partition.PartitionHolder;
 import org.joda.time.Interval;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
@@ -237,6 +247,7 @@ public class ServerManager implements QuerySegmentWalker
         analysis.getBaseQuery().orElse(query)
     );
 
+    // log
     specs.forEach(sp->{
       try {
         log.info("!!!：his节点合并runner，正在创建runner，spec："+new ObjectMapper().writeValueAsString(sp));
@@ -244,9 +255,8 @@ public class ServerManager implements QuerySegmentWalker
         log.info("!!!：his节点合并runner，正在创建runner，spec解析失败");
       }
     });
-    /**
-     * 该runners，其每一个runner都是用来处理一个segment分片的查询
-     */
+
+    // 该runners负责agg各个seg分片
     final FunctionalIterable<QueryRunner<T>> queryRunners = FunctionalIterable
         /**
          * 创建函数式工具类{@link FunctionalIterable}
@@ -278,24 +288,55 @@ public class ServerManager implements QuerySegmentWalker
         );
 
     /**
-     * 上一步已经获得了多个queryRunner：
-     * 每一个时间片段的segment都有一个对应的QueryRunner。
-     *
-     * 此处的exec是线程池，用来并发执行queryRunners中的各个runner，
-     * 即并发的从各segment中查询数据。
-     *
-     * factory.mergeRunners():{@link org.apache.druid.query.timeseries.TimeseriesQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
-     * ->创建：{@link org.apache.druid.query.ChainedExecutionQueryRunner}
-     * toolChest.mergeResults():{@link TimeseriesQueryQueryToolChest#mergeResults(QueryRunner)}
+     * !ndm
+     * runners中包含了新engine，可将各分片kv结果封装返回，
+     * 此处建立runner执行runners，并处理kv列表，返回空结果集给当前请求线程。
      */
-    log.info("!!!：his节点合并runner，正在创建runner，factory："+factory.getClass());
-    QueryRunner<T> queryRunner = factory.mergeRunners(exec, queryRunners);
-    log.info("!!!：his节点合并runner，正在创建runner，toolChest："+toolChest.getClass());
+    QueryRunner<T> tFinalizeResultsQueryRunner = null;
+    if (CustomConfig.needDistributeMerge(query)){
+      // 判断是否需要使用自定义线程数线程池
+      int executorCount = CustomConfig.getExecutorCount();
+      ExecutorService execC = exec;
+      if (executorCount>0){
+        execC = Executors.newFixedThreadPool(executorCount);
+      }
+
+      QueryRunner<T> queryRunner = factory.mergeRunners(execC, queryRunners);
+      tFinalizeResultsQueryRunner = (queryPlus, responseContext) -> {
+        // 执行，但不返回agg结果，当前请求线程中也不执行
+        Sequence<T> aggKVRes = queryRunner.run(queryPlus, responseContext);
+        // 将agg结果列表交由dm线程并发聚合
+        DistributeMergeManager.getInstance().startMerge(queryPlus.getQuery(), aggKVRes);
+        return Sequences.empty();
+      };
+    }else {
+      /**
+       * 上一步已经获得了多个queryRunner：
+       * 每一个时间片段的segment都有一个对应的QueryRunner。
+       *
+       * 此处返回的queryRunner是多个queryrunner横合并后的总runner，其run方法就是查询上述每个分片runner的run方法。
+       * 此处的exec是线程池，用来并发执行queryRunners中的各个runner，
+       * 即并发的从各segment中查询数据。
+       *
+       * factory.mergeRunners():{@link org.apache.druid.query.timeseries.TimeseriesQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}
+       * ->创建：{@link org.apache.druid.query.ChainedExecutionQueryRunner}
+       * toolChest.mergeResults():{@link TimeseriesQueryQueryToolChest#mergeResults(QueryRunner)}
+       */
+      QueryRunner<T> queryRunner = factory.mergeRunners(exec, queryRunners);
+
+      tFinalizeResultsQueryRunner = new FinalizeResultsQueryRunner<>(
+              /**
+               * queryRunner中返回的迭代器中包含了每个分片的agg结果，
+               * 此处mergeResults主要体现在{@link org.apache.druid.query.ResultMergeQueryRunner#doRun(QueryRunner, QueryPlus, ResponseContext)}
+               * 其中在queryRunner返回的结果外面包上一层“CombiningSequence”，该sequence的accumulate方法，会combine每个单分片的结果。
+               */
+              toolChest.mergeResults(queryRunner),
+              toolChest
+      );
+    }
+
     return CPUTimeMetricQueryRunner.safeBuild(
-        new FinalizeResultsQueryRunner<>(
-            toolChest.mergeResults(queryRunner),
-            toolChest
-        ),
+        tFinalizeResultsQueryRunner,
         toolChest,
         emitter,
         cpuTimeAccumulator,
@@ -352,7 +393,7 @@ public class ServerManager implements QuerySegmentWalker
   }
 
   /**
-   *
+   * 创建单个seg分片的runner
    * @param factory 根据query的class类型来获取QueryRunnerFactory对象
    * @param toolChest
    * @param segment  如果此次查询不涉及子查询，则此segment数据就是“请求对象对应分区上的segment数据对象”

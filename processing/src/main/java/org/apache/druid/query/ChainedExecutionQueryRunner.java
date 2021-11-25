@@ -63,6 +63,7 @@ public class ChainedExecutionQueryRunner<T> implements QueryRunner<T>
 {
   private static final Logger log = new Logger(ChainedExecutionQueryRunner.class);
 
+  // 各个分片对应的runner
   private final Iterable<QueryRunner<T>> queryables;
   private final ListeningExecutorService exec;
   private final QueryWatcher queryWatcher;
@@ -132,7 +133,8 @@ public class ChainedExecutionQueryRunner<T> implements QueryRunner<T>
                                 {
                                   try {
                                     /**
-                                     * 创建Sequence方法
+                                     * 执行每个分片的runner
+                                     * 由{@link (server)ServerManager#getQueryRunnerForSegments()}内部匿名函数创建
                                      */
                                     Sequence<T> result = input.run(threadSafeQueryPlus, responseContext);
                                     if (result == null) {

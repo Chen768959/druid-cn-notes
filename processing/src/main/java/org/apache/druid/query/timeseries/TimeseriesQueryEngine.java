@@ -300,23 +300,17 @@ public class TimeseriesQueryEngine
            * {@link org.apache.druid.segment.column.StringDictionaryEncodedColumn#makeDimensionSelector(ReadableOffset, ExtractionFn)}
            */
           try {
+            // agg当前分片每一行
             while (!cursor.isDone()) {
               for (Aggregator aggregator : aggregators) {
                 aggregator.aggregate();
               }
               cursor.advance();
             }
-            log.info("!!!：his节点合并runner，执行runner，aggregator完毕");
-            for (Aggregator aggregator : aggregators) {
-              try {
-                log.info("!!!：his节点合并runner，执行runner，aggregator完毕，aggregator："+aggregator+"...res:"+ new ObjectMapper().writeValueAsString(Optional.ofNullable(aggregator.get()).orElse("")));
-              } catch (JsonProcessingException e) {
-                log.info("!!!：his节点合并runner，aggregatorres解析异常");
-              }
-            }
 
             TimeseriesResultBuilder bob = new TimeseriesResultBuilder(cursor.getTime());
 
+            // 获取agg结果
             for (int i = 0; i < aggregatorSpecs.size(); i++) {
               bob.addMetric(aggregatorNames[i], aggregators[i].get());
             }

@@ -111,4 +111,38 @@ public class CustomConfig {
 
     return needDistributeMerge;
   }
+
+  public static int getExecutorCount(){
+    int executorCount = 0;
+    FileInputStream fileInputStream = null;
+    InputStreamReader inputStreamReader = null;
+    BufferedReader bufferedReader = null;
+    try {
+      File file = new File("/data/druid-config/hisExecutorInt.config");
+      if (file.exists()){
+        fileInputStream = new FileInputStream(file);
+        inputStreamReader = new InputStreamReader(fileInputStream);
+        bufferedReader = new BufferedReader(inputStreamReader);
+        executorCount = Integer.parseInt(bufferedReader.readLine());
+      }
+    }catch (Exception e){
+      LOG.warn("distributeMerge.config read error");
+    }finally {
+      try {
+        if (fileInputStream!=null){
+          fileInputStream.close();
+        }
+        if (inputStreamReader!=null){
+          inputStreamReader.close();
+        }
+        if (bufferedReader!=null){
+          bufferedReader.close();
+        }
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+
+    return executorCount;
+  }
 }
