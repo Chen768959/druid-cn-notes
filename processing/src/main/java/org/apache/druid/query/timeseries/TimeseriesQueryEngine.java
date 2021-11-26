@@ -27,6 +27,8 @@ import com.google.inject.Inject;
 import org.apache.druid.collections.NonBlockingPool;
 import org.apache.druid.collections.ResourceHolder;
 import org.apache.druid.collections.StupidPool;
+import org.apache.druid.distribute.DistributeAggregator;
+import org.apache.druid.distribute.DistributeAggregatorFactory;
 import org.apache.druid.guice.annotations.Global;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.granularity.Granularity;
@@ -34,6 +36,7 @@ import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.java.util.common.guava.Sequences;
 import org.apache.druid.java.util.common.io.Closer;
 import org.apache.druid.java.util.common.logger.Logger;
+import org.apache.druid.query.CustomConfig;
 import org.apache.druid.query.DruidProcessingConfig;
 import org.apache.druid.query.FinalizeResultsQueryRunner;
 import org.apache.druid.query.QueryContexts;
@@ -57,6 +60,7 @@ import org.joda.time.Interval;
 
 import javax.annotation.Nullable;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -284,43 +288,95 @@ public class TimeseriesQueryEngine
             return null;
           }
 
-          Aggregator[] aggregators = new Aggregator[aggregatorSpecs.size()];
-          String[] aggregatorNames = new String[aggregatorSpecs.size()];
+          // !ndm 分布式聚合逻辑====================================================================
+          if (CustomConfig.needDistributeMerge(query)){
+            List<DistributeAggregator> aggregators = new ArrayList<>();
+            List<String> aggregatorNames = new ArrayList<>();
 
-          for (int i = 0; i < aggregatorSpecs.size(); i++) {
-            aggregators[i] = aggregatorSpecs.get(i).factorize(cursor.getColumnSelectorFactory());
-            aggregatorNames[i] = aggregatorSpecs.get(i).getName();
-          }
-
-          /**
-           * ColumnSelectorFactory:
-           * {@link org.apache.druid.segment.QueryableIndexColumnSelectorFactory}
-           *
-           * ColumnValueSelector:
-           * {@link org.apache.druid.segment.column.StringDictionaryEncodedColumn#makeDimensionSelector(ReadableOffset, ExtractionFn)}
-           */
-          try {
-            // agg当前分片每一行
-            while (!cursor.isDone()) {
-              for (Aggregator aggregator : aggregators) {
-                aggregator.aggregate();
-              }
-              cursor.advance();
-            }
-
-            TimeseriesResultBuilder bob = new TimeseriesResultBuilder(cursor.getTime());
-
-            // 获取agg结果
             for (int i = 0; i < aggregatorSpecs.size(); i++) {
-              bob.addMetric(aggregatorNames[i], aggregators[i].get());
+              if (aggregatorSpecs.get(i).getClass().isAssignableFrom(DistributeAggregatorFactory.class)){
+                aggregators.add(((DistributeAggregatorFactory) aggregatorSpecs.get(i)).factorizeDistribute(cursor.getColumnSelectorFactory()));
+                aggregatorNames.add(aggregatorSpecs.get(i).getName());
+              }
             }
 
-            return bob.build();
-          }
-          finally {
-            // cleanup
-            for (Aggregator agg : aggregators) {
-              agg.close();
+            if (aggregators.isEmpty()){
+              log.warn("DistributeAggregator is Empty");
+              return null;
+            }
+
+            /**
+             * ColumnSelectorFactory:
+             * {@link org.apache.druid.segment.QueryableIndexColumnSelectorFactory}
+             *
+             * ColumnValueSelector:
+             * {@link org.apache.druid.segment.column.StringDictionaryEncodedColumn#makeDimensionSelector(ReadableOffset, ExtractionFn)}
+             */
+            try {
+              // agg当前分片中的每一行
+              while (!cursor.isDone()) {
+                for (Aggregator aggregator : aggregators) {
+                  aggregator.aggregate();
+                }
+                cursor.advance();
+              }
+
+              TimeseriesResultBuilder bob = new TimeseriesResultBuilder(cursor.getTime());
+
+              // 获取agg结果
+              for (int i = 0; i < aggregators.size(); i++) {
+                bob.addMetric(aggregatorNames.get(i), aggregators.get(i).getKV());
+              }
+
+              return bob.build();
+            }
+            finally {
+              // cleanup
+              for (Aggregator agg : aggregators) {
+                agg.close();
+              }
+            }
+
+          // 单机聚合逻辑======================================================================
+          }else {
+            Aggregator[] aggregators = new Aggregator[aggregatorSpecs.size()];
+            String[] aggregatorNames = new String[aggregatorSpecs.size()];
+
+            for (int i = 0; i < aggregatorSpecs.size(); i++) {
+              aggregators[i] = aggregatorSpecs.get(i).factorize(cursor.getColumnSelectorFactory());
+              aggregatorNames[i] = aggregatorSpecs.get(i).getName();
+            }
+
+            /**
+             * ColumnSelectorFactory:
+             * {@link org.apache.druid.segment.QueryableIndexColumnSelectorFactory}
+             *
+             * ColumnValueSelector:
+             * {@link org.apache.druid.segment.column.StringDictionaryEncodedColumn#makeDimensionSelector(ReadableOffset, ExtractionFn)}
+             */
+            try {
+              // agg当前分片中的每一行
+              while (!cursor.isDone()) {
+                for (Aggregator aggregator : aggregators) {
+                  aggregator.aggregate();
+                }
+                cursor.advance();
+              }
+
+              TimeseriesResultBuilder bob = new TimeseriesResultBuilder(cursor.getTime());
+
+              // 获取agg结果
+              for (int i = 0; i < aggregatorSpecs.size(); i++) {
+                bob.addMetric(aggregatorNames[i], aggregators[i].get());
+              }
+
+              return bob.build();
+            }
+            finally {
+              // cleanup
+              for (Aggregator agg : aggregators) {
+                agg.close();
+              }
             }
           }
         }

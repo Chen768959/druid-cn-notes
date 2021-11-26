@@ -112,13 +112,14 @@ public class CustomConfig {
     return needDistributeMerge;
   }
 
-  public static int getExecutorCount(){
+  // his节点并发查询segment的线程池
+  public static int getHisSegExecutorCount(){
     int executorCount = 0;
     FileInputStream fileInputStream = null;
     InputStreamReader inputStreamReader = null;
     BufferedReader bufferedReader = null;
     try {
-      File file = new File("/data/druid-config/hisExecutorInt.config");
+      File file = new File("/data/druid-config/hisSegExecutorCount.config");
       if (file.exists()){
         fileInputStream = new FileInputStream(file);
         inputStreamReader = new InputStreamReader(fileInputStream);
@@ -144,5 +145,84 @@ public class CustomConfig {
     }
 
     return executorCount;
+  }
+
+  // his节点分布式聚合中，并发处理查询请求的线程池（关系到集群可并发处理请求的数量）
+  public static int getHisDistributeExecutorCount(){
+    int executorCount = 10;
+    FileInputStream fileInputStream = null;
+    InputStreamReader inputStreamReader = null;
+    BufferedReader bufferedReader = null;
+    try {
+      File file = new File("/data/druid-config/hisDistributeExecutorCount.config");
+      if (file.exists()){
+        fileInputStream = new FileInputStream(file);
+        inputStreamReader = new InputStreamReader(fileInputStream);
+        bufferedReader = new BufferedReader(inputStreamReader);
+        executorCount = Integer.parseInt(bufferedReader.readLine());
+      }
+    }catch (Exception e){
+      LOG.warn("distributeMerge.config read error");
+    }finally {
+      try {
+        if (fileInputStream!=null){
+          fileInputStream.close();
+        }
+        if (inputStreamReader!=null){
+          inputStreamReader.close();
+        }
+        if (bufferedReader!=null){
+          bufferedReader.close();
+        }
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+
+    return executorCount;
+  }
+
+  // his节点单台主机combine自身k-v的线程池（关系到agg完毕后，第一步本机combine的并发量）
+  public static int getHisLocalCombineExecutorCount(){
+    int executorCount = 10;
+    FileInputStream fileInputStream = null;
+    InputStreamReader inputStreamReader = null;
+    BufferedReader bufferedReader = null;
+    try {
+      File file = new File("/data/druid-config/hisLocalCombineExecutorCount.config");
+      if (file.exists()){
+        fileInputStream = new FileInputStream(file);
+        inputStreamReader = new InputStreamReader(fileInputStream);
+        bufferedReader = new BufferedReader(inputStreamReader);
+        executorCount = Integer.parseInt(bufferedReader.readLine());
+      }
+    }catch (Exception e){
+      LOG.warn("distributeMerge.config read error");
+    }finally {
+      try {
+        if (fileInputStream!=null){
+          fileInputStream.close();
+        }
+        if (inputStreamReader!=null){
+          inputStreamReader.close();
+        }
+        if (bufferedReader!=null){
+          bufferedReader.close();
+        }
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+
+    return executorCount;
+  }
+
+
+  public static int getHisLocalFinalExecutorCount() {
+    return 0;
+  }
+
+  public static int getHisLocalFinalMergeExecutorCount() {
+    return 0;
   }
 }

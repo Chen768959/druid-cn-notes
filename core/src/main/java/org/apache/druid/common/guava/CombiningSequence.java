@@ -271,6 +271,7 @@ public class CombiningSequence<T> implements Sequence<T>
         return mergeFn.apply(t, null);
       }
 
+      /** mergeFn:{@link TimeseriesBinaryFn} */
       if (ordering.compare(prevValue, t) == 0) {
         log.info("!!!："+Thread.currentThread().getId()+"...B");
         return mergeFn.apply(prevValue, t);

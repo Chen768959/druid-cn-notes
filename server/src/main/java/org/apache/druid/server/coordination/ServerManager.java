@@ -58,14 +58,12 @@ import org.apache.druid.query.QueryToolChest;
 import org.apache.druid.query.QueryUnsupportedException;
 import org.apache.druid.query.ReferenceCountingSegmentQueryRunner;
 import org.apache.druid.query.ReportTimelineMissingSegmentQueryRunner;
-import org.apache.druid.query.Result;
 import org.apache.druid.query.SegmentDescriptor;
 import org.apache.druid.query.context.ResponseContext;
 import org.apache.druid.query.planning.DataSourceAnalysis;
 import org.apache.druid.query.spec.SpecificSegmentQueryRunner;
 import org.apache.druid.query.spec.SpecificSegmentSpec;
 import org.apache.druid.query.timeseries.TimeseriesQueryQueryToolChest;
-import org.apache.druid.query.timeseries.TimeseriesResultValue;
 import org.apache.druid.segment.ReferenceCountingSegment;
 import org.apache.druid.segment.SegmentReference;
 import org.apache.druid.segment.join.JoinableFactory;
@@ -80,8 +78,6 @@ import org.apache.druid.timeline.partition.PartitionHolder;
 import org.joda.time.Interval;
 
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -290,17 +286,19 @@ public class ServerManager implements QuerySegmentWalker
     /**
      * !ndm
      * runners中包含了新engine，可将各分片kv结果封装返回，
+     * （engine逻辑位置{@link org.apache.druid.query.timeseries.TimeseriesQueryRunnerFactory.TimeseriesQueryRunner#run(QueryPlus, ResponseContext)}）
+     *
      * 此处建立runner执行runners，并处理kv列表，返回空结果集给当前请求线程。
      */
     QueryRunner<T> tFinalizeResultsQueryRunner = null;
     if (CustomConfig.needDistributeMerge(query)){
       // 判断是否需要使用自定义线程数线程池
-      int executorCount = CustomConfig.getExecutorCount();
+      int executorCount = CustomConfig.getHisSegExecutorCount();
       ExecutorService execC = exec;
       if (executorCount>0){
         execC = Executors.newFixedThreadPool(executorCount);
       }
-
+      /**{@link org.apache.druid.query.timeseries.TimeseriesQueryRunnerFactory#mergeRunners(ExecutorService, Iterable)}*/
       QueryRunner<T> queryRunner = factory.mergeRunners(execC, queryRunners);
       tFinalizeResultsQueryRunner = (queryPlus, responseContext) -> {
         // 执行，但不返回agg结果，当前请求线程中也不执行
