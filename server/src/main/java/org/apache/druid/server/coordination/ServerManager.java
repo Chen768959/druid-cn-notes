@@ -63,6 +63,7 @@ import org.apache.druid.query.context.ResponseContext;
 import org.apache.druid.query.planning.DataSourceAnalysis;
 import org.apache.druid.query.spec.SpecificSegmentQueryRunner;
 import org.apache.druid.query.spec.SpecificSegmentSpec;
+import org.apache.druid.query.timeseries.TimeseriesQuery;
 import org.apache.druid.query.timeseries.TimeseriesQueryQueryToolChest;
 import org.apache.druid.segment.ReferenceCountingSegment;
 import org.apache.druid.segment.SegmentReference;
@@ -253,6 +254,13 @@ public class ServerManager implements QuerySegmentWalker
     });
 
     // 该runners负责agg各个seg分片
+    /**
+     * queryRunners包含了所有seg分片对应的查询runner，
+     * 迭代出来的每个runner.run()返回的是“Sequence<Result<TimeseriesResultValue>>”
+     * 其中只包含了一个Result对象，
+     * 其中又只有一个TimeseriesResultValue对象，
+     * TimeseriesResultValue中包含了一个map对象，key是聚合器名，value是该聚合器对应的聚合结果
+     */
     final FunctionalIterable<QueryRunner<T>> queryRunners = FunctionalIterable
         /**
          * 创建函数式工具类{@link FunctionalIterable}
@@ -285,7 +293,17 @@ public class ServerManager implements QuerySegmentWalker
 
     /**
      * !ndm
-     * runners中包含了新engine，可将各分片kv结果封装返回，
+     * queryRunners：多个QueryRunner形成的迭代器
+     * 包含了所有seg分片对应的查询runner，每个runner.run()返回的是“Sequence<Result<TimeseriesResultValue>>”
+     * 单个Sequence中只包含了一个Result对象，
+     * 单个Result中又只有一个TimeseriesResultValue对象，
+     * 单个TimeseriesResultValue中包含了一个map对象，key是聚合器名，value是该聚合器对应的聚合结果
+     *
+     * 以下的“QueryRunner<T> queryRunner = factory.mergeRunners(execC, queryRunners);”
+     * 该queryRunner返回的Sequence中包含的是多个Result（也就是所有seg分片的Result结果对象）。
+     *
+     * =================================================================================================================
+     * 每个seg分片对应的QueryRunner中包含了新的engine，可将各分片kv结果封装进result返回，
      * （engine逻辑位置{@link org.apache.druid.query.timeseries.TimeseriesQueryRunnerFactory.TimeseriesQueryRunner#run(QueryPlus, ResponseContext)}）
      *
      * 此处建立runner执行runners，并处理kv列表，返回空结果集给当前请求线程。
@@ -302,9 +320,10 @@ public class ServerManager implements QuerySegmentWalker
       QueryRunner<T> queryRunner = factory.mergeRunners(execC, queryRunners);
       tFinalizeResultsQueryRunner = (queryPlus, responseContext) -> {
         // 执行，但不返回agg结果，当前请求线程中也不执行
+        // aggKVRes中包含了所有分片的Result对象
         Sequence<T> aggKVRes = queryRunner.run(queryPlus, responseContext);
         // 将agg结果列表交由dm线程并发聚合
-        DistributeMergeManager.getInstance().startMerge(queryPlus.getQuery(), aggKVRes);
+        DistributeMergeManager.getInstance().startMerge((TimeseriesQuery)queryPlus.getQuery(), aggKVRes);
         return Sequences.empty();
       };
     }else {

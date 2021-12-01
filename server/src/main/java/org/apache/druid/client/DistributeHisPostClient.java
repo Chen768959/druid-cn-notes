@@ -12,7 +12,7 @@ import java.util.Set;
  * @date 2021/11/26
  */
 public class DistributeHisPostClient {
-  public static List<PostKeyToBrokerRes> postKeysToBrokerInCombine(Query query, Set<Object> keySet) {
+  public static List<PostKeyToBrokerRes> postKeysToBrokerInCombine(Query query, Map<String, Set<Object>> aggNamesAndKeys) {
     return null;
   }
 
@@ -20,18 +20,33 @@ public class DistributeHisPostClient {
 
   }
 
-  public static PostFVToBrokerRes postFVToBrokerInFinal(Query query) {
+  public static List<DistributeHisPostClient.PostFVToBrokerRes> postFVToBrokerInFinal(Query query, Set<String> aggNames) {
     return null;
   }
 
-  public static void postFVToHisInFinalMerge(Query query, PostFVToBrokerRes postFVToBrokerRes, Object finalValueRes) {
+  public static void postFVToHisInFinalMerge(Query query, PostFVToBrokerRes postFVToBrokerRes, Map<String, Object> finalValueRes) {
+
+  }
+
+  // 主动发送最终结果给broker
+  public static void postResultObjectToBroker(Query query, Object result) {
 
   }
 
   public class PostFVToBrokerRes{
     private boolean local;
 
+    private String aggName;
+
     private String toUrl;
+
+    public String getAggName() {
+      return aggName;
+    }
+
+    public void setAggName(String aggName) {
+      this.aggName = aggName;
+    }
 
     public boolean isLocal() {
       return local;
@@ -51,6 +66,8 @@ public class DistributeHisPostClient {
   }
 
   public class PostKeyToBrokerRes{
+    private String aggName;
+
     private Object key;
 
     private boolean local;
@@ -79,6 +96,14 @@ public class DistributeHisPostClient {
 
     public void setToUrl(String toUrl) {
       this.toUrl = toUrl;
+    }
+
+    public String getAggName() {
+      return aggName;
+    }
+
+    public void setAggName(String aggName) {
+      this.aggName = aggName;
     }
   }
 }

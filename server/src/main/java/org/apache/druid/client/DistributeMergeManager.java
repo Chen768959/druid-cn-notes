@@ -1,20 +1,29 @@
 package org.apache.druid.client;
 
+import org.apache.druid.distribute.DistributeAggregatorFactory;
 import org.apache.druid.java.util.common.Pair;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.query.CustomConfig;
 import org.apache.druid.query.Query;
 import org.apache.druid.query.Result;
+import org.apache.druid.query.aggregation.AggregatorFactory;
+import org.apache.druid.query.timeseries.TimeseriesQuery;
 import org.apache.druid.query.timeseries.TimeseriesResultValue;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * !ndm
@@ -26,6 +35,9 @@ public class DistributeMergeManager {
   private static DistributeMergeManager distributeMergeManager = new DistributeMergeManager();
 
   private final ExecutorService distributeExecutor;
+
+  // 每次查询及他对应的聚合器
+  private final Map<String, List<DistributeAggregatorFactory>> queryAggregatorFactoryMap = new ConcurrentHashMap<>();
 
   /**
    * k：queryId
@@ -45,10 +57,15 @@ public class DistributeMergeManager {
   private final Map<String, Boolean> allQueryFinalMergeIsEnd = new ConcurrentHashMap<>();
 
   /**
-   * k：queryId
-   * v：所有该查询的待聚合kv {k：agg结果的某个key   v：{p1：该key的锁   p2：该key的对应value结果}}
+   * {k：queryId
+   *  v：{k：aggName
+   *      v：{k：agg结果的某个key
+   *          v：{p1：该key的锁(一个kv同一时间只能进行一个合并)   p2：该key的对应value结果}
+   *         }
+   *     }
+   * }
    */
-  private final Map<String, Map<Object, Pair<Object, Object>>> allWaitCombineKV = new ConcurrentHashMap<>();
+  private final Map<String, Map<String, Map<Object, Pair<Object, Object>>>> allWaitFinalKV = new ConcurrentHashMap<>();
 
   /**
    * k：queryId
@@ -81,8 +98,27 @@ public class DistributeMergeManager {
    * @date 2021/11/24 下午 3:18
    * @return void
    */
-  public void startMerge(Query query, Sequence sequence){
+  public void startMerge(TimeseriesQuery query, Sequence sequence){
+    /**
+     * 单个seg分片对应一个Result对象
+     * 单个Result中又只有一个TimeseriesResultValue对象，
+     * 单个TimeseriesResultValue中包含了一个map对象，key是聚合器名，value是该聚合器对应的聚合结果
+     */
     List<Result<TimeseriesResultValue>> aggKVList = (List<Result<TimeseriesResultValue>>) sequence.toList();
+
+    // 获取分布式聚合器
+    List<DistributeAggregatorFactory> queryDistributeAggregatorFactorys = new ArrayList<>();
+    List<AggregatorFactory> aggregatorSpecs = query.getAggregatorSpecs();
+    for (int i = 0; i < aggregatorSpecs.size(); i++) {
+      if (aggregatorSpecs.get(i).getClass().isAssignableFrom(DistributeAggregatorFactory.class)){
+        queryDistributeAggregatorFactorys.add((DistributeAggregatorFactory)aggregatorSpecs.get(i));
+      }
+    }
+    if (queryDistributeAggregatorFactorys.isEmpty()){// 主动发送空响应
+      DistributeHisPostClient.postResultObjectToBroker(query, null);
+      return;
+    }
+    queryAggregatorFactoryMap.put(query.getId(), queryDistributeAggregatorFactorys);
 
     distributeExecutor.submit(new Runnable() {
       @Override
@@ -90,13 +126,13 @@ public class DistributeMergeManager {
         // 1、准备一个线程池，用于本机相同k的combine
         ExecutorService localCombineExecutor = Executors.newFixedThreadPool(CustomConfig.getHisLocalCombineExecutorCount());
 
-        // 本机相同key进行combine，每台his得到一组k-v
-        Map<Object, Object> kvRes = localCombineBySameKey(localCombineExecutor, aggKVList);
+        // 本机相同key进行combine，每台his得到一组k-v（按聚合器名group）
+        Map<String, Map<Object, Object>> kvRes = localCombineBySameKey(localCombineExecutor, aggKVList);
         localCombineExecutor.shutdownNow();
 
         // 2、将所有本机k全部发送给broker，由broker判断是保留本机还是发送给其他his
-        //准备此次查询的“等待combine集合”
-        allWaitCombineKV.put(query.getId(), new ConcurrentHashMap<>());
+        //准备此次查询的“combine结果集合”
+        allWaitFinalKV.put(query.getId(), new ConcurrentHashMap<>());
         // 准备本次查询的combine锁
         Object combineLock = new Object();
         try {
@@ -106,11 +142,17 @@ public class DistributeMergeManager {
         }
         allQueryCombineLock.put(query.getId(),combineLock);
 
-        List<DistributeHisPostClient.PostKeyToBrokerRes> keysToBrokerRes = DistributeHisPostClient.postKeysToBrokerInCombine(query, kvRes.keySet());
+        // 提取出每个聚合器名与其包含的key
+        Map<String, Set<Object>> aggNamesAndKeys = new HashMap<>();
+        kvRes.entrySet().forEach(entry->{
+          aggNamesAndKeys.put(entry.getKey(),entry.getValue().keySet());
+        });
+
+        List<DistributeHisPostClient.PostKeyToBrokerRes> keysToBrokerRes = DistributeHisPostClient.postKeysToBrokerInCombine(query, aggNamesAndKeys);
         keysToBrokerRes.forEach(res->{
-          Object value = kvRes.get(res.getKey());
+          Object value = kvRes.get(res.getAggName()).get(res.getKey());
           if (res.isLocal()){// 保留本地
-            saveValueAndCombine(query, res.getKey(), value);
+            saveValueAndCombine(query, res.getAggName(), res.getKey(), value);
           }else {// 发送其他主机
             DistributeHisPostClient.postKVToHisInCombine(query, res, value);
           }
@@ -122,15 +164,15 @@ public class DistributeMergeManager {
         }
 
         // 4、本机自行final待办map中的所有kv，得到final后的kv
-        if (!allWaitCombineKV.get(query.getId()).isEmpty()){
+        if (!allWaitFinalKV.get(query.getId()).isEmpty()){
           // 准备本次final使用的线程池
           ExecutorService localFinalExecutor = Executors.newFixedThreadPool(CustomConfig.getHisLocalFinalExecutorCount());
-          Map<Object, Object> fkvRes = localFinalBySameKey(localFinalExecutor, allWaitCombineKV.get(query.getId()));
+          Map<String, Map<Object, Object>> fkvRes = localFinalBySameKey(localFinalExecutor, allWaitFinalKV.get(query.getId()));// 获取当前节点所有等待final的kv结果
 
           // 5、本机自行final merge所有fkv
           // 准备本次final merge使用的线程池
           ExecutorService localFinalMergeExecutor = Executors.newFixedThreadPool(CustomConfig.getHisLocalFinalMergeExecutorCount());
-          Object finalValueRes = localFinalMergeBySameKey(localFinalMergeExecutor, fkvRes);
+          Map<String, Object> finalValueRes = localFinalMergeBySameKey(localFinalMergeExecutor, fkvRes);// k:aggName   v:该聚合器对应结果
           // 准备本次查询的final merge锁
           Object finalMergeLock = new Object();
           try {
@@ -141,12 +183,15 @@ public class DistributeMergeManager {
           allQueryFinalMergeLock.put(query.getId(),finalMergeLock);
 
           // 6、询问broker，由broker判断finalValueRes是保留本地进入待办队列，还是发送给其他his
-          DistributeHisPostClient.PostFVToBrokerRes postFVToBrokerRes = DistributeHisPostClient.postFVToBrokerInFinal(query);
-          if (postFVToBrokerRes.isLocal()){ // 保留本地
-            saveFVAndFinalMerge(query, finalValueRes);
-          }else { // 发送给其他his
-            DistributeHisPostClient.postFVToHisInFinalMerge(query, postFVToBrokerRes, finalValueRes);
-          }
+          List<DistributeHisPostClient.PostFVToBrokerRes> postFVToBrokerResList = DistributeHisPostClient.postFVToBrokerInFinal(query, finalValueRes.keySet());
+          postFVToBrokerResList.forEach(postFVToBrokerRes->{
+            if (postFVToBrokerRes.isLocal()){ // 保留本地
+              saveFVAndFinalMerge(query, postFVToBrokerRes.getAggName(), finalValueRes.get(postFVToBrokerRes.getAggName()));
+            }else { // 发送给其他his
+              DistributeHisPostClient.postFVToHisInFinalMerge(query, postFVToBrokerRes, finalValueRes);
+            }
+          });
+
 
           // 7、阻塞，直到收到broker的finalMerge结束请求（期间一直在接收其他主机的fv结果并合并）
           synchronized (finalMergeLock){
@@ -161,11 +206,11 @@ public class DistributeMergeManager {
          * broker收到某台主机keys后，先存起来，并返回信息让其原地待命。
          * 等到收到第二台的keys后，比较二者相同key，相同key就让第二台his主动发送给1his，其余key让2his待命。
          *
-         * 1his收到2his发来的key后，主动接触阻塞，进行合并，
+         * 1his收到2his发来的key后，主动解除阻塞，进行合并，
          * 合并完后发送消息给broker，告知其合并完毕，并由broker响应是等待，还是将新结果发于别人。
          * 等待则继续阻塞，发于别人则直接发送走。
          *
-         * broker判断所有combine阶段完毕后，主动发送给所有his节点，接触他们的阻塞。
+         * broker判断所有combine阶段完毕后，主动发送给所有his节点，解除他们的阻塞。
          * 每次his节点解除阻塞，先判断是否存在“待合并的k-v”，
          * 存在则合并后与broker交互，
          * 不存在则表示combine阶段完毕，此时是由broker唤醒的，则每个k-v线程进行下个阶段
@@ -183,23 +228,36 @@ public class DistributeMergeManager {
          */
       }
 
-      private Object localFinalMergeBySameKey(ExecutorService localFinalMergeExecutor, Map<Object, Object> fkvRes) {
+      private Map<String, Object> localFinalMergeBySameKey(ExecutorService localFinalMergeExecutor, Map<String, Map<Object, Object>> fkvRes) {
         return null;
       }
 
-      private Object finalMergeFV(Object fv1, Object fv2) {
+      private Map<String, Map<Object, Object>> localFinalBySameKey(ExecutorService localFinalExecutor, Map<String, Map<Object, Pair<Object, Object>>> objectPairMap) {
         return null;
       }
 
-      private Map<Object, Object> localFinalBySameKey(ExecutorService localFinalExecutor, Map<Object, Pair<Object, Object>> objectPairMap) {
-        return null;
-      }
-
-      private Map<Object, Object> localCombineBySameKey(ExecutorService localCombineExecutor, List<Result<TimeseriesResultValue>> aggKVList) {
+      private Map<String, Map<Object, Object>> localCombineBySameKey(ExecutorService localCombineExecutor, List<Result<TimeseriesResultValue>> aggKVList) {
         return null;
       }
     });
 
+  }
+
+  private List<DistributeAggregatorFactory> getDistributeAggregatorFactorys(Query query){
+    List<DistributeAggregatorFactory> distributeAggregatorFactories = queryAggregatorFactoryMap.get(query.getId());
+    if (distributeAggregatorFactories == null){
+      distributeAggregatorFactories = new ArrayList<>();
+      List<AggregatorFactory> aggregatorSpecs = ((TimeseriesQuery)query).getAggregatorSpecs();
+      for (AggregatorFactory aggregatorFactory : aggregatorSpecs) {
+        if (aggregatorFactory.getClass().isAssignableFrom(DistributeAggregatorFactory.class)){
+          distributeAggregatorFactories.add((DistributeAggregatorFactory)aggregatorFactory);
+        }
+      }
+
+      queryAggregatorFactoryMap.put(query.getId(), distributeAggregatorFactories);
+    }
+
+    return distributeAggregatorFactories;
   }
 
   /**
@@ -214,7 +272,7 @@ public class DistributeMergeManager {
    * @date 2021/11/26 下午 8:07
    * @return void
    */
-  public void saveValueAndCombine(Query query, Object key, Object value){
+  public void saveValueAndCombine(Query query,String aggName, Object key, Object value){
 
   }
 
@@ -229,10 +287,28 @@ public class DistributeMergeManager {
    * @date 2021/11/26 下午 9:00
    * @return void
    */
-  public void saveFVAndFinalMerge(Query query, Object fv){
-    allWaitFinalMergeFVRes.get(query.getId()).add(fv);
+  public void saveFVAndFinalMerge(Query query, String aggName, Object fv){
+    Object firstWaitFv = null;
 
+    synchronized (this){
+      Queue<Object> waitFinalMergeFVRes = allWaitFinalMergeFVRes.get(query.getId());
 
+      if (waitFinalMergeFVRes == null){
+        waitFinalMergeFVRes = new ConcurrentLinkedQueue();
+        waitFinalMergeFVRes.add(fv);
+        allWaitFinalMergeFVRes.put(query.getId(), waitFinalMergeFVRes);
+      }else {
+        firstWaitFv = waitFinalMergeFVRes.poll();
+      }
+    }
+
+    // 另起线程final merge合并新旧fv，再递归放入queue
+    if (firstWaitFv!=null){
+      List<DistributeAggregatorFactory> distributeAggregatorFactories = queryAggregatorFactoryMap.get(query.getId());
+      if (distributeAggregatorFactories!=null){
+
+      }
+    }
   }
 
   public void endCombine(Query query){
@@ -246,7 +322,6 @@ public class DistributeMergeManager {
   public void endFinalMerge(Query query){
     Boolean finalIsEnd = allQueryFinalMergeIsEnd.get(query.getId());
     if (finalIsEnd!=null){
-      finalIsEnd = true;
       allQueryFinalMergeIsEnd.remove(query.getId());
     }
   }
@@ -274,6 +349,16 @@ public class DistributeMergeManager {
     }
 
     return res;
+  }
+
+  public void endQuery(Query query){
+    allQueryCombineLock.remove(query.getId());
+    allQueryFinalMergeLock.remove(query.getId());
+    allQueryFinalMergeIsEnd.remove(query.getId());
+    allWaitFinalKV.remove(query.getId());
+    allWaitFinalMergeFVRes.remove(query.getId());
+    allThreadIsEnd.remove(query.getId());
+
   }
 
   public static DistributeMergeManager getInstance() {

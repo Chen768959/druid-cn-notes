@@ -217,11 +217,12 @@ public class CustomConfig {
     return executorCount;
   }
 
-
+  // his节点单台主机执行本机final用的线程池
   public static int getHisLocalFinalExecutorCount() {
     return 0;
   }
 
+  // his节点执行本机final merge用的线程池
   public static int getHisLocalFinalMergeExecutorCount() {
     return 0;
   }
