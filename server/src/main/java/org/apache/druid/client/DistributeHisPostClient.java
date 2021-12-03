@@ -1,7 +1,9 @@
 package org.apache.druid.client;
 
 import org.apache.druid.query.Query;
+import org.apache.druid.query.timeseries.TimeseriesQuery;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,7 +22,7 @@ public class DistributeHisPostClient {
 
   }
 
-  public static List<DistributeHisPostClient.PostFVToBrokerRes> postFVToBrokerInFinal(Query query, Set<String> aggNames) {
+  public static List<DistributeHisPostClient.PostFVToBrokerRes> postFVToBrokerInFinal(Query query, Collection<String> aggNames) {
     return null;
   }
 
@@ -30,6 +32,16 @@ public class DistributeHisPostClient {
 
   // 主动发送最终结果给broker
   public static void postResultObjectToBroker(Query query, Object result) {
+
+  }
+
+  // 通知broker，agg对应的key combine合并完毕一次
+  public static void postCombineNotifyToBroker(TimeseriesQuery query, String aggName, Object key) {
+
+  }
+
+  // 通知broker，agg finalMerge合并完毕一次
+  public static void postFinalMergeNotifyToBroker(TimeseriesQuery query, String aggName) {
 
   }
 
