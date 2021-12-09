@@ -730,18 +730,26 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
       }
 
       try {
+        // 获取 KafkaRecordSupplier 内部创建了一个消费者
         recordSupplier = setupRecordSupplier();
 
+        // 另起线程负责处理notices中的notice
         exec.submit(
             () -> {
               try {
                 long pollTimeout = Math.max(ioConfig.getPeriod().getMillis(), MAX_RUN_FREQUENCY_MILLIS);
+                /**
+                 * 循环处理notice（notice是定时不断加入进来的）
+                 */
                 while (!Thread.currentThread().isInterrupted() && !stopped) {
                   final Notice notice = notices.poll(pollTimeout, TimeUnit.MILLISECONDS);
                   if (notice == null) {
                     continue;
                   }
 
+                  /**
+                   * 每次执行该逻辑{@link this#runInternal()}
+                   */
                   try {
                     notice.handle();
                   }
@@ -759,11 +767,17 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
               }
             }
         );
+
         firstRunTime = DateTimes.nowUtc().plus(ioConfig.getStartDelay());
+        /**
+         * 启动定时线程，每次执行buildRunTask()
+         * buildRunTask()内部每次创建一个{@link RunNotice}，然后上面那个单循环线程每次处理一个notice.handle()
+         * handle内部，只有一行方法：{@link this#runInternal()}
+         */
         scheduledExec.scheduleAtFixedRate(
             buildRunTask(),
-            ioConfig.getStartDelay().getMillis(),
-            Math.max(ioConfig.getPeriod().getMillis(), MAX_RUN_FREQUENCY_MILLIS),
+            ioConfig.getStartDelay().getMillis(),// 起始延迟时间
+            Math.max(ioConfig.getPeriod().getMillis(), MAX_RUN_FREQUENCY_MILLIS),// 间隔时间，默认1s
             TimeUnit.MILLISECONDS
         );
 
@@ -1059,6 +1073,7 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
 
       // if supervisor is not suspended, ensure required tasks are running
       // if suspended, ensure tasks have been requested to gracefully stop
+      // 只要当前没有挂起，就创建新task
       if (!spec.isSuspended()) {
         log.info("[%s] supervisor is running.", dataSource);
 
@@ -2922,11 +2937,13 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
             "Number of tasks [%d] does not match configured numReplicas [%d] in task group [%d], creating more tasks",
             taskGroup.tasks.size(), ioConfig.getReplicas(), groupId
         );
+        // 创建task
         createTasksForGroup(groupId, ioConfig.getReplicas() - taskGroup.tasks.size());
         createdTask = true;
       }
     }
 
+    // 如果刚刚创建了新task
     if (createdTask && firstRunTime.isBeforeNow()) {
       // Schedule a run event after a short delay to update our internal data structures with the new tasks that were
       // just created. This is mainly for the benefit of the status API in situations where the run period is lengthy.

@@ -7,6 +7,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.List;
 
 /**
  * @author Chen768959
@@ -225,5 +226,10 @@ public class CustomConfig {
   // his节点执行本机final merge用的线程池
   public static int getHisLocalFinalMergeExecutorCount() {
     return 0;
+  }
+
+  // 获取所有参与分布式聚合的主机ip
+  public static List<String> getDistributeHosts(){
+    return null;
   }
 }

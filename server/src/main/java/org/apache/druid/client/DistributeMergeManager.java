@@ -187,7 +187,7 @@ public class DistributeMergeManager {
 
 
           // 6、询问broker，由broker判断finalValueRes是保留本地进入待办队列，还是发送给其他his
-          List<DistributeHisPostClient.PostFVToBrokerRes> postFVToBrokerResList = DistributeHisPostClient.postFVToBrokerInFinal(query, finalValueRes.keySet());
+          List<DistributeHisPostClient.PostFVToBrokerRes> postFVToBrokerResList = DistributeHisPostClient.postFVToBrokerInFinalMerge(query, finalValueRes.keySet());
           postFVToBrokerResList.forEach(postFVToBrokerRes->{
             if (postFVToBrokerRes.isLocal()){ // 保留本地
               saveFVInFinalMerge(query, postFVToBrokerRes.getAggName(), finalValueRes.get(postFVToBrokerRes.getAggName()));
@@ -209,7 +209,7 @@ public class DistributeMergeManager {
                   // 通知broker fm合并完毕
                   DistributeHisPostClient.postFinalMergeNotifyToBroker(query, aggName);
                   // 询问broker此结果去向
-                  DistributeHisPostClient.PostFVToBrokerRes postFVToBrokerRes = DistributeHisPostClient.postFVToBrokerInFinal(query, new ArrayList<String>() {{ add(aggName); }}).get(0);
+                  DistributeHisPostClient.PostFVToBrokerRes postFVToBrokerRes = DistributeHisPostClient.postFVToBrokerInFinalMerge(query, new ArrayList<String>() {{ add(aggName); }}).get(0);
                   if (postFVToBrokerRes.isLocal()){ // 保留本地
                     saveFVInFinalMerge(query, postFVToBrokerRes.getAggName(), fmvRes);
                   }else { // 发送给其他his

@@ -507,8 +507,12 @@ public class CachingClusteredClient implements QuerySegmentWalker
                 () -> {
                   // 准备分布式聚合所需参数
                   updateDistributeMergeQuery(queryPlus.getQuery());
+                  // 开始broker分布式聚合server
+                  DistributeBrokerServer.getInstance().initServer(queryPlus.getQuery(), segmentsByServer, CustomConfig.getDistributeHosts());
                   // 发送http请求至所有待查询his
                   getSequencesFromServer(segmentsByServer);
+                  // 开始分布式聚合，并获取聚合结果
+                  return DistributeBrokerServer.getInstance().processServer(queryPlus.getQuery());
                   // 阻塞，直至查询结果主动返回
                   return waitDistributeResult();
                 });

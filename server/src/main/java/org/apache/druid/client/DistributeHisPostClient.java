@@ -10,22 +10,27 @@ import java.util.Set;
 
 /**
  * !ndm
+ *
  * @author Chen768959
  * @date 2021/11/26
  */
 public class DistributeHisPostClient {
+  // 在combine阶段，询问broker，指定agg+key的value结果交由那台主机处理
   public static List<PostKeyToBrokerRes> postKeysToBrokerInCombine(Query query, Map<String, Set<Object>> aggNamesAndKeys) {
     return null;
   }
 
+  // 在combine阶段，将agg结果发送至其他his
   public static void postKVToHisInCombine(Query query, PostKeyToBrokerRes res, Object value) {
 
   }
 
-  public static List<DistributeHisPostClient.PostFVToBrokerRes> postFVToBrokerInFinal(Query query, Collection<String> aggNames) {
+  // 在FinalMerge阶段，询问broker，指定agg的fv结果交由那台主机处理
+  public static List<DistributeHisPostClient.PostFVToBrokerRes> postFVToBrokerInFinalMerge(Query query, Collection<String> aggNames) {
     return null;
   }
 
+  // 在FinalMerge阶段，将fv结果发送至其他his
   public static void postFVToHisInFinalMerge(Query query, PostFVToBrokerRes postFVToBrokerRes, Map<String, Object> finalValueRes) {
 
   }
