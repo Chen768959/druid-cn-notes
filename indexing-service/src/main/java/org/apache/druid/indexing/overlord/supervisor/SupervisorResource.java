@@ -91,12 +91,14 @@ public class SupervisorResource
     this.objectMapper = objectMapper;
   }
 
+  // overload接收摄入json请求，实时摄入的起始
   @POST
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public Response specPost(final SupervisorSpec spec, @Context final HttpServletRequest req)
   {
     return asLeaderWithSupervisorManager(
+        // manager由启动时注入，全局唯一，SupervisorManager
         manager -> {
           Preconditions.checkArgument(
               spec.getDataSources() != null && spec.getDataSources().size() > 0,
@@ -113,6 +115,7 @@ public class SupervisorResource
             throw new ForbiddenException(authResult.toString());
           }
 
+          // 根据此次请求的json参数，创建或更新Supervisor
           manager.createOrUpdateAndStartSupervisor(spec);
           return Response.ok(ImmutableMap.of("id", spec.getId())).build();
         }

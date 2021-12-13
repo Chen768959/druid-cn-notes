@@ -102,13 +102,13 @@ public class KafkaSupervisorSpec extends SeekableStreamSupervisorSpec
   public Supervisor createSupervisor()
   {
     return new KafkaSupervisor(
-        taskStorage,
-        taskMaster,
-        indexerMetadataStorageCoordinator,
-        (KafkaIndexTaskClientFactory) indexTaskClientFactory,
-        mapper,
-        this,
-        rowIngestionMetersFactory
+        taskStorage,// task信息存储方式，有内存存储以及mysql数据库存储两种方式
+        taskMaster,// leader生命周期？
+        indexerMetadataStorageCoordinator,// 检索segment
+        (KafkaIndexTaskClientFactory) indexTaskClientFactory,// 负责创建TaskClient
+        mapper,// json解析器
+        this,// 请求中的supervisor json文件参数
+        rowIngestionMetersFactory // 用于摄入统计
     );
   }
 

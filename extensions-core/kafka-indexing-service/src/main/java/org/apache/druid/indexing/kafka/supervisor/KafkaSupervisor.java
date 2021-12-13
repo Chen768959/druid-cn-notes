@@ -92,6 +92,17 @@ public class KafkaSupervisor extends SeekableStreamSupervisor<Integer, Long>
 
   private final KafkaSupervisorSpec spec;
 
+  /**
+   *
+   * @param taskStorage task信息存储方式，有内存存储以及mysql数据库存储两种方式
+   * @param taskMaster 控制leader生命周期？
+   * @param indexerMetadataStorageCoordinator 检索segment
+   * @param taskClientFactory 负责创建TaskClient
+   * @param mapper json解析器
+   * @param spec 请求中的supervisor json文件参数
+   * @param rowIngestionMetersFactory 用于摄入统计
+   * @return
+   */
   public KafkaSupervisor(
       final TaskStorage taskStorage,
       final TaskMaster taskMaster,

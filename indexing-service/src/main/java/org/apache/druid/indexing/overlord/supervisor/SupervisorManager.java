@@ -78,9 +78,11 @@ public class SupervisorManager
     Preconditions.checkNotNull(spec.getId(), "spec.getId()");
     Preconditions.checkNotNull(spec.getDataSources(), "spec.getDatasources()");
 
+    // 同一时间只能创建一个supervisor
     synchronized (lock) {
       Preconditions.checkState(started, "SupervisorManager not started");
       possiblyStopAndRemoveSupervisorInternal(spec.getId(), false);
+      // 根据此次请求的json参数，创建Supervisor
       return createAndStartSupervisorInternal(spec, true);
     }
   }
@@ -273,18 +275,18 @@ public class SupervisorManager
   private boolean createAndStartSupervisorInternal(SupervisorSpec spec, boolean persistSpec)
   {
     String id = spec.getId();
-    if (supervisors.containsKey(id)) {
+    if (supervisors.containsKey(id)) {// 已存在的supervisor不会重复启动
       return false;
     }
 
-    if (persistSpec) {
-      metadataSupervisorManager.insert(id, spec);
+    if (persistSpec) {// true
+      metadataSupervisorManager.insert(id, spec);// 写入元数据
     }
 
     Supervisor supervisor;
     try {
-      supervisor = spec.createSupervisor();
-      supervisor.start();
+      supervisor = spec.createSupervisor();// 创建supervisor
+      supervisor.start();// 启动supervisor
     }
     catch (Exception e) {
       // Supervisor creation or start failed write tombstone only when trying to start a new supervisor

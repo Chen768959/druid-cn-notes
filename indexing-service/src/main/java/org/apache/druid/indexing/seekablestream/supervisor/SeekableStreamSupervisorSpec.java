@@ -69,6 +69,7 @@ public abstract class SeekableStreamSupervisorSpec implements SupervisorSpec
   private final boolean suspended;
   protected final SupervisorStateManagerConfig supervisorStateManagerConfig;
 
+  // @JacksonInject：如果请求的json文件中没有指定，则使用默认对象
   @JsonCreator
   public SeekableStreamSupervisorSpec(
       @JsonProperty("spec") final SeekableStreamSupervisorIngestionSpec ingestionSchema,
