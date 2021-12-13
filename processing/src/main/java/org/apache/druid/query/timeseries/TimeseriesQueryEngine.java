@@ -19,16 +19,14 @@
 
 package org.apache.druid.query.timeseries;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterables;
 import com.google.inject.Inject;
 import org.apache.druid.collections.NonBlockingPool;
 import org.apache.druid.collections.ResourceHolder;
 import org.apache.druid.collections.StupidPool;
-import org.apache.druid.distribute.DistributeAggregator;
-import org.apache.druid.distribute.DistributeAggregatorFactory;
+import org.apache.druid.query.aggregation.DistributeAggregator;
+import org.apache.druid.query.aggregation.DistributeAggregatorFactory;
 import org.apache.druid.guice.annotations.Global;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.granularity.Granularity;
@@ -38,7 +36,6 @@ import org.apache.druid.java.util.common.io.Closer;
 import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.CustomConfig;
 import org.apache.druid.query.DruidProcessingConfig;
-import org.apache.druid.query.FinalizeResultsQueryRunner;
 import org.apache.druid.query.QueryContexts;
 import org.apache.druid.query.QueryRunnerHelper;
 import org.apache.druid.query.Result;
@@ -53,7 +50,6 @@ import org.apache.druid.segment.StorageAdapter;
 import org.apache.druid.segment.VirtualColumns;
 import org.apache.druid.segment.data.ReadableOffset;
 import org.apache.druid.segment.filter.Filters;
-import org.apache.druid.segment.vector.ReadableVectorOffset;
 import org.apache.druid.segment.vector.VectorColumnSelectorFactory;
 import org.apache.druid.segment.vector.VectorCursor;
 import org.joda.time.Interval;
@@ -64,7 +60,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  *

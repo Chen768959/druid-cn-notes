@@ -1,4 +1,4 @@
-package org.apache.druid.distribute;
+package org.apache.druid.query.aggregation;
 
 import org.apache.druid.query.aggregation.AggregatorFactory;
 import org.apache.druid.segment.ColumnSelectorFactory;

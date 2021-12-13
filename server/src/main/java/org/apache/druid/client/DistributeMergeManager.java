@@ -1,6 +1,6 @@
 package org.apache.druid.client;
 
-import org.apache.druid.distribute.DistributeAggregatorFactory;
+import org.apache.druid.query.aggregation.DistributeAggregatorFactory;
 import org.apache.druid.java.util.common.Pair;
 import org.apache.druid.java.util.common.guava.Sequence;
 import org.apache.druid.query.CustomConfig;
@@ -9,7 +9,6 @@ import org.apache.druid.query.Result;
 import org.apache.druid.query.aggregation.AggregatorFactory;
 import org.apache.druid.query.timeseries.TimeseriesQuery;
 import org.apache.druid.query.timeseries.TimeseriesResultValue;
-import org.checkerframework.checker.units.qual.A;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -19,15 +18,12 @@ import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -144,6 +140,7 @@ public class DistributeMergeManager {
           aggNamesAndKeys.put(entry.getKey(),entry.getValue().keySet());
         });
 
+        // 将所有本机k全部发送给broker，由broker判断是保留本机还是发送给其他his
         List<DistributeHisPostClient.PostKeyToBrokerRes> keysToBrokerRes = DistributeHisPostClient.postKeysToBrokerInCombine(query, aggNamesAndKeys);
         keysToBrokerRes.forEach(res->{
           Object value = kvRes.get(res.getAggName()).get(res.getKey());

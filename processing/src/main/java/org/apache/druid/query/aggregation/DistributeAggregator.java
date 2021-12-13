@@ -1,6 +1,4 @@
-package org.apache.druid.distribute;
-
-import org.apache.druid.query.aggregation.Aggregator;
+package org.apache.druid.query.aggregation;
 
 import javax.annotation.Nullable;
 import java.util.Map;
