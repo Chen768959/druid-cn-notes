@@ -539,7 +539,7 @@ public class RemoteTaskRunner implements WorkerTaskRunner, TaskLogStreamer
       return runningTask.getResult();
     } else if ((completeTask = completeTasks.get(task.getId())) != null) {
       return completeTask.getResult();
-    } else {
+    } else {// 发送任务
       return addPendingTask(task).getResult();
     }
   }
@@ -715,6 +715,7 @@ public class RemoteTaskRunner implements WorkerTaskRunner, TaskLogStreamer
             List<RemoteTaskRunnerWorkItem> copy = Lists.newArrayList(pendingTasks.values());
             sortByInsertionTime(copy);
 
+            // 遍历pendingTasks中的每一项待处理task
             for (RemoteTaskRunnerWorkItem taskRunnerWorkItem : copy) {
               String taskId = taskRunnerWorkItem.getTaskId();
               if (tryAssignTasks.putIfAbsent(taskId, taskId) == null) {
@@ -723,6 +724,10 @@ public class RemoteTaskRunner implements WorkerTaskRunner, TaskLogStreamer
                   //or if another thread steals and completes this task right after this thread makes copy
                   //of pending tasks. See https://github.com/apache/druid/issues/2842 .
                   Task task = pendingTaskPayloads.get(taskId);
+                  /**
+                   * {@link this#tryAssignTask(Task, RemoteTaskRunnerWorkItem)}
+                   * 分配任务
+                   */
                   if (task != null && tryAssignTask(task, taskRunnerWorkItem)) {
                     pendingTaskPayloads.remove(taskId);
                   }
@@ -835,6 +840,7 @@ public class RemoteTaskRunner implements WorkerTaskRunner, TaskLogStreamer
         }
 
         if (assignedWorker != null) {
+          // 将task注册到zookeeper上
           return announceTask(task, assignedWorker, taskRunnerWorkItem);
         } else {
           log.debug(

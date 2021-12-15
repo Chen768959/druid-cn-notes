@@ -130,6 +130,11 @@ public class TaskMaster implements TaskCountStatsProvider, TaskSlotCountStatsPro
                .emit();
           }
 
+          /**
+           * 将taskQueue等对象作为参数包装成{@link Lifecycle.AnnotationBasedHandler}类型对象，
+           * 然后在程序启动时，通过Lifecycle调用{@link Lifecycle.AnnotationBasedHandler#start()}方法
+           * 根据其内部逻辑可知，最终taskQueue的{@link TaskQueue#start()}在程序启动时会被调用
+           */
           leaderLifecycle.addManagedInstance(taskRunner);
           leaderLifecycle.addManagedInstance(taskQueue);
           leaderLifecycle.addManagedInstance(supervisorManager);

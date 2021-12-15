@@ -29,8 +29,10 @@ import org.apache.druid.indexing.overlord.IndexerMetadataStorageCoordinator;
 import org.apache.druid.indexing.overlord.TaskMaster;
 import org.apache.druid.indexing.overlord.TaskStorage;
 import org.apache.druid.indexing.overlord.supervisor.Supervisor;
+import org.apache.druid.indexing.overlord.supervisor.SupervisorResource;
 import org.apache.druid.indexing.overlord.supervisor.SupervisorStateManagerConfig;
 import org.apache.druid.indexing.seekablestream.supervisor.SeekableStreamSupervisorSpec;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.java.util.emitter.service.ServiceEmitter;
 import org.apache.druid.segment.incremental.RowIngestionMetersFactory;
 import org.apache.druid.segment.indexing.DataSchema;
@@ -41,6 +43,7 @@ import java.util.Map;
 
 public class KafkaSupervisorSpec extends SeekableStreamSupervisorSpec
 {
+  private static final Logger LOG = new Logger(KafkaSupervisorSpec.class);
   private static final String TASK_TYPE = "kafka";
 
   @JsonCreator
@@ -101,6 +104,7 @@ public class KafkaSupervisorSpec extends SeekableStreamSupervisorSpec
   @Override
   public Supervisor createSupervisor()
   {
+    LOG.info("!cin，创建kafkaSupervisor");
     return new KafkaSupervisor(
         taskStorage,// task信息存储方式，有内存存储以及mysql数据库存储两种方式
         taskMaster,// leader生命周期？

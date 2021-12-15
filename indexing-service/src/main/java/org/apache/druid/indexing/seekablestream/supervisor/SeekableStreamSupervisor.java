@@ -77,6 +77,7 @@ import org.apache.druid.java.util.common.Pair;
 import org.apache.druid.java.util.common.RetryUtils;
 import org.apache.druid.java.util.common.StringUtils;
 import org.apache.druid.java.util.common.concurrent.Execs;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.java.util.emitter.EmittingLogger;
 import org.apache.druid.java.util.emitter.service.ServiceEmitter;
 import org.apache.druid.java.util.emitter.service.ServiceMetricEvent;
@@ -143,7 +144,7 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
   private static final int MAX_INITIALIZATION_RETRIES = 20;
 
   private static final EmittingLogger log = new EmittingLogger(SeekableStreamSupervisor.class);
-
+  private static final Logger LOG = new Logger(SeekableStreamSupervisor.class);
   // Internal data structures
   // --------------------------------------------------------
 
@@ -594,11 +595,13 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
   @Override
   public void start()
   {
+    LOG.info("cin，supervisor开始start()");
     synchronized (stateChangeLock) {
       Preconditions.checkState(!lifecycleStarted, "already started");
       Preconditions.checkState(!exec.isShutdown(), "already stopped");
 
       // Try normal initialization first, if that fails then schedule periodic initialization retries
+      // 尝试初始化，如果失败则进行重试
       try {
         tryInit();
       }
@@ -736,10 +739,11 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
         // 另起线程负责处理notices中的notice
         exec.submit(
             () -> {
+              LOG.info("!cin->tryInit，进入handle处理线程");
               try {
                 long pollTimeout = Math.max(ioConfig.getPeriod().getMillis(), MAX_RUN_FREQUENCY_MILLIS);
                 /**
-                 * 循环处理notice（notice是定时不断加入进来的）
+                 * 循环处理notice（notice是下面的逻辑中定时不断创建并加入到notices队列中的）
                  */
                 while (!Thread.currentThread().isInterrupted() && !stopped) {
                   final Notice notice = notices.poll(pollTimeout, TimeUnit.MILLISECONDS);
@@ -748,9 +752,11 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
                   }
 
                   /**
-                   * 每次执行该逻辑{@link this#runInternal()}
+                   * 此处每次执行的都是{@link this#runInternal()}逻辑
+                   * 默认每间隔1s就会有个新的notice需要被执行
                    */
                   try {
+                    LOG.info("!cin->tryInit，执行notice.handle()");
                     notice.handle();
                   }
                   catch (Throwable e) {
@@ -770,7 +776,7 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
 
         firstRunTime = DateTimes.nowUtc().plus(ioConfig.getStartDelay());
         /**
-         * 启动定时线程，每次执行buildRunTask()
+         * 启动单线程定时线程，每次执行buildRunTask()
          * buildRunTask()内部每次创建一个{@link RunNotice}，然后上面那个单循环线程每次处理一个notice.handle()
          * handle内部，只有一行方法：{@link this#runInternal()}
          */
@@ -1052,10 +1058,12 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
   @VisibleForTesting
   public void runInternal()
   {
+    LOG.info("!cin->tryInit->notice.handle()，执行runInternal()");
     try {
       possiblyRegisterListener();
 
       stateManager.maybeSetState(SeekableStreamSupervisorStateManager.SeekableStreamState.CONNECTING_TO_STREAM);
+      // updatePartitionDataFromStream()会更新patition
       if (!updatePartitionDataFromStream() && !stateManager.isAtLeastOneSuccessfulRun()) {
         return; // if we can't connect to the stream and this is the first run, stop and wait to retry the connection
       }
@@ -1078,6 +1086,8 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
         log.info("[%s] supervisor is running.", dataSource);
 
         stateManager.maybeSetState(SeekableStreamSupervisorStateManager.SeekableStreamState.CREATING_TASKS);
+        LOG.info("!cin->tryInit->notice.handle()，准备创建tasks");
+        // 创建task
         createNewTasks();
       } else {
         log.info("[%s] supervisor is suspended.", dataSource);
@@ -2839,7 +2849,10 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
     );
 
     // check that there is a current task group for each group of partitions in [partitionGroups]
+    // 判断此次提交的任务中的，消费者组id，是否已经存在，
+    // 如果没有存在，则创建全新的消费者组id的TaskGroup
     for (Integer groupId : partitionGroups.keySet()) {
+      // activelyReadingTaskGroups，当前任务组
       if (!activelyReadingTaskGroups.containsKey(groupId)) {
         log.info("Creating new task group [%d] for partitions %s", groupId, partitionGroups.get(groupId));
         Optional<DateTime> minimumMessageTime;
@@ -2920,6 +2933,7 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
     }
 
     // iterate through all the current task groups and make sure each one has the desired number of replica tasks
+    // 遍历所有当前任务组，确保每个任务组都具有所需数量的副本任务
     boolean createdTask = false;
     for (Entry<Integer, TaskGroup> entry : activelyReadingTaskGroups.entrySet()) {
       TaskGroup taskGroup = entry.getValue();
@@ -2937,7 +2951,8 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
             "Number of tasks [%d] does not match configured numReplicas [%d] in task group [%d], creating more tasks",
             taskGroup.tasks.size(), ioConfig.getReplicas(), groupId
         );
-        // 创建task
+        LOG.info("!cin->tryInit->notice.handle()，根据groupId创建Task");
+        // 根据groupId创建Task
         createTasksForGroup(groupId, ioConfig.getReplicas() - taskGroup.tasks.size());
         createdTask = true;
       }
@@ -3102,6 +3117,7 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
     }
   }
 
+  // 创建task主要逻辑
   private void createTasksForGroup(int groupId, int replicas)
       throws JsonProcessingException
   {
@@ -3129,6 +3145,8 @@ public abstract class SeekableStreamSupervisor<PartitionIdType, SequenceOffsetTy
         ioConfig
     );
 
+    LOG.info("!cin->tryInit->notice.handle()，由不同的supervisor子类来创建特定的IndexTask对象");
+    // 由不同的supervisor子类来创建特定的IndexTask对象
     List<SeekableStreamIndexTask<PartitionIdType, SequenceOffsetType>> taskList = createIndexTasks(
         replicas,
         group.baseSequenceName,

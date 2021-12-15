@@ -26,8 +26,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import org.apache.druid.indexing.common.task.TaskResource;
+import org.apache.druid.indexing.kafka.supervisor.KafkaSupervisorSpec;
 import org.apache.druid.indexing.seekablestream.SeekableStreamIndexTask;
 import org.apache.druid.indexing.seekablestream.SeekableStreamIndexTaskRunner;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.segment.indexing.DataSchema;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
@@ -41,6 +43,7 @@ import java.util.stream.Collectors;
 
 public class KafkaIndexTask extends SeekableStreamIndexTask<Integer, Long>
 {
+  private static final Logger LOG = new Logger(KafkaIndexTask.class);
   private static final String TYPE = "index_kafka";
 
   private final KafkaIndexTaskIOConfig ioConfig;
@@ -132,9 +135,11 @@ public class KafkaIndexTask extends SeekableStreamIndexTask<Integer, Long>
     );
   }
 
+  // 创建一个新的消费者
   @Override
   protected KafkaRecordSupplier newTaskRecordSupplier()
   {
+    LOG.info("!cin,创建新消费者");
     ClassLoader currCtxCl = Thread.currentThread().getContextClassLoader();
     try {
       Thread.currentThread().setContextClassLoader(getClass().getClassLoader());

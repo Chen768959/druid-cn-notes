@@ -76,6 +76,7 @@ public class TaskQueue
 {
   private final long MANAGEMENT_WAIT_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(60);
 
+  // 包含了所有通过add方式加入当前queue的待执行task
   private final List<Task> tasks = new ArrayList<>();
   private final Map<String, ListenableFuture<TaskStatus>> taskFutures = new HashMap<>();
 
@@ -130,6 +131,8 @@ public class TaskQueue
 
   /**
    * Starts this task queue. Allows {@link #add(Task)} to accept new tasks.
+   * 随着程序启动时被执行，
+   * 当前taskQueue中的task都是通过supervisor启动后（或直接调用overlord的task接口上传），由{@link this#add(Task)}加入
    */
   @LifecycleStart
   public void start()
@@ -238,6 +241,7 @@ public class TaskQueue
     // Ignore return value- we'll get the IDs and futures from getKnownTasks later.
     taskRunner.restore();
 
+    // 此处正常情况下无限循环
     while (active) {
       giant.lock();
 
@@ -249,12 +253,12 @@ public class TaskQueue
         }
         // Attain futures for all active tasks (assuming they are ready to run).
         // Copy tasks list, as notifyStatus may modify it.
-        for (final Task task : ImmutableList.copyOf(tasks)) {
+        for (final Task task : ImmutableList.copyOf(tasks)) {// 复制并遍历所有task
           if (!taskFutures.containsKey(task.getId())) {
             final ListenableFuture<TaskStatus> runnerTaskFuture;
             if (runnerTaskFutures.containsKey(task.getId())) {
               runnerTaskFuture = runnerTaskFutures.get(task.getId());
-            } else {
+            } else {// 启动task
               // Task should be running, so run it.
               final boolean taskIsReady;
               try {
@@ -267,13 +271,18 @@ public class TaskQueue
               }
               if (taskIsReady) {
                 log.info("Asking taskRunner to run: %s", task.getId());
+                log.info("!cin,Lifecycle->start()->taskQueue->taskRunner.run(task)，taskRunner："+taskRunner.getClass());
+                /**
+                 * 启动task
+                 * {@link org.apache.druid.indexing.overlord.RemoteTaskRunner#run(Task)}
+                 */
                 runnerTaskFuture = taskRunner.run(task);
               } else {
                 continue;
               }
             }
             taskFutures.put(task.getId(), attachCallbacks(task, runnerTaskFuture));
-          } else if (isTaskPending(task)) {
+          } else if (isTaskPending(task)) {// 如果task是等待状态
             // if the taskFutures contain this task and this task is pending, also let the taskRunner
             // to run it to guarantee it will be assigned to run
             // see https://github.com/apache/druid/pull/6991

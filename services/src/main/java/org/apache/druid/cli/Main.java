@@ -84,7 +84,7 @@ public class Main
          * 索引服务本身由3个部分组成：
          * 1、overload，负责创建、分发task到middlemanager上
          * 2、middlemanager，作为从节点，接收任务，并为每个任务启动一个jvm进程执行
-         * 3、speon，由middlemanager的一个进程，用于运行一个任务
+         * 3、peon，由middlemanager的一个进程，用于运行一个任务
          */
         CliIndexer.class,
         /**

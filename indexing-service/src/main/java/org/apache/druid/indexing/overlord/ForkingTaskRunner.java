@@ -84,6 +84,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Runs tasks in separate processes using the "internal peon" verb.
+ *
+ * middleManager节点使用的taskRunner
  */
 public class ForkingTaskRunner
     extends BaseRestorableTaskRunner<ForkingTaskRunner.ForkingTaskRunnerWorkItem>
@@ -125,6 +127,9 @@ public class ForkingTaskRunner
     );
   }
 
+  /**
+   * 由{@link org.apache.druid.indexing.worker.WorkerTaskManager}中的RunNotice.handle()逻辑调用
+   */
   @Override
   public ListenableFuture<TaskStatus> run(final Task task)
   {
@@ -140,7 +145,7 @@ public class ForkingTaskRunner
                 {
                   final String attemptUUID = UUID.randomUUID().toString();
                   final File taskDir = taskConfig.getTaskDir(task.getId());
-                  final File attemptDir = new File(taskDir, attemptUUID);
+                  final File attemptDir = new File(taskDir, attemptUUID);// middleManager节点上peon与其task的信息所存储的本地目录位置
 
                   final ProcessHolder processHolder;
                   final String childHost = node.getHost();
@@ -189,6 +194,7 @@ public class ForkingTaskRunner
                           throw new ISE("TaskInfo already has processHolder for task[%s]!", task.getId());
                         }
 
+                        // 当前middleManager节点为task创建peon进程所用到的命令
                         final List<String> command = new ArrayList<>();
                         final String taskClasspath;
                         if (task.getClasspathPrefix() != null && !task.getClasspathPrefix().isEmpty()) {
@@ -344,6 +350,7 @@ public class ForkingTaskRunner
                         }
 
                         LOGGER.info("Running command: %s", getMaskedCommand(startupLoggingConfig.getMaskProperties(), command));
+                        //
                         taskWorkItem.processHolder = new ProcessHolder(
                           new ProcessBuilder(ImmutableList.copyOf(command)).redirectErrorStream(true).start(),
                           logFile,

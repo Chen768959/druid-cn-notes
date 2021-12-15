@@ -33,6 +33,7 @@ import com.sun.jersey.spi.container.ResourceFilters;
 import org.apache.druid.indexing.overlord.TaskMaster;
 import org.apache.druid.indexing.overlord.http.security.SupervisorResourceFilter;
 import org.apache.druid.java.util.common.StringUtils;
+import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.server.security.Access;
 import org.apache.druid.server.security.AuthorizationUtils;
 import org.apache.druid.server.security.AuthorizerMapper;
@@ -65,6 +66,8 @@ import java.util.stream.Collectors;
 @Path("/druid/indexer/v1/supervisor")
 public class SupervisorResource
 {
+  private static final Logger LOG = new Logger(SupervisorResource.class);
+
   private static final Function<VersionedSupervisorSpec, Iterable<ResourceAction>> SPEC_DATASOURCE_READ_RA_GENERATOR =
       supervisorSpec -> {
         if (supervisorSpec.getSpec() == null) {
@@ -97,6 +100,7 @@ public class SupervisorResource
   @Produces(MediaType.APPLICATION_JSON)
   public Response specPost(final SupervisorSpec spec, @Context final HttpServletRequest req)
   {
+    LOG.info("!cin,接收请求创建supervisor");
     return asLeaderWithSupervisorManager(
         // manager由启动时注入，全局唯一，SupervisorManager
         manager -> {

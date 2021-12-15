@@ -35,6 +35,7 @@ import org.apache.druid.indexing.common.TaskToolboxFactory;
 import org.apache.druid.indexing.common.config.TaskConfig;
 import org.apache.druid.indexing.common.task.Task;
 import org.apache.druid.indexing.overlord.autoscaling.ScalingStats;
+import org.apache.druid.indexing.worker.executor.ExecutorLifecycle;
 import org.apache.druid.java.util.common.DateTimes;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.Numbers;
@@ -66,6 +67,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Runs a single task in a JVM thread using an ExecutorService.
+ *
+ * peo进程中使用的taskRunner
  */
 public class SingleTaskBackgroundRunner implements TaskRunner, QuerySegmentWalker
 {
@@ -238,6 +241,9 @@ public class SingleTaskBackgroundRunner implements TaskRunner, QuerySegmentWalke
     }
   }
 
+  /**
+   * 由{@link ExecutorLifecycle#start()}调用
+   */
   @Override
   public ListenableFuture<TaskStatus> run(final Task task)
   {
@@ -448,6 +454,7 @@ public class SingleTaskBackgroundRunner implements TaskRunner, QuerySegmentWalke
             location
         );
         TaskRunnerUtils.notifyStatusChanged(listeners, task.getId(), TaskStatus.running(task.getId()));
+        // 执行task.run
         status = task.run(toolbox);
       }
       catch (InterruptedException e) {

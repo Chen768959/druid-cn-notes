@@ -177,6 +177,9 @@ public class ExecutorLifecycle
       throw new ISE(e, "Failed to run task[%s] isReady", task.getId());
     }
 
+    /**
+     * !!! peon进程使用{@link org.apache.druid.indexing.overlord.SingleTaskBackgroundRunner#run(Task)}执行收到的task
+     */
     statusFuture = Futures.transform(
         taskRunner.run(task),
         new Function<TaskStatus, TaskStatus>()

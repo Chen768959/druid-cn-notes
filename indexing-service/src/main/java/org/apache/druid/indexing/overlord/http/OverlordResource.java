@@ -153,6 +153,7 @@ public class OverlordResource
    * remotely with {@link ClientTaskQuery} objects, but we deserialize {@link Task} objects. See the comment for {@link
    * ClientTaskQuery} for details.
    */
+  // overload节点接收提交任务
   @POST
   @Path("/task")
   @Consumes(MediaType.APPLICATION_JSON)
@@ -179,10 +180,12 @@ public class OverlordResource
         taskMaster.getTaskQueue(),
         new Function<TaskQueue, Response>()
         {
+          // 将上面的taskMaster.getTaskQueue()作为入参传入
           @Override
           public Response apply(TaskQueue taskQueue)
           {
             try {
+              // 将入参task也加入task总队列中
               taskQueue.add(task);
               return Response.ok(ImmutableMap.of("task", task.getId())).build();
             }
