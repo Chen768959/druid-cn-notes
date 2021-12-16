@@ -353,6 +353,9 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
     log.info("Starting with sequences: %s", sequences);
   }
 
+  /**
+   * poen中执行的task主要逻辑
+   */
   private TaskStatus runInternal(TaskToolbox toolbox) throws Exception
   {
     startTime = DateTimes.nowUtc();
@@ -370,6 +373,7 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
     );
 
     // Now we can initialize StreamChunkReader with the given toolbox.
+    // StreamChunkParser：流数据的解析类
     final StreamChunkParser parser = new StreamChunkParser(
         this.parser,
         inputFormat,
@@ -389,6 +393,13 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
     runThread = Thread.currentThread();
 
     // Set up FireDepartmentMetrics
+    /**
+     * druid中存在以下比喻
+     * 实时数据流被比喻成Firehose，
+     * 分发器sink被比喻成Plumber，
+     * Firehose提供实时数据流，Plumber将数据流导入正确的目的地
+     */
+    // 此处是创建监控相关类
     final FireDepartment fireDepartmentForMetrics = new FireDepartment(
         task.getDataSchema(),
         new RealtimeIOConfig(null, null),
@@ -419,9 +430,15 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
         toolbox.getDruidNodeAnnouncer().announce(discoveryDruidNode);
       }
       appenderator = task.newAppenderator(toolbox, fireDepartmentMetrics, rowIngestionMeters, parseExceptionHandler);
+      /**
+       * driver用于流数据的摄取
+       */
       driver = task.newDriver(appenderator, toolbox, fireDepartmentMetrics);
 
       // Start up, set up initial sequences.
+      /**
+       * driver执行初始化，此时druid还未开始获取流数据
+       */
       final Object restoredMetadata = driver.startJob(
           segmentId -> {
             try {
@@ -450,6 +467,7 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
             }
           }
       );
+
       if (restoredMetadata == null) {
         // no persist has happened so far
         // so either this is a brand new task or replacement of a failed task
@@ -465,12 +483,14 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
       } else {
         @SuppressWarnings("unchecked")
         final Map<String, Object> restoredMetadataMap = (Map) restoredMetadata;
+        // 将上面获取的restore元数据反序列化成SeekableStreamEndSequenceNumbers对象
         final SeekableStreamEndSequenceNumbers<PartitionIdType, SequenceOffsetType> restoredNextPartitions =
             deserializePartitionsFromMetadata(
                 toolbox.getJsonMapper(),
                 restoredMetadataMap.get(METADATA_NEXT_PARTITIONS)
             );
 
+        // currOffsets中装了所有的分区id
         currOffsets.putAll(restoredNextPartitions.getPartitionSequenceNumberMap());
 
         // Sanity checks.
@@ -498,6 +518,7 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
         }
       }
 
+      // sequences初始化完毕
       log.info(
           "Initialized sequences: %s",
           sequences.stream().map(SequenceMetadata::toString).collect(Collectors.joining(", "))
@@ -505,6 +526,7 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
 
       // Filter out partitions with END_OF_SHARD markers since these partitions have already been fully read. This
       // should have been done by the supervisor already so this is defensive.
+      // 过滤到带有END_OF_SHARD标志的分区，这些分区已经被完全读取？
       int numPreFilterPartitions = currOffsets.size();
       if (currOffsets.entrySet().removeIf(x -> isEndOfShard(x.getValue()))) {
         log.info(
@@ -539,6 +561,7 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
           @Override
           public Object getMetadata()
           {
+            // 返回一个k-v键值对，key是“nextPartitions”常量，value是SeekableStreamEndSequenceNumbers对象
             return ImmutableMap.of(METADATA_NEXT_PARTITIONS, new SeekableStreamEndSequenceNumbers<>(stream, snapshot));
           }
 
@@ -566,7 +589,7 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
       Throwable caughtExceptionInner = null;
 
       try {
-        while (stillReading) {
+        while (stillReading) {// true死循环
           if (possiblyPause()) {
             // The partition assignments may have changed while paused by a call to setEndOffsets() so reassign
             // partitions upon resuming. Don't call "seekToStartingSequence" after "assignPartitions", because there's
@@ -582,14 +605,13 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
           }
 
           // if stop is requested or task's end sequence is set by call to setEndOffsets method with finish set to true
+          // 终止读取
           if (stopRequested.get() || sequences.size() == 0 || getLastSequenceMetadata().isCheckpointed()) {
             status = Status.PUBLISHING;
           }
-
           if (stopRequested.get()) {
             break;
           }
-
           if (backgroundThreadException != null) {
             throw new RuntimeException(backgroundThreadException);
           }
@@ -600,6 +622,10 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
 
           // calling getRecord() ensures that exceptions specific to kafka/kinesis like OffsetOutOfRangeException
           // are handled in the subclasses.
+          /**
+           * 通过消费者recordSupplier，从kafka中消费数据，
+           * 每次消费的条数在上传的task json配置中有指定
+           */
           List<OrderedPartitionableRecord<PartitionIdType, SequenceOffsetType>> records = getRecords(
               recordSupplier,
               toolbox
@@ -609,6 +635,7 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
           stillReading = !assignment.isEmpty();
 
           SequenceMetadata<PartitionIdType, SequenceOffsetType> sequenceToCheckpoint = null;
+          // 针对每一条数据进行处理
           for (OrderedPartitionableRecord<PartitionIdType, SequenceOffsetType> record : records) {
             final boolean shouldProcess = verifyRecordInRange(record.getPartitionId(), record.getSequenceNumber());
 
@@ -622,6 +649,10 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
 
             if (shouldProcess) {
               final List<byte[]> valueBytess = record.getData();
+              /**
+               * 通过规定的json解析器解析一行kafka数据后，
+               * 得到一个可写入druid的所有行数据
+               */
               final List<InputRow> rows = parser.parse(valueBytess);
               boolean isPersistRequired = false;
 
@@ -641,6 +672,10 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
               }
 
               for (InputRow row : rows) {
+                /**
+                 * driver中存在一个Appenderator对象，
+                 * 该对象可“提供实时数据的查询”，还可以“将数据推送到深度存储中”
+                 */
                 final AppenderatorDriverAddResult addResult = driver.add(
                     row,
                     sequenceToUse.getSequenceName(),

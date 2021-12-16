@@ -176,6 +176,7 @@ public class StreamAppenderatorDriver extends BaseAppenderatorDriver
    *
    * @throws IOException if there is an I/O error while allocating or writing to a segment
    */
+  // 提供存储实时流数据，使其可查询，并定期作为segment存储进深度存储中
   public AppenderatorDriverAddResult add(
       final InputRow row,
       final String sequenceName,

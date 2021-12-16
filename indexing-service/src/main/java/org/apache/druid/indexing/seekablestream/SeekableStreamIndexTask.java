@@ -140,9 +140,13 @@ public abstract class SeekableStreamIndexTask<PartitionIdType, SequenceOffsetTyp
     return ioConfig;
   }
 
+  // peon中执行该逻辑
   @Override
   public TaskStatus run(final TaskToolbox toolbox)
   {
+    /**
+     * {@link SeekableStreamIndexTaskRunner#run(TaskToolbox)}
+     */
     return getRunner().run(toolbox);
   }
 

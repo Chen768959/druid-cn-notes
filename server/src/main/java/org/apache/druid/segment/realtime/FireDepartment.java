@@ -36,6 +36,10 @@ import java.io.IOException;
  * This is a metaphor for a realtime stream (Firehose) and a coordinator of sinks (Plumber). The Firehose provides the
  * realtime stream of data.  The Plumber directs each drop of water from the firehose into the correct sink and makes
  * sure that the sinks don't overflow.
+ *
+ * 实时数据流被比喻成Firehose，
+ * 分发器sink被比喻成Plumber，
+ * Firehose提供实时数据流，Plumber将数据导入正确的目的地
  */
 public class FireDepartment extends IngestionSpec<RealtimeIOConfig, RealtimeTuningConfig>
 {

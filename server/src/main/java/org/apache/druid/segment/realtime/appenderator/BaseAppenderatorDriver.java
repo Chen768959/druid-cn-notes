@@ -399,6 +399,7 @@ public abstract class BaseAppenderatorDriver implements Closeable
     Preconditions.checkNotNull(row, "row");
     Preconditions.checkNotNull(sequenceName, "sequenceName");
 
+    // 获取该行需要被存储的segment的信息
     final SegmentIdWithShardSpec identifier = getSegment(row, sequenceName, skipSegmentLineageCheck);
 
     if (identifier != null) {
