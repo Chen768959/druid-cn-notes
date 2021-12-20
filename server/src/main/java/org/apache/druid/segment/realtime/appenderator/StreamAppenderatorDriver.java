@@ -39,6 +39,7 @@ import org.apache.druid.query.SegmentDescriptor;
 import org.apache.druid.segment.loading.DataSegmentKiller;
 import org.apache.druid.segment.realtime.FireDepartmentMetrics;
 import org.apache.druid.segment.realtime.appenderator.SegmentWithState.SegmentState;
+import org.apache.druid.segment.realtime.plumber.CoordinatorBasedSegmentHandoffNotifier;
 import org.apache.druid.segment.realtime.plumber.SegmentHandoffNotifier;
 import org.apache.druid.segment.realtime.plumber.SegmentHandoffNotifierFactory;
 import org.apache.druid.timeline.DataSegment;
@@ -110,8 +111,17 @@ public class StreamAppenderatorDriver extends BaseAppenderatorDriver
   @Nullable
   public Object startJob(AppenderatorDriverSegmentLockHelper lockHelper)
   {
+    /**
+     * 开启定时任务不断调用{@link CoordinatorBasedSegmentHandoffNotifier#checkForSegmentHandoffs()}
+     * 每次定时检查实时数据流所属的segment是否有已经完毕成功发布到深度存储的，
+     * 如果已经发布到深度存储，则将该segment从appenderator中删除，
+     * （appenderator主要负责查询实时数据（这部分数据还未分发入深度存储））
+     */
     handoffNotifier.start();
 
+    /**
+     * 获取appenderator的元数据
+     */
     final AppenderatorDriverMetadata metadata = objectMapper.convertValue(
         appenderator.startJob(),
         AppenderatorDriverMetadata.class
@@ -224,6 +234,7 @@ public class StreamAppenderatorDriver extends BaseAppenderatorDriver
    *
    * @return commitMetadata persisted
    */
+  // 持久化报错driver迄今为止收到的所有流数据（kafka task的模式下，应该在一个task消费完所有数据并都通过add方法加入driver后再调用此方法）
   public Object persist(final Committer committer) throws InterruptedException
   {
     try {
@@ -265,6 +276,9 @@ public class StreamAppenderatorDriver extends BaseAppenderatorDriver
    *
    * @return a {@link ListenableFuture} for the submitted task which removes published {@code sequenceNames} from
    * {@code activeSegments} and {@code publishPendingSegments}
+   */
+  /**
+   * 将segment发布到深度存储，然后储存segment的元数据信息
    */
   public ListenableFuture<SegmentsAndCommitMetadata> publish(
       final TransactionalSegmentPublisher publisher,
@@ -334,17 +348,22 @@ public class StreamAppenderatorDriver extends BaseAppenderatorDriver
       final AtomicInteger numRemainingHandoffSegments = new AtomicInteger(waitingSegmentIdList.size());
 
       for (final SegmentIdWithShardSpec segmentIdentifier : waitingSegmentIdList) {
+        // 每个segment在发布完后执行的回调逻辑
         handoffNotifier.registerSegmentHandoffCallback(
+            // segment信息
             new SegmentDescriptor(
                 segmentIdentifier.getInterval(),
                 segmentIdentifier.getVersion(),
                 segmentIdentifier.getShardSpec().getPartitionNum()
             ),
+            // 执行以下回调逻辑的线程池
             Execs.directExecutor(),
+            // segment成功“分发”后的回调程序
             () -> {
               log.debug("Segment[%s] successfully handed off, dropping.", segmentIdentifier);
               metrics.incrementHandOffCount();
 
+              // 从appenderator中删掉该segment的信息？（appenderator主要负责查询实时数据（这部分数据还未分发入深度存储））
               final ListenableFuture<?> dropFuture = appenderator.drop(segmentIdentifier);
               Futures.addCallback(
                   dropFuture,

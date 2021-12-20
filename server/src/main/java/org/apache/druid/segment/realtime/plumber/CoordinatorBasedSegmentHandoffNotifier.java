@@ -25,6 +25,8 @@ import org.apache.druid.java.util.common.Pair;
 import org.apache.druid.java.util.common.concurrent.Execs;
 import org.apache.druid.java.util.common.logger.Logger;
 import org.apache.druid.query.SegmentDescriptor;
+import org.apache.druid.segment.realtime.appenderator.AppenderatorDriverSegmentLockHelper;
+import org.apache.druid.segment.realtime.appenderator.SegmentsAndCommitMetadata;
 import org.apache.druid.server.coordination.DruidServerMetadata;
 
 import java.util.Iterator;
@@ -84,15 +86,30 @@ public class CoordinatorBasedSegmentHandoffNotifier implements SegmentHandoffNot
     );
   }
 
+  /**
+   * {@link org.apache.druid.segment.realtime.appenderator.StreamAppenderatorDriver#startJob(AppenderatorDriverSegmentLockHelper)}
+   * driver初始化时被上面的定时线程开始循环调用。
+   * 每次定时检查实时数据流所属的segment是否有已经完毕成功发布到深度存储的，
+   * 如果已经发布到深度存储，则将该segment从appenderator中删除，
+   * （appenderator主要负责查询实时数据（这部分数据还未分发入深度存储））
+   */
   void checkForSegmentHandoffs()
   {
     try {
+      /**
+       * handOffCallbacks是各个segement发布完毕后的回调逻辑，
+       * 具体的回调逻辑写在{@link org.apache.druid.segment.realtime.appenderator.StreamAppenderatorDriver#registerHandoff(SegmentsAndCommitMetadata)}中
+       * 目前看来，该回调逻辑主要是将已经分发成功进深度存储的segment从appenderator中删掉。
+       * （appenderator主要负责查询实时数据（这部分数据还未分发入深度存储））
+       */
       Iterator<Map.Entry<SegmentDescriptor, Pair<Executor, Runnable>>> itr = handOffCallbacks.entrySet()
                                                                                              .iterator();
+      // 迭代每一个segment发布后的回调逻辑
       while (itr.hasNext()) {
         Map.Entry<SegmentDescriptor, Pair<Executor, Runnable>> entry = itr.next();
         SegmentDescriptor descriptor = entry.getKey();
         try {
+          // 检查segment是否已经“发布”
           Boolean handOffComplete = coordinatorClient.isHandOffComplete(dataSource, descriptor);
           if (handOffComplete == null) {
             log.warn(
@@ -105,6 +122,8 @@ public class CoordinatorBasedSegmentHandoffNotifier implements SegmentHandoffNot
             );
             handOffComplete = isHandOffComplete(loadedSegments, descriptor);
           }
+          // 如果segment已经发布，则执行这个segment的发布后的回调逻辑，即从appenderator中删除该segment的相关信息，
+          // 实时task节点不在提供查询该segment的功能，该segment因为发布成功，所以可去历史节点查询
           if (handOffComplete) {
             log.info("Segment Handoff complete for dataSource[%s] Segment[%s]", dataSource, descriptor);
             entry.getValue().lhs.execute(entry.getValue().rhs);

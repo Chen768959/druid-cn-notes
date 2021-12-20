@@ -217,8 +217,11 @@ public class AppenderatorImpl implements Appenderator
   @Override
   public Object startJob()
   {
+    // 建立多级文件夹
     tuningConfig.getBasePersistDirectory().mkdirs();
+    log.info("!cin，tuningConfig.getBasePersistDirectory："+tuningConfig.getBasePersistDirectory().getPath());
     lockBasePersistDirectory();
+    // 从磁盘文件中获取sink
     final Object retVal = bootstrapSinksFromDisk();
     initializeExecutors();
     resetNextFlush();
@@ -489,6 +492,7 @@ public class AppenderatorImpl implements Appenderator
   @Override
   public ListenableFuture<?> drop(final SegmentIdWithShardSpec identifier)
   {
+    // 找到segment对应的sink
     final Sink sink = sinks.get(identifier);
     if (sink != null) {
       return abandonSegment(identifier, sink, true);
@@ -1009,6 +1013,8 @@ public class AppenderatorImpl implements Appenderator
 
   /**
    * Populate "sinks" and "sinkTimeline" with committed segments, and announce them with the segmentAnnouncer.
+   *
+   * 将committed segments填充进"sinks"和"sinkTimeline"中
    *
    * @return persisted commit metadata
    */

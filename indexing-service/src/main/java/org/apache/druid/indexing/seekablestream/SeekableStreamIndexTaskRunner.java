@@ -40,6 +40,7 @@ import org.apache.druid.data.input.Committer;
 import org.apache.druid.data.input.InputFormat;
 import org.apache.druid.data.input.InputRow;
 import org.apache.druid.data.input.InputRowSchema;
+import org.apache.druid.data.input.MapBasedInputRow;
 import org.apache.druid.data.input.impl.InputRowParser;
 import org.apache.druid.discovery.DiscoveryDruidNode;
 import org.apache.druid.discovery.LookupNodeService;
@@ -60,6 +61,7 @@ import org.apache.druid.indexing.common.actions.SegmentLockAcquireAction;
 import org.apache.druid.indexing.common.actions.TimeChunkLockAcquireAction;
 import org.apache.druid.indexing.common.task.IndexTaskUtils;
 import org.apache.druid.indexing.common.task.RealtimeIndexTask;
+import org.apache.druid.indexing.overlord.sampler.SamplerInputRow;
 import org.apache.druid.indexing.seekablestream.common.OrderedPartitionableRecord;
 import org.apache.druid.indexing.seekablestream.common.OrderedSequenceNumber;
 import org.apache.druid.indexing.seekablestream.common.RecordSupplier;
@@ -103,6 +105,7 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -671,7 +674,14 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
                 );
               }
 
+              /**
+               * row：{@link MapBasedInputRow}
+               */
               for (InputRow row : rows) {
+                row.getDimensions().forEach(dim->{
+                  log.info("!cin，单行，dimName："+dim+"...v："+row.getDimension(dim)+"...class："+row.getClass());
+                });
+
                 /**
                  * driver中存在一个Appenderator对象，
                  * 该对象可“提供实时数据的查询”，还可以“将数据推送到深度存储中”
