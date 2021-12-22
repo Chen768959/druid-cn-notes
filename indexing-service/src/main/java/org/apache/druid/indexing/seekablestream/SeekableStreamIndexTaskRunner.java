@@ -678,16 +678,18 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
                * row：{@link MapBasedInputRow}
                */
               for (InputRow row : rows) {
-                row.getDimensions().forEach(dim->{
-                  log.info("!cin，单行，dimName："+dim+"...v："+row.getDimension(dim)+"...class："+row.getClass());
-                });
+//                row.getDimensions().forEach(dim->{
+//                  log.info("!cin，单行，dimName："+dim+"...v："+row.getDimension(dim)+"...class："+row.getClass());
+//                });
 
                 /**
+                 * {@link org.apache.druid.segment.realtime.appenderator.BaseAppenderatorDriver#append(InputRow, String, Supplier, boolean, boolean)}
+                 *
                  * driver中存在一个Appenderator对象，
                  * 该对象可“提供实时数据的查询”，还可以“将数据推送到深度存储中”
                  */
                 final AppenderatorDriverAddResult addResult = driver.add(
-                    row,
+                    row, // 待存储的一行数据，map格式，k是列名，v是内容
                     sequenceToUse.getSequenceName(),
                     committerSupplier,
                     true,
@@ -696,6 +698,7 @@ public abstract class SeekableStreamIndexTaskRunner<PartitionIdType, SequenceOff
                     false
                 );
 
+                log.info("!cin，driver.add完毕");
                 if (addResult.isOk()) {
                   // If the number of rows in the segment exceeds the threshold after adding a row,
                   // move the segment out from the active segments of BaseAppenderatorDriver to make a new segment.

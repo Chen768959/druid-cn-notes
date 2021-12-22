@@ -39,6 +39,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import org.apache.druid.client.cache.Cache;
 import org.apache.druid.data.input.Committer;
 import org.apache.druid.data.input.InputRow;
+import org.apache.druid.data.input.MapBasedInputRow;
 import org.apache.druid.java.util.common.DateTimes;
 import org.apache.druid.java.util.common.FileUtils;
 import org.apache.druid.java.util.common.IAE;
@@ -235,17 +236,24 @@ public class AppenderatorImpl implements Appenderator
     }
   }
 
+  /**
+   *
+   * @param identifier 该行数据所属segment
+   * @param row 待存数据
+   * @param committerSupplier （如果allowIncrementalPersists设置成false，则不会使用此参数）
+   * @param allowIncrementalPersists 默认false
+   */
   @Override
   public AppenderatorAddResult add(
       final SegmentIdWithShardSpec identifier,
-      final InputRow row,
+      InputRow row,
       @Nullable final Supplier<Committer> committerSupplier,
       final boolean allowIncrementalPersists
   ) throws IndexSizeExceededException, SegmentNotWritableException
   {
     throwPersistErrorIfExists();
 
-    if (!identifier.getDataSource().equals(schema.getDataSource())) {
+    if (!identifier.getDataSource().equals(schema.getDataSource())) {// 判断行所属数据源，与配置指定数据源是否一致
       throw new IAE(
           "Expected dataSource[%s] but was asked to insert row for dataSource[%s]?!",
           schema.getDataSource(),
@@ -253,6 +261,7 @@ public class AppenderatorImpl implements Appenderator
       );
     }
 
+    // 根据segment信息，获取（创建）对应sink
     final Sink sink = getOrCreateSink(identifier);
     metrics.reportMessageMaxTimestamp(row.getTimestampFromEpoch());
     final int sinkRowsInMemoryBeforeAdd = sink.getNumRowsInMemory();

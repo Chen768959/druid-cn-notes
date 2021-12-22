@@ -21,6 +21,7 @@ package org.apache.druid.segment.incremental;
 
 import com.google.common.base.Supplier;
 import org.apache.druid.data.input.InputRow;
+import org.apache.druid.data.input.MapBasedInputRow;
 import org.apache.druid.java.util.common.StringUtils;
 import org.apache.druid.java.util.common.io.Closer;
 import org.apache.druid.java.util.common.logger.Logger;
@@ -150,6 +151,9 @@ public class OnheapIncrementalIndex extends IncrementalIndex<Aggregator>
   ) throws IndexSizeExceededException
   {
     final List<String> parseExceptionMessages = new ArrayList<>();
+    /**
+     * facts中应该是存储了所有
+     */
     final int priorIndex = facts.getPriorIndex(key);
 
     Aggregator[] aggs;
@@ -157,9 +161,12 @@ public class OnheapIncrementalIndex extends IncrementalIndex<Aggregator>
     final AtomicInteger numEntries = getNumEntries();
     final AtomicLong sizeInBytes = getBytesInMemory();
     if (IncrementalIndexRow.EMPTY_ROW_INDEX != priorIndex) {
+      log.info("!cin,EMPTY_ROW_INDEX != priorIndex");
       aggs = concurrentGet(priorIndex);
       doAggregate(metrics, aggs, rowContainer, row, parseExceptionMessages);
     } else {
+      // 至此已经无法更改row
+      log.info("!cin,EMPTY_ROW_INDEX == priorIndex");
       aggs = new Aggregator[metrics.length];
       factorizeAggs(metrics, aggs, rowContainer, row);
       doAggregate(metrics, aggs, rowContainer, row, parseExceptionMessages);
@@ -179,10 +186,12 @@ public class OnheapIncrementalIndex extends IncrementalIndex<Aggregator>
       }
       final int prev = facts.putIfAbsent(key, rowIndex);
       if (IncrementalIndexRow.EMPTY_ROW_INDEX == prev) {
+        log.info("!cin,EMPTY_ROW_INDEX == prev");
         numEntries.incrementAndGet();
         long estimatedRowSize = estimateRowSizeInBytes(key, maxBytesPerRowForAggregators);
         sizeInBytes.addAndGet(estimatedRowSize);
       } else {
+        log.info("!cin,EMPTY_ROW_INDEX != prev");
         // We lost a race
         parseExceptionMessages.clear();
         aggs = concurrentGet(prev);
@@ -193,6 +202,19 @@ public class OnheapIncrementalIndex extends IncrementalIndex<Aggregator>
       }
     }
 
+    /**
+     * tmp test================================
+     */
+//    final AtomicInteger numEntries = getNumEntries();
+//    numEntries.incrementAndGet();
+//    final AtomicLong sizeInBytes = getBytesInMemory();
+//    long estimatedRowSize = estimateRowSizeInBytes(key, maxBytesPerRowForAggregators);
+//    sizeInBytes.addAndGet(estimatedRowSize);
+//    List<String> parseExceptionMessages =new ArrayList<>();
+    /**
+     * tmp test================================
+     */
+    log.info("!cin，tmp，numEntries："+numEntries.get()+"...sizeInBytes："+sizeInBytes.get()+"...parseExceptionMessages："+parseExceptionMessages.size());
     return new AddToFactsResult(numEntries.get(), sizeInBytes.get(), parseExceptionMessages);
   }
 
@@ -227,6 +249,7 @@ public class OnheapIncrementalIndex extends IncrementalIndex<Aggregator>
       InputRow row
   )
   {
+    log.info("!cin, metrics.size："+metrics.length);
     rowContainer.set(row);
     for (int i = 0; i < metrics.length; i++) {
       final AggregatorFactory agg = metrics[i];
@@ -245,8 +268,10 @@ public class OnheapIncrementalIndex extends IncrementalIndex<Aggregator>
   {
     rowContainer.set(row);
 
+    log.info("!cin, aggs.size："+aggs.length);
     for (int i = 0; i < aggs.length; i++) {
       final Aggregator agg = aggs[i];
+      log.info("!cin, agg"+i+"...class："+agg.getClass());
       synchronized (agg) {
         try {
           agg.aggregate();

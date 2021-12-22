@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import org.apache.druid.data.input.InputRow;
+import org.apache.druid.data.input.MapBasedInputRow;
 import org.apache.druid.java.util.common.IAE;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.query.aggregation.AggregatorFactory;
@@ -34,6 +35,7 @@ import org.apache.druid.segment.incremental.IncrementalIndex;
 import org.apache.druid.segment.incremental.IncrementalIndexAddResult;
 import org.apache.druid.segment.incremental.IncrementalIndexSchema;
 import org.apache.druid.segment.incremental.IndexSizeExceededException;
+import org.apache.druid.segment.incremental.OnheapIncrementalIndex;
 import org.apache.druid.segment.indexing.DataSchema;
 import org.apache.druid.segment.realtime.FireHydrant;
 import org.apache.druid.timeline.DataSegment;
@@ -41,6 +43,7 @@ import org.apache.druid.timeline.Overshadowable;
 import org.apache.druid.timeline.partition.ShardSpec;
 import org.joda.time.Interval;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -150,6 +153,11 @@ public class Sink implements Iterable<FireHydrant>, Overshadowable<Sink>
     return currHydrant;
   }
 
+  /**
+   *
+   * @param row 待写入数据
+   * @param skipMaxRowsInMemoryCheck true
+   */
   public IncrementalIndexAddResult add(InputRow row, boolean skipMaxRowsInMemoryCheck) throws IndexSizeExceededException
   {
     if (currHydrant == null) {
@@ -170,6 +178,9 @@ public class Sink implements Iterable<FireHydrant>, Overshadowable<Sink>
         return Plumber.DUPLICATE;
       }
 
+      /**
+       * index:{@link OnheapIncrementalIndex}
+       */
       return index.add(row, skipMaxRowsInMemoryCheck);
     }
   }

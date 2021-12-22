@@ -36,6 +36,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import org.apache.druid.data.input.Committer;
 import org.apache.druid.data.input.InputRow;
+import org.apache.druid.data.input.MapBasedInputRow;
 import org.apache.druid.indexing.overlord.SegmentPublishResult;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.concurrent.Execs;
@@ -52,6 +53,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -327,8 +329,10 @@ public abstract class BaseAppenderatorDriver implements Closeable
       final DateTime timestamp = row.getTimestamp();
       final SegmentIdWithShardSpec existing = getAppendableSegment(timestamp, sequenceName);
       if (existing != null) {
+        log.info("!cin，timestamp对应segment已存在");
         return existing;
       } else {
+        log.info("!cin，timestamp对应segment不存在，新建，segmentAllocator："+segmentAllocator.getClass());
         // Allocate new segment.
         final SegmentsForSequence segmentsForSequence = segments.get(sequenceName);
         final SegmentIdWithShardSpec newSegment = segmentAllocator.allocate(
@@ -338,7 +342,7 @@ public abstract class BaseAppenderatorDriver implements Closeable
             // send lastSegmentId irrespective of skipSegmentLineageCheck so that
             // unique constraint for sequence_name_prev_id_sha1 does not fail for
             // allocatePendingSegment in IndexerSQLMetadataStorageCoordinator
-            skipSegmentLineageCheck
+            skipSegmentLineageCheck // true
         );
 
         if (newSegment != null) {
@@ -399,16 +403,25 @@ public abstract class BaseAppenderatorDriver implements Closeable
     Preconditions.checkNotNull(row, "row");
     Preconditions.checkNotNull(sequenceName, "sequenceName");
 
-    // 获取该行需要被存储的segment的信息
+    /**
+     * 根据该行时间戳获取该行需要被存储的segment信息，
+     * 如果对应segment不存在，则新建segment并返回
+     *
+     * ！！！ 负责将数据写入segment
+     */
     final SegmentIdWithShardSpec identifier = getSegment(row, sequenceName, skipSegmentLineageCheck);
 
     if (identifier != null) {
       try {
+        /**
+         * appenderator:该对象可“提供实时数据的查询”，还可以“将数据推送到深度存储中”
+         *
+         */
         final Appenderator.AppenderatorAddResult result = appenderator.add(
-            identifier,
-            row,
-            committerSupplier == null ? null : wrapCommitterSupplier(committerSupplier),
-            allowIncrementalPersists
+            identifier, // 该行所属segment的信息
+            row, // 该行数据
+            committerSupplier == null ? null : wrapCommitterSupplier(committerSupplier), // 元数据相关
+            allowIncrementalPersists // false
         );
         return AppenderatorDriverAddResult.ok(
             identifier,

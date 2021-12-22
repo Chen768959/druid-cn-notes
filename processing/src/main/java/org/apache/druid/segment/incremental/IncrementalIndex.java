@@ -34,6 +34,7 @@ import com.google.errorprone.annotations.concurrent.GuardedBy;
 import org.apache.druid.collections.NonBlockingPool;
 import org.apache.druid.common.config.NullHandling;
 import org.apache.druid.data.input.InputRow;
+import org.apache.druid.data.input.MapBasedInputRow;
 import org.apache.druid.data.input.MapBasedRow;
 import org.apache.druid.data.input.Row;
 import org.apache.druid.data.input.impl.DimensionSchema;
@@ -44,6 +45,7 @@ import org.apache.druid.java.util.common.IAE;
 import org.apache.druid.java.util.common.ISE;
 import org.apache.druid.java.util.common.granularity.Granularity;
 import org.apache.druid.java.util.common.parsers.ParseException;
+import org.apache.druid.java.util.emitter.EmittingLogger;
 import org.apache.druid.query.aggregation.AggregatorFactory;
 import org.apache.druid.query.aggregation.PostAggregator;
 import org.apache.druid.query.dimension.DimensionSpec;
@@ -102,6 +104,7 @@ import java.util.stream.Stream;
 
 public abstract class IncrementalIndex<AggregatorType> extends AbstractIndex implements Iterable<Row>, Closeable
 {
+  private static final EmittingLogger log = new EmittingLogger(IncrementalIndex.class);
   /**
    * Column selector used at ingestion time for inputs to aggregators.
    *
@@ -586,14 +589,22 @@ public abstract class IncrementalIndex<AggregatorType> extends AbstractIndex imp
 
   public IncrementalIndexAddResult add(InputRow row, boolean skipMaxRowsInMemoryCheck) throws IndexSizeExceededException
   {
+    log.info("!cin,进入index.add，当前index："+this.getClass());
+
+    /**
+     * 此行包含row写实时segment的逻辑
+     */
     IncrementalIndexRowResult incrementalIndexRowResult = toIncrementalIndexRow(row);
+
+    /** {@link OnheapIncrementalIndex#addToFacts(InputRow, IncrementalIndexRow, ThreadLocal, Supplier, boolean)}*/
     final AddToFactsResult addToFactsResult = addToFacts(
         row,
         incrementalIndexRowResult.getIncrementalIndexRow(),
         in,
         rowSupplier,
-        skipMaxRowsInMemoryCheck
+        skipMaxRowsInMemoryCheck // true
     );
+
     updateMaxIngestedTime(row.getTimestamp());
     @Nullable ParseException parseException = getCombinedParseException(
         row,
